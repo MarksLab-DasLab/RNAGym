@@ -1,0 +1,31 @@
+# Vienna RNAfold 2 Mac using installer:
+vienna_2: /scratch-ssd/pastin/RNAGym/models/ViennaRNA-2.6.4/src/bin
+vienna: /scratch-ssd/pastin/RNAGym/models/ViennaRNA-2.6.4/src/bin
+
+# NUPACK build:
+nupack: /path/to/nupack3.0.6/src/bin ###
+
+# CONTRAfold build
+contrafold_2: /scratch-ssd/pastin/RNAGym/models/contrafold-se/src
+
+# RNASoft build
+rnasoft: /path/to/MultiRNAFold ###
+
+# RNAstructure (precompiled command line src)
+rnastructure: /scratch-ssd/pastin/RNAGym/models/RNAstructure/exe
+
+# Path to EternaFold
+eternafold: /scratch-ssd/pastin/RNAGym/models/EternaFold/src
+
+# (DEPRECATED, better to put path to Eternafold)
+# Path to EternaFold parameters
+# eternafoldparams: /path/to/EternaFold/parameters/EternaFoldParams.v1
+
+# LinearFold build
+linearfold: /path/to/LinearFold/bin
+
+#LinearPartition build
+linearpartition: /path/to/LinearPartition/bin
+
+#directory to write temp files
+TMP: /scratch-ssd/pastin/RNAGym/models/tmp
