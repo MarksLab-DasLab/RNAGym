@@ -29,6 +29,25 @@ CONTRAfold | Structure prediction | Do et al. "CONTRAfold: RNA secondary structu
 Vienna | Structure prediction | Gruber et al. "The vienna rna websuite." Nucleic Acids Research, 36:W70 – W74, 2008.
 RNAstructure | Structure prediction | Reuter et al. "Rnastructure: software for rna secondary structure prediction and analysis". BMC Bioinformatics, 11:129 – 129, 2010.
 
+## Setup
+
+The RNAGym environment may be created via conda and the provided rnagym_env.yml file as follows:
+```
+conda env create -f rnagym_env.yml
+conda activate rnagym_env
+```
+
+For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
+
+structure_prediction/
+├── test_data/
+├── raw_data/
+├── model_predictions/
+└── models/
+
+The content for `models`, `model_predictions`, `raw_data` and `test_data` may all be downloaded via the links in the next section.
+The `data_folder` argument in the data and scoring scripts should be set to the location of the `structure_prediction` folder.
+
 ## Resources
 
 To download and unzip the data, run the following commands for each of the data sources you would like to download, as listed in the table below. 

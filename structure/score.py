@@ -47,11 +47,8 @@ if __name__ == "__main__":
     final_output_repo = os.path.join(data_folder,'model_predictions')
     final_test_data_name = "final_test_set.csv"
     performance_summary_file = 'performance_SS_pred.csv'
-
     final_test_set_all_mutants = pd.read_csv(os.path.join(test_data_folder,final_test_data_name), low_memory=False)
-    final_test_set_all_mutants.sort_values(by=['sequence_id', 'id'], inplace=True)
-    final_test_set_all_mutants['position_id'] = final_test_set_all_mutants.groupby('sequence_id').cumcount()
-
+    
     # Predict with selected model
     if os.path.exists(final_output_repo+os.sep+'predictions_'+model_type+'.csv'):
         final_test_set_all_mutants_pred = pd.read_csv(final_output_repo+os.sep+'predictions_'+model_type+'.csv')
@@ -62,7 +59,7 @@ if __name__ == "__main__":
         final_test_set_all_seqs = final_test_set_all_mutants[["sequence_id","sequence"]].drop_duplicates()
         print(len(final_test_set_all_seqs)) #len: 114,836
         all_models_predictions = []
-        for row_index, row in tqdm.tqdm(final_test_set_all_seqs.iterrows(), total=len(final_test_set_all_seqs)):
+        for row_index, row in tqdm.tqdm(final_test_set_all_seqs.iloc[:200].iterrows(), total=len(final_test_set_all_seqs)):
             pred = predict_structures(row['sequence'], models=[model_type])[model_type]
             pred = unpaired_probabilities(pred)
             pred_df = {
