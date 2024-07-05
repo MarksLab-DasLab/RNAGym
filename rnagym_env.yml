@@ -1,4 +1,4 @@
-name: proteinnpt_env
+name: rnagym_env
 channels:
   - pytorch
   - nvidia
@@ -22,3 +22,4 @@ dependencies:
       - transformers
       - tokenizers
       - datasets
+      - arnie==0.1.6

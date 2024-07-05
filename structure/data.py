@@ -1,6 +1,6 @@
+import os,sys
 import pandas as pd
 from Bio import pairwise2
-import os
 import tqdm
 from collections import defaultdict
 
@@ -44,7 +44,7 @@ def filter_sequences(sequences, public_sequences, threshold=0.2):
 
 def cluster_sequences(sequences, threshold=0.2):
   """
-  Clusters sequences based on 20% identity threshold using BLAST
+  Clusters sequences based on identity threshold using BLAST
 
   Args:
       sequences: Pandas dataframe containing sequences information
@@ -60,12 +60,10 @@ def cluster_sequences(sequences, threshold=0.2):
     already_clustered = False
     #for j, row_j in sequences.iloc[i + 1:].iterrows():
     for j, row_j in sequences.iterrows():
-      print(j)
       seq2 = row_j["sequence"]
       # Perform pairwise alignment using BLAST
       alignments = pairwise2.align.globalms(seq1, seq2, 2, -1, -float("inf"), -float("inf"))
       score = alignments[0][2] / len(seq1)  # Identity as score / sequence length
-      print(score)
       if score >= threshold:
         if clusters.get(seq1):
           clusters[seq1].append(seq2)
@@ -83,15 +81,17 @@ def cluster_sequences(sequences, threshold=0.2):
 
 if __name__ == "__main__":
     # Read the datasets
-    data_folder = "../local_data"
-    processed_folder = "../local_data/processed"
+    data_folder = sys.argv[1] # Location of raw & processed datasets (eg., "./local_data/structure_prediction")
+    raw_data_folder = os.path.join(data_folder,'raw_data')
+    processed_folder = os.path.join(data_folder,'test_data')
+    model_predictions_folder = os.path.join(data_folder,'model_predictions')
     test_data_name = "final_test_set.csv"
     filtered_data_name = "filtered_private_clusters_representatives_df"
 
-    solution_df = pd.read_parquet(os.path.join(data_folder,'solution_ribonanza.parquet')) #len: 269,796,671
-    ribonanzanet_df = pd.read_parquet(os.path.join(data_folder,'ribonanzanet.parquet'))
-    test_sequences = pd.read_csv(os.path.join(data_folder,'test_sequences.csv')) #len: 1,343,823
-    train_data = pd.read_csv(os.path.join(data_folder,'train_data.csv'))
+    solution_df = pd.read_parquet(os.path.join(raw_data_folder,'solution_ribonanza.parquet')) #len: 269,796,671 #Dataset with labels for all sequences / positions
+    ribonanzanet_df = pd.read_parquet(os.path.join(raw_data_folder,'ribonanzanet.parquet')) #len: 269,796,671 #Predictions from Ribonanzanet
+    test_sequences = pd.read_csv(os.path.join(raw_data_folder,'test_sequences.csv')) #len: 1,343,823 #Test dataset with actual RNA sequences
+    train_data = pd.read_csv(os.path.join(raw_data_folder,'train_data.csv')) #len: 1,643,680 #Train dataset with actual RNA sequences
 
     private_solution_df = solution_df[solution_df['Usage']=='Private'] #len: 14,902,527
     public_solution_df = solution_df[solution_df['Usage']=='Public'] #len: 6,188,100
@@ -111,12 +111,12 @@ if __name__ == "__main__":
     private_seqs_unique_seqs = private_seqs.drop_duplicates('sequence') #len: 114,836
     
     # Filter parquet files for mutants in eval sequences
-    solution_eval = solution_df[solution_df['sequence'].isin(private_seqs['sequence'])]
-    ribonanzanet_eval = ribonanzanet_df[ribonanzanet_df['id'].isin(solution_eval['id'])]
+    solution_eval = solution_df[solution_df['sequence'].isin(private_seqs['sequence'])] #len: 23,740,972
+    ribonanzanet_eval = ribonanzanet_df[ribonanzanet_df['id'].isin(solution_eval['id'])] #len: 23,740,972
 
     # Save filtered datasets
     solution_eval.to_csv(os.path.join(processed_folder,'solution_ribonanza_eval.csv'), index=False)
-    ribonanzanet_eval.rename(columns={'reactivity_DMS_MaP': 'prediction_ribonanzanet'}).to_csv(os.path.join(processed_folder,'ribonanzanet_eval.csv'), index=False)
+    ribonanzanet_eval.rename(columns={'reactivity_DMS_MaP': 'prediction_ribonanzanet'}).to_csv(os.path.join(model_predictions_folder,'predictions_ribonanzanet.csv'), index=False)
 
     # Clustering analysis
     private_clusters, private_clusters_representatives = cluster_sequences(private_seqs_unique_seqs, threshold=0.2)
