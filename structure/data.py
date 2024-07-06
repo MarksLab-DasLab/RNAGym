@@ -23,7 +23,6 @@ if __name__ == "__main__":
     solution_df.sort_values(by=['id'], inplace=True)
     
     # Filter test sequences based on 'Usage'
-    #private_seqs_seq_id = solution_df[solution_df['Usage'] == 'Private'].sequence_id #len: 14,902,527
     private_seqs = solution_df[solution_df['Usage'] == 'Private'] #len: 14,902,527; 114,836 IDS
     public_seqs = solution_df[solution_df['Usage'] == 'Public'] #len: 6,188,100; 61,881 IDS
     set1 = set(private_seqs.sequence_id)
