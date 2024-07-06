@@ -43,6 +43,8 @@ if __name__ == "__main__":
     model_type = sys.argv[1] #"eternafold"
     print("Model type: {}".format(model_type))
     data_folder = sys.argv[2] #"./local_data/structure_prediction"
+    if model_type == "rnastructure":
+        os.environ['DATAPATH'] = os.path.join(data_folder,'models/RNAstructure/data_tables')
     test_data_folder = os.path.join(data_folder,'test_data')
     final_output_repo = os.path.join(data_folder,'model_predictions')
     final_test_data_name = "final_test_set.csv"
@@ -53,13 +55,13 @@ if __name__ == "__main__":
     if os.path.exists(final_output_repo+os.sep+'predictions_'+model_type+'.csv'):
         final_test_set_all_mutants_pred = pd.read_csv(final_output_repo+os.sep+'predictions_'+model_type+'.csv')
         if model_type=="ribonanzanet":
-            final_test_set_all_mutants_pred = final_test_set_all_mutants_pred[['id','predictions_ribonanzanet']]
+            final_test_set_all_mutants_pred = final_test_set_all_mutants_pred[['id','prediction_ribonanzanet']]
             final_test_set_all_mutants_pred = pd.merge(final_test_set_all_mutants,final_test_set_all_mutants_pred, on='id', how="left") #len: 14,902,527
     else:
         final_test_set_all_seqs = final_test_set_all_mutants[["sequence_id","sequence"]].drop_duplicates()
         print(len(final_test_set_all_seqs)) #len: 114,836
         all_models_predictions = []
-        for row_index, row in tqdm.tqdm(final_test_set_all_seqs.iloc[:200].iterrows(), total=len(final_test_set_all_seqs)):
+        for row_index, row in tqdm.tqdm(final_test_set_all_seqs.iterrows(), total=len(final_test_set_all_seqs)):
             pred = predict_structures(row['sequence'], models=[model_type])[model_type]
             pred = unpaired_probabilities(pred)
             pred_df = {
