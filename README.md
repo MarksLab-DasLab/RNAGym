@@ -38,13 +38,13 @@ conda activate rnagym_env
 ```
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
-
+```
 structure_prediction/
 ├── test_data/
 ├── raw_data/
 ├── model_predictions/
 └── models/
-
+```
 The content for `models`, `model_predictions`, `raw_data` and `test_data` may all be downloaded via the links in the next section.
 The `data_folder` argument in the data and scoring scripts should be set to the location of the `structure_prediction` folder.
 
@@ -53,13 +53,21 @@ The `data_folder` argument in the data and scoring scripts should be set to the 
 To download and unzip the data, run the following commands for each of the data sources you would like to download, as listed in the table below. 
 For example, you can download & unzip the zero-shot predictions for all baselines for all DMS substitution assays as follows:
 ```
-curl -o zero_shot_substitutions_scores.zip https://marks.hms.harvard.edu/proteingym/zero_shot_substitutions_scores.zip
-unzip zero_shot_substitutions_scores.zip && rm zero_shot_substitutions_scores.zip
+curl -o rnagym_assays.zip https://marks.hms.harvard.edu/rnagym/fitness_prediction/rnagym_assays.zip
+unzip rnagym_assays.zip && rm rnagym_assays.zip
 ```
 
-Data | Size (unzipped) | Link
---- | --- | --- |
-Fitness benchmark | 100MB | url
+Task | Data | Size (unzipped) | Link
+--- | --- | --- | --- |
+**Fitness prediction** | Processed assay data | 75MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/rnagym_assays.zip
+**Fitness prediction** | Raw assay data | 88MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/raw_data.zip
+**Fitness prediction** | Model predictions | 438MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+**Structure prediction** | Processed assay data | 9.2GB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+**Structure prediction** | Raw assay data | 5.1GB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+**Structure prediction** | Model predictions | 441MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+**Structure prediction** | Model files | 441MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+
+Model files for the structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
 
 ## Acknowledgements
 
