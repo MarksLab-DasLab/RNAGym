@@ -28,6 +28,7 @@ EternaFold | Structure prediction | Wayment-Steele et al. "Rna secondary structu
 CONTRAfold | Structure prediction | Do et al. "CONTRAfold: RNA secondary structure prediction without physics-based models" Bioinformatics, 22 14:e90–8, 2006.
 Vienna | Structure prediction | Gruber et al. "The vienna rna websuite." Nucleic Acids Research, 36:W70 – W74, 2008.
 RNAstructure | Structure prediction | Reuter et al. "Rnastructure: software for rna secondary structure prediction and analysis". BMC Bioinformatics, 11:129 – 129, 2010.
+RNA-FM | RNA Language Model | Chen et al. "Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions" arXiv, 2022. 
 
 ## Setup
 
