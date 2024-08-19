@@ -1,14 +1,15 @@
 #!/bin/bash
-#SBATCH -c 3                               # Request one core
-#SBATCH -t 0-05:00                         # Runtime in D-HH:MM format
-#SBATCH -p short                           # Partition to run in
-#SBATCH --mem=5G                           # Memory total in MiB (for all cores)
-#SBATCH -o hostname_%j.out                 # File to which STDOUT will be written, including job ID (%j)
-#SBATCH -e hostname_%j.err                 # File to which STDERR will be written, including job ID (%j)
 
+# the directory containing RNA-FM model
+# downloaded from https://github.com/ml4bio/RNA-FM 
+export model_location="path/to/model/location/RNA-FM/fm/"
+
+export reference_sheet="path/to/reference_sheet.csv"
+export dms_data_dir="path/to/dms/data/dir"
+export output_scores_dir="path/to/output/scores/dir"
 
 python compute_fitness.py  \
-    --model_location /n/groups/marks/projects/rna_structure/code/RNA-FM/fm/ \
-    --reference_sequences /n/groups/marks/projects/RNAgym/mutational_assays/reference_sheet_cleaned_CAS.csv \
-    --dms_directory /n/groups/marks/projects/RNAgym/mutational_assays/processed_gdrive/ \
-    --output_directory /n/groups/marks/projects/RNAgym/baselines/RNA-FM/test-batch/test_run/ 
+    --model_location "$model_location" \
+    --reference_sequences "$reference_sheet" \
+    --dms_directory "$dms_data_dir" \
+    --output_directory "$output_scores_dir" 
