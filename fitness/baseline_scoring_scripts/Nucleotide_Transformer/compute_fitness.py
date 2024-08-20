@@ -26,23 +26,25 @@ def get_sequences(wt_sequence, df):
         old_base = mutation[0]
         old_base = 'T' if old_base == 'U' else old_base
         new_base = 'T' if new_base == 'U' else new_base
-        
+
         assert old_base in possible_bases, mutation
         assert new_base in possible_bases, mutation
-        
-        if new_base == '':
+
+        if old_base == 'N':
+            # This is going to be an insertion
+            mutated_sequence = sequence[:pos+1] + new_base + sequence[pos+1:]
+        elif new_base == '':
             # This is going to be a deletion
             mutated_sequence = sequence[:pos] + sequence[pos+1:]
         else:
             # This is a substitution
             assert old_base == sequence[pos], mutation
             mutated_sequence = sequence[:pos] + new_base + sequence[pos+1:]
-        
+
         return mutated_sequence
 
     # Function to apply multiple mutations
     def apply_mutations(sequence, mutations):
-
         for mutation in mutations.split(','):
             sequence = apply_mutation(sequence, mutation)
         return sequence
@@ -54,12 +56,29 @@ def get_sequences(wt_sequence, df):
         df['mutated_sequence'] = df[mutation_column].apply(lambda x: apply_mutations(wt_sequence, x))
     else:
         raise ValueError("No 'mutant' or 'mutation' column found in the DataFrame")
-    
+
     return df
 
-def score_variants(sequences, tokenizer, model, batch_size=32):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    model = model.to(device)
+def score_variants(assay, model, tokenizer, base_dir, results_dir, score_column, batch_size=32):
+    
+    dataset = assay['fitness filename']
+    if 'snoRNA' in dataset:
+        return
+    df_path = os.path.join(base_dir, f'{dataset}.csv')
+    df = pd.read_csv(df_path)
+    df.columns = df.columns.str.lower()
+    df.dropna(inplace=True)
+    df = df.loc[:, ~df.columns.duplicated()]
+    wt_seq = assay['Raw Construct Sequence'].upper()
+    
+    try:
+        sequences = get_sequences(wt_seq, df)
+    except AssertionError as e:
+        print("assertion error", e, "in", dataset)
+        return
+    
+    output_file = os.path.join(results_dir, f"{dataset}.csv")
+
     max_length = tokenizer.model_max_length
     scores = []
 
@@ -93,52 +112,38 @@ def score_variants(sequences, tokenizer, model, batch_size=32):
 
             scores.append(avg_log_prob)
 
-    return scores
+    scores.to_csv(f'{output_file}')
 
 
-def main():
+def main(args):
 
-    assay_id = int(sys.argv[1])
+    print('Loading model...')
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    tokenizer = AutoTokenizer.from_pretrained(args.model_location)
+    model = AutoModelForMaskedLM.from_pretrained(args.model_location).to(device)
 
-    # load reference sheet
-    wt_seqs = pd.read_csv('/n/groups/marks/projects/RNAgym/mutational_assays/reference_sheet_cleaned_CAS_nosno_with_N.csv', encoding='latin-1')
+    base_dir = args.dms_directory
+    results_dir = args.output_directory
+    score_column = 'logit_scores'
+    wt_seqs = pd.read_csv(args.reference_sheet, encoding='latin-1')
     wt_seqs.dropna(inplace=True)
     wt_seqs['Year'] = wt_seqs['Year'].astype(int)
     wt_seqs['First Author Last Name'] = wt_seqs['First Author Last Name'].astype(str)
     wt_seqs['Molecule Type'] = wt_seqs['Molecule Type'].astype(str)
-    row = wt_seqs.iloc[assay_id]
-    dataset = row['fitness filename']
-    output = f'/n/groups/marks/projects/RNAgym/baselines/Nucleotide_Transformer/results_N/{dataset}.csv'
 
-    if os.path.exists(output):
-        print(f'Already processed {dataset}! Continue')
-        exit(0)
-
-    print('Loading model...')
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    tokenizer = AutoTokenizer.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species")
-    model = AutoModelForMaskedLM.from_pretrained("InstaDeepAI/nucleotide-transformer-2.5b-multi-species").to(device)
-
-    print(f'Scoring {dataset}...')
-    df = f'/n/groups/marks/projects/RNAgym/mutational_assays/processed_gdrive/{dataset}.csv'
-    df = pd.read_csv(df)
-    df.columns = df.columns.str.lower()
-    df.dropna(inplace=True)
-    df = df.loc[:, ~df.columns.duplicated()]
-
-    wt_seq = row['Raw Construct Sequence'].upper()
-
-    if dataset == "Pitt_2010_ribozyme":
-        wt_seq = "GGAACACTATCCGACTGCGGTCGGTGGAGATGTATAGTCTTAGGGTGAGGCTGGAGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
-    df = get_sequences(wt_seq, df)
-
-    seqs = df.mutated_sequence
-    scores = score_variants(seqs, tokenizer, model)
-    df['NT_scores'] = scores
-    df.to_csv(f'{output}')
-    print(f'Finished {dataset}!')
+    # Select the row corresponding to the task ID
+    assay = wt_seqs.iloc[args.task_id]
+    score_variants(assay, model, tokenizer, base_dir, results_dir, score_column)
 
 
-main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--reference_sheet', type=str, required=True)
+    parser.add_argument('--task_id', type=int, required=True)
+    parser.add_argument("--model_location", type=str, help="NT Huggingface model to use")
+    parser.add_argument("--dms_directory", type=str,help="Directory containing the mutational datasets to be scored")
+    parser.add_argument("--output_directory", type=str, help="Directory for scored fitness files")
+    args = parser.parse_args()
+    main(args)
 
 
