@@ -65,7 +65,7 @@ Task | Data | Size (unzipped) | Link
 **Fitness prediction** | Model predictions | 438MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
 **Structure prediction** | Processed eval data | 3.2GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_data.zip
 **Structure prediction** | Raw assay data | 5.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/raw_data.zip
-**Structure prediction** | Model predictions | 441MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/model_predictions.zip
+**Structure prediction** | Model predictions | 34GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/model_predictions.zip
 **Structure prediction** | Model files | 441MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/models.zip
 
 Model files for the structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
