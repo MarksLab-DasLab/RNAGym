@@ -23,7 +23,7 @@ def compute_bins(df, model_type):
     return df
 
 model_type='RNA_FM'
-data_folder = '/n/groups/marks/projects/marks_lab_and_oatml/RNAGym/structure_prediction'
+data_folder = 'Path to model predictions' #Replace w/ your folder path
 test_data_folder = os.path.join(data_folder,'test_data')
 final_output_repo = os.path.join(data_folder,'model_predictions')
 final_test_data_name = "final_test_set.csv"
