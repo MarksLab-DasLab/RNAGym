@@ -59,33 +59,38 @@ def get_sequences(wt_sequence, df):
 
     return df
 
-def score_variants(assay, model, tokenizer, base_dir, results_dir, score_column, batch_size=32):
-    
+def score_variants(assay, model, tokenizer, base_dir, results_dir, score_column, batch_size):
+
     dataset = assay['fitness filename']
     if 'snoRNA' in dataset:
         return
     df_path = os.path.join(base_dir, f'{dataset}.csv')
     df = pd.read_csv(df_path)
     df.columns = df.columns.str.lower()
-    df.dropna(inplace=True)
+    mutation_column = 'mutant' if 'mutant' in df.columns else 'mutation' if 'mutation' in df.columns else 'mutations' if 'mutations' in df.columns else None
+    df = df[~df[mutation_column].isna()]
     df = df.loc[:, ~df.columns.duplicated()]
     wt_seq = assay['Raw Construct Sequence'].upper()
-    
+
     try:
-        sequences = get_sequences(wt_seq, df)
+        df = get_sequences(wt_seq, df)
     except AssertionError as e:
         print("assertion error", e, "in", dataset)
         return
-    
+
     output_file = os.path.join(results_dir, f"{dataset}.csv")
 
     max_length = tokenizer.model_max_length
     scores = []
 
+
+    sequences = df.mutated_sequence
+    print(len(sequences))
+    print(batch_size)
     # Process sequences in batches
     for i in tqdm(range(0, len(sequences), batch_size), desc="Processing batches"):
         batch = sequences[i:i + batch_size]
-
+        print(len(batch))
         # Check and truncate sequences if they exceed the model's maximum length
         batch = [seq[:max_length] for seq in batch]
 
@@ -104,6 +109,7 @@ def score_variants(assay, model, tokenizer, base_dir, results_dir, score_column,
             valid_length = (input_ids != tokenizer.pad_token_id).sum().item()
 
             if valid_length == 0:
+                print(seq)
                 continue
 
             # Get log probabilities of the correct tokens
@@ -111,8 +117,11 @@ def score_variants(assay, model, tokenizer, base_dir, results_dir, score_column,
             avg_log_prob = log_probs.mean().item()
 
             scores.append(avg_log_prob)
+        print(len(scores))
 
-    scores.to_csv(f'{output_file}')
+    df[score_column] = scores
+    df.to_csv(output_file, index=False)
+
 
 
 def main(args):
@@ -133,7 +142,8 @@ def main(args):
 
     # Select the row corresponding to the task ID
     assay = wt_seqs.iloc[args.task_id]
-    score_variants(assay, model, tokenizer, base_dir, results_dir, score_column)
+    batch_size = 16
+    score_variants(assay, model, tokenizer, base_dir, results_dir, score_column, batch_size)
 
 
 if __name__ == "__main__":
