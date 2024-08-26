@@ -37,6 +37,13 @@ The RNAGym environment may be created via conda and the provided rnagym_env.yml 
 conda env create -f rnagym_env.yml
 conda activate rnagym_env
 ```
+For the fitness prediction task, we recommend the following folder structure:
+```
+fitness_prediction/
+├── processed_DMS_files/
+├── model_predictions/
+└── model_checkpoints/
+```
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
 ```
@@ -60,14 +67,17 @@ unzip rnagym_assays.zip && rm rnagym_assays.zip
 
 Task | Data | Size (unzipped) | Link
 --- | --- | --- | --- |
-**Fitness prediction** | Processed assay data | 75MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/rnagym_assays.zip
-**Fitness prediction** | Raw assay data | 88MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/raw_data.zip
+**Fitness prediction** | Processed assay data | 73MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_processed_assays.zip
+**Fitness prediction** | Raw assay data | 88MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_raw_data.zip
 **Fitness prediction** | Model predictions | 438MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
+**Fitness prediction** | Alignments | 319K | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_MSAs.zip
+**Fitness prediction** | 3D structures | 621K | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_assays_3D_structures.zip
 **Fitness prediction** | CV splits (supervised) | 145M | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_CV_splits.zip
 **Structure prediction** | Processed eval data | 3.2GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_data.zip
 **Structure prediction** | Raw assay data | 5.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/raw_data.zip
 **Structure prediction** | Model predictions | 34GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/model_predictions.zip
 **Structure prediction** | Model files | 441MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/models.zip
+**Structure prediction** | Training data (supervised) | 8.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/train_data.zip
 **Structure prediction** | Additional annotations (PDB, Rfam, PseudoBase) | 29M | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_sequences_annotated.zip
 
 Model files for the structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
