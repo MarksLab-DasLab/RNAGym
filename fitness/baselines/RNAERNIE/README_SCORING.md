@@ -1,1 +1,0 @@
-python score_RNAERNIE.py --model_checkpoint output/BERT,ERNIE,MOTIF,PROMPT/checkpoint_final/  --dms_directory /home/ubuntu/RNAGYM/RNAGym-main/fitness_processed_assays/ --output_directory out/ --vocab_path ./data/vocab/vocab_1MER.txt --reference_sequences /home/ubuntu/RNAGYM/RNAGym-main/fitness/reference_sheet.csv

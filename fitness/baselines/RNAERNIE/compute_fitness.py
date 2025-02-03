@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import pandas as pd
 from paddlenlp.transformers import ErnieForMaskedLM
 import paddle
-from rna_ernie import BatchConverter  
+from src.rna_ernie import BatchConverter  
 
 # Function Definitions
 def construct_file_path(directory, filename, extension=".csv"):

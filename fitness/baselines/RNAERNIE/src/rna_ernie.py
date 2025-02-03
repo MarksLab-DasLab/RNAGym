@@ -12,8 +12,8 @@ from paddlenlp.utils.log import logger
 from paddlenlp.data import Stack
 from paddlenlp.transformers import ErnieModel
 
-from dataset_utils import seq2input_ids
-from tokenizer_nuc import NUCTokenizer
+from src.dataset_utils import seq2input_ids
+from src.tokenizer_nuc import NUCTokenizer
 
 
 class BatchConverter(object):
