@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# the directory containing RNA-FM model
-# downloaded from https://github.com/ml4bio/RNA-FM 
+# RNAErnie model
 export model_checkpoint="src/"
 export vocab_path="src/vocab_1MER.txt"
 
