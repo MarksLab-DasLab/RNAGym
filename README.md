@@ -11,11 +11,13 @@ We have currently implemented the following baselines:
 
 Model name | Model type | Reference
 --- | --- | --- |
+Evo | Genomic Language Model | Nguyen et al. "Sequence modeling and design from molecular to genome scale with Evo". Science, 2024.
+RNAErnie | Genomic Language Model | Wang et al. "Multi-purpose RNA language modelling with motif-aware pretraining and type-guided fine-tuning". Nature Machine Intelligence, 2024.
 RiNALMo | RNA Language Model | Penić et al. "RiNALMo: General-Purpose RNA Language Models Can Generalize Well on Structure Prediction Tasks". arXiv, 2024.
-Evo | Genomic Language Model | Nguyen et al. "Sequence modeling and design from molecular to genome scale with Evo". bioRxiv, 2024.
 RNA-FM | RNA Language Model | Chen et al. "Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions" arXiv, 2022. 
-GenSLM | Genomic Language Model | Zvyagin et al. "GenSLMs: Genome-scale language models reveal SARS-CoV-2 evolutionary dynamics". The International Journal of High Performance Computing Applications, 2023.
 Nucleotide Transformer | Genomic Language Model | Dalla-Torre et al. "The Nucleotide Transformer: Building and Evaluating Robust Foundation Models for Human Genomics". bioRxiv, 2023.
+GenSLM | Genomic Language Model | Zvyagin et al. "GenSLMs: Genome-scale language models reveal SARS-CoV-2 evolutionary dynamics". The International Journal of High Performance Computing Applications, 2023.
+
 
 ### Structure prediction
 
