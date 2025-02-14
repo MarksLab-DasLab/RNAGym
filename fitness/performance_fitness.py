@@ -83,6 +83,59 @@ def bootstrap_se(data: pd.DataFrame, group_col: str, metric_col: str, types: Lis
 
     return se
 
+def bootstrap_se_of_means(df: pd.DataFrame, type_col: str, metric_col: str, types: List[str], 
+                         metric_columns: List[str], n_iterations: int) -> float:
+    """
+    Calculate the standard error of the mean of type means using bootstrapping.
+    Takes into account assay reshuffling and handles maximum scores correctly.
+    
+    Args:
+        df: DataFrame containing the data
+        type_col: Column name containing RNA types
+        metric_col: Column name of the metric to calculate SE for
+        types: List of RNA types to include
+        metric_columns: List of metric columns (used for assay reshuffling)
+        n_iterations: Number of bootstrap iterations
+    
+    Returns:
+        float: Standard error of the mean of type means
+    """
+    bootstrap_means = []
+    
+    # Get the true values for comparison
+    true_type_means = {rna_type: df[df[type_col] == rna_type][metric_col].mean() 
+                      for rna_type in types}
+    true_mean = sum(true_type_means.values()) / len(true_type_means)
+    
+    # If this is the maximum scoring model for this metric,
+    # return 0 as the standard error
+    other_scores = df[metric_columns].mean()
+    if all(other_scores[metric_col] >= other_scores):
+        return 0.0
+    
+    for _ in range(n_iterations):
+        # For each iteration, first reshuffle the assay scores
+        reshuffled_df = df.copy()
+        metric_data = reshuffled_df[metric_columns].values
+        np.random.shuffle(metric_data)
+        reshuffled_df[metric_columns] = metric_data
+        
+        # Then calculate means for each type
+        type_means = []
+        for rna_type in types:
+            type_data = reshuffled_df[reshuffled_df[type_col] == rna_type][metric_col]
+            if len(type_data) > 0:
+                # For each type, bootstrap sample with replacement
+                bootstrap_sample = type_data.sample(n=len(type_data), replace=True)
+                type_means.append(bootstrap_sample.mean())
+        
+        # Calculate mean of type means for this iteration
+        if type_means:
+            bootstrap_means.append(sum(type_means) / len(type_means))
+    
+    # Calculate standard error from bootstrap distribution
+    return np.std(bootstrap_means)
+
 def calculate_RNA_types_averages_with_se(wt_seqs: pd.DataFrame, types: List[str], score_columns: List[str], calculate_se: bool, number_assay_reshuffle: int = 100) -> pd.DataFrame:
     """Calculate average metrics and optionally bootstrap standard errors for each type and model."""
     metrics = ['Spearman', 'AUC', 'MCC']
@@ -92,20 +145,22 @@ def calculate_RNA_types_averages_with_se(wt_seqs: pd.DataFrame, types: List[str]
         model_data = {'Model': model}
         for metric in metrics:
             metric_col = f'{metric}_{model}'
-            for rna_type in types + ['All']:
-                if rna_type == 'All':
-                    mean_value = wt_seqs[metric_col].mean()
-                else:
-                    mean_value = wt_seqs[wt_seqs['RNA_TYPE'] == rna_type][metric_col].mean()
-                
+            type_means = {}
+            for rna_type in types:
+                mean_value = wt_seqs[wt_seqs['RNA_TYPE'] == rna_type][metric_col].mean()
+                type_means[rna_type] = mean_value
                 model_data[f'{metric}_{rna_type}_Mean'] = mean_value
-                
+            
+            # Calculate 'All' as average of type means
+            all_mean = sum(type_means.values()) / len(type_means)
+            model_data[f'{metric}_All_Mean'] = all_mean
+
             if calculate_se:
                 metric_columns = [f'{metric}_{col}' for col in score_columns]
-                se = bootstrap_se(wt_seqs, 'RNA_TYPE', metric_col, types, metric_columns, number_assay_reshuffle)
-                for rna_type in types + ['All']:
-                    model_data[f'{metric}_{rna_type}_SE'] = se[rna_type]
-        
+                type_se = bootstrap_se(wt_seqs, 'RNA_TYPE', metric_col, types, metric_columns, number_assay_reshuffle)
+                for rna_type in types + ["All"]:
+                    model_data[f'{metric}_{rna_type}_SE'] = type_se[rna_type]
+
         result_data.append(model_data)
 
     result_df = pd.DataFrame(result_data)
@@ -224,7 +279,8 @@ def save_assay_level_results(wt_seqs: pd.DataFrame, score_columns: List[str], ou
 
 def main(args):
     wt_seqs = pd.read_csv(args.reference_file)
-    score_columns = ['Evo_score','GenSLM_score','Nucleotide_Transformer_score','RNA_FM_score','RiNALMo_score']
+    model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt']
+    score_columns = [model+str("_score") for model in model_list]
     wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns)
     types = ['mRNA', 'tRNA', 'Aptamer', 'Ribozyme']
     
@@ -235,14 +291,14 @@ def main(args):
     result_df_mutation_depth = calculate_mutation_depth_averages_with_se(wt_seqs, score_columns, args.combined_dir, False)
 
     # Ensure the performance directory exists
-    os.makedirs('./performance', exist_ok=True)
+    os.makedirs(args.performance_dir, exist_ok=True)
 
     # Save results to CSV
-    result_df_type.to_csv('./performance/results_by_rna_type.csv', index=False)
-    result_df_mutation_depth.to_csv('./performance/results_by_mutation_depth.csv', index=False)
+    result_df_type.to_csv(os.path.join(args.performance_dir,'results_by_rna_type.csv'), index=False)
+    result_df_mutation_depth.to_csv(os.path.join(args.performance_dir,'results_by_mutation_depth.csv'), index=False)
     
     # Save assay-level results
-    save_assay_level_results(wt_seqs, score_columns, './performance/assay_level_results.csv')
+    save_assay_level_results(wt_seqs, score_columns, os.path.join(args.performance_dir,'assay_level_results.csv'))
 
     # Print results
     print("\nMetrics by RNA Type:")
@@ -258,5 +314,7 @@ if __name__ == "__main__":
                         help='Base directory for combined result files')
     parser.add_argument('--calculate_se', action='store_true',
                         help='Calculate standard errors (computationally intensive)')
+    parser.add_argument('--performance_dir', type=str, default=None, help='Dir where performance file should be stored')
     args = parser.parse_args()
+    if args.performance_dir is None: args.performance_dir = os.getcwd()
     main(args)

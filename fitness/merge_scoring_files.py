@@ -75,14 +75,17 @@ def main():
     if args.assays_with_MSAs_only:
         model_list = ['PSSM', 'EVmutation']
     else:
-        model_list = ['Evo','GenSLM','Nucleotide_Transformer','RNA_FM','RiNALMo']
+        model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt']
     
     score_cols_dict = {
-        'Evo': 'scores',
+        'evo1': 'evo_1_8k_base_score',
+        'evo1.5': 'evo_1.5_8k_base_score',
         'GenSLM': 'logit_scores',
-        'Nucleotide_Transformer': 'logit_scores',
-        'RNA_FM': 'RNA_FM_scores',
-        'RiNALMo': 'logit_scores',
+        'NT_mm': 'avg_masked_LL',
+        'NT_pll': 'avg_pseudo_LL',
+        'RNA-FM_wt': 'RNA_FM_scores',
+        'rinalmo': 'logit_scores',
+        'RNAErnie': 'Mutation_Scores',
         'PSSM': 'prediction_independent',
         'EVmutation': 'prediction_epistatic'
     }
