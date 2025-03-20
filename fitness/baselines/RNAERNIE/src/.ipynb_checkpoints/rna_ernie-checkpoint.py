@@ -1,6 +1,5 @@
 """
 This module inference sequences embeddings.
-
 """
 
 from Bio import SeqIO
