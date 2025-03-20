@@ -1,8 +1,5 @@
 """
 This module builds RNA nucleotide tokenizer.
-
-Author: wangning(wangning.roci@gmail.com)
-Date  : 2022/8/8 2:43 PM
 """
 
 # built-in modules
