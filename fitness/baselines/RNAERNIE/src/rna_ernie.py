@@ -17,7 +17,7 @@ class BatchConverter(object):
     """Convert sequences to batch inputs.
     """
 
-    def __init__(self, k_mer=1, vocab_path="./data/vocab/vocab_1MER.txt", batch_size=256, max_seq_len=512, is_pad=True, st_pos=0):
+    def __init__(self, k_mer=1, vocab_path="./vocab/vocab_1MER.txt", batch_size=256, max_seq_len=512, is_pad=True, st_pos=0):
         """this class predicts embeddings from RNA sequences list
 
         Args:
