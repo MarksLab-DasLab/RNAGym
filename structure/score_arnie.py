@@ -59,7 +59,6 @@ def main(args: argparse.Namespace):
         for rowidx, row in tqdm(df.iterrows(), total=df.shape[0]):
             pred = predict_structures_arnie(row['sequence'], args.model_type)
             df.at[rowidx, f"prediction_{args.model_type}"] = array_to_string(pred)
-            if rowidx > 100: break
 
         # Save predictions
         save_predictions(df, output_path)
