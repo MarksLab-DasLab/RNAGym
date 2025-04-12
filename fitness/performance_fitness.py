@@ -29,9 +29,12 @@ def get_performance_dataset(df: pd.DataFrame, assay_col: str, score_columns: Lis
     df = df.dropna(subset=['mutant'])  # Drop WT sequences if present
     
     for model in score_columns:
-        subset = df.dropna(subset=[assay_col, model])
+        try:
+            subset = df.dropna(subset=[assay_col, model])
+        except:
+            subset = None
         
-        if subset.empty:
+        if subset is None or subset.empty:
             results[model] = {metric: np.nan for metric in ['Spearman', 'AUC', 'MCC']}
         else:
             try:
@@ -279,7 +282,7 @@ def save_assay_level_results(wt_seqs: pd.DataFrame, score_columns: List[str], ou
 
 def main(args):
     wt_seqs = pd.read_csv(args.reference_file)
-    model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt']
+    model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
     score_columns = [model+str("_score") for model in model_list]
     wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns)
     types = ['mRNA', 'tRNA', 'Aptamer', 'Ribozyme']

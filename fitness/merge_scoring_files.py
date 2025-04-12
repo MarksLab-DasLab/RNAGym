@@ -21,7 +21,7 @@ def get_mutation_column(df):
 
 # Function to standardize mutation strings (replace 'T' with 'U')
 def standardize_mutation(mutation):
-    return str(mutation).replace('T', 'U')
+    return str(mutation).replace('T', 'U').replace(' ','')
 
 # Function to combine CSV data with model predictions
 def combine_csv_data(processed_folder, model_predictions_folder, output_folder, model_list, score_cols_dict):
@@ -56,7 +56,7 @@ def combine_csv_data(processed_folder, model_predictions_folder, output_folder, 
                         save = False
                 else:
                     logger.warning(f"Model file {csv_file} not found in {model_name}")
-                    save = False
+                    #save = False
 
             if len(df) > 0 and save:
                 output_file = os.path.join(output_folder, csv_file)
@@ -75,15 +75,16 @@ def main():
     if args.assays_with_MSAs_only:
         model_list = ['PSSM', 'EVmutation']
     else:
-        model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt']
+        model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
     
     score_cols_dict = {
-        'evo1': 'evo_1_8k_base_score',
+        'evo1': 'evo_1_131k_base_score',
         'evo1.5': 'evo_1.5_8k_base_score',
         'GenSLM': 'logit_scores',
-        'NT_mm': 'avg_masked_LL',
+        'NT_mm': 'kmer_pseudo_LL',
         'NT_pll': 'avg_pseudo_LL',
         'RNA-FM_wt': 'RNA_FM_scores',
+        'RNA-FM_masked': 'RNA_FM_score',
         'rinalmo': 'logit_scores',
         'RNAErnie': 'Mutation_Scores',
         'PSSM': 'prediction_independent',
