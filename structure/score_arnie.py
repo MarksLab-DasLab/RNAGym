@@ -69,7 +69,7 @@ def main(args: argparse.Namespace):
             for rowidx, row in tqdm(df.iterrows(), total=df.shape[0]):
                 df.at[rowidx, f"prediction_{args.model_type}"] = func(row['sequence'])
         else:
-            results = process_map(func, df.sequence.values, max_workers=num_workers, chunksize=1)
+            results = process_map(func, df.sequence.values, max_workers=args.num_workers, chunksize=1)
             df[f"prediction_{args.model_type}"] = results
 
         # Save predictions
