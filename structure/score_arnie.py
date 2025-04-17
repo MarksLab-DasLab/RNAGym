@@ -11,6 +11,19 @@ from utils import (load_data, unpaired_probabilities, process_predictions, organ
 from tqdm.contrib.concurrent import process_map
 from functools import partial
 
+def organize_data(df: pd.DataFrame) -> pd.DataFrame:
+    # Organize the DMS and 2A3 data
+    df_DMS = df[df["modifier"] == "DMS"]
+    df_2A3 = df[df["modifier"] == "2A3"]
+
+    for df_mod in [df_DMS, df_2A3]:
+        # Remove duplicate sequences within each df. Select the duplicate with the highest signal-to-noise ratio (SNR)
+        df_mod = df_mod.sort_values(['sequence', 'SNR'], ascending=[False, False])
+        df_mod = df_mod.drop_duplicates(subset=['sequence'], keep="first")
+    df = pd.merge(df_DMS, df_2A3, on='sequence', how='outer', suffixes=('_DMS', '_2A3'))
+    df = df[["seqID_DMS", "seqID_2A3", "sequence", "reactivity_DMS", "reactivity_2A3"]]
+    return df
+
 def predict_structures_arnie(seq: str, model_type: str) -> np.ndarray:
     # clean sequence
     seq = seq.replace("T", "U") # Convert to RNA if there's any T's by accident
@@ -44,6 +57,7 @@ def main(args: argparse.Namespace):
 
     # Organize and clean up such that each row is a unique sequence
     df = organize_data(df)
+    print(f"Processing df with shape {df.shape}")
 
     # Check if predictions already exist
     if os.path.exists(output_path):
