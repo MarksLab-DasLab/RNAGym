@@ -139,7 +139,7 @@ def bootstrap_se_of_means(df: pd.DataFrame, type_col: str, metric_col: str, type
     # Calculate standard error from bootstrap distribution
     return np.std(bootstrap_means)
 
-def calculate_RNA_types_averages_with_se(wt_seqs: pd.DataFrame, types: List[str], score_columns: List[str], calculate_se: bool, number_assay_reshuffle: int = 100) -> pd.DataFrame:
+def calculate_RNA_types_averages_with_se(wt_seqs: pd.DataFrame, types: List[str], score_columns: List[str], calculate_se: bool, number_assay_reshuffle: int = 1000) -> pd.DataFrame:
     """Calculate average metrics and optionally bootstrap standard errors for each type and model."""
     metrics = ['Spearman', 'AUC', 'MCC']
     result_data = []
@@ -280,18 +280,142 @@ def save_assay_level_results(wt_seqs: pd.DataFrame, score_columns: List[str], ou
     assay_df = pd.DataFrame(data)
     assay_df.to_csv(output_file, index=False)
 
+def calculate_combined_averages_with_se(wt_seqs: pd.DataFrame, types: List[str], score_columns: List[str], 
+                                       combined_dir: str, calculate_se: bool, 
+                                       number_assay_reshuffle: int = 10000) -> pd.DataFrame:
+    """Calculate average metrics for combinations of RNA type and mutation depth."""
+    # First, ensure mutation depth columns are added to the dataframe
+    for _, row in wt_seqs.iterrows():
+        dataset = row['DMS_ID']
+        df_path = f'{combined_dir}/{dataset}.csv'
+        
+        if os.path.exists(df_path):
+            df = pd.read_csv(df_path)
+            if 'Depth' not in df:
+                mutation_column = 'mutant'
+                df[mutation_column] = df[mutation_column].astype(str)
+                df['mutation_count'] = df[mutation_column].apply(lambda x: len(x.split(',')))
+                df['Depth'] = np.where(df['mutation_count'] == 1, 'single', 'multiple')
+                df.to_csv(df_path, index=False)
+            
+            # Calculate metrics for each depth and RNA type combination
+            for depth in ['single', 'multiple']:
+                df_subset_depth = df[df['Depth'] == depth]
+                if not df_subset_depth.empty:
+                    dataset_results = get_performance_dataset(df_subset_depth, 'DMS_score', score_columns)
+                    for model in score_columns:
+                        for metric in ['Spearman', 'AUC', 'MCC']:
+                            wt_seqs.loc[wt_seqs['DMS_ID'] == dataset, f'{metric}_{model}_{depth}'] = dataset_results[model][metric]
+            
+            # Also calculate metrics for all mutations (without filtering by depth)
+            dataset_results_all = get_performance_dataset(df, 'DMS_score', score_columns)
+            for model in score_columns:
+                for metric in ['Spearman', 'AUC', 'MCC']:
+                    wt_seqs.loc[wt_seqs['DMS_ID'] == dataset, f'{metric}_{model}_overall'] = dataset_results_all[model][metric]
+
+    # Calculate averages for each combination
+    results = []
+    for model in score_columns:
+        for depth in ['single', 'multiple', 'overall']:
+            # First calculate per RNA type
+            for rna_type in types:
+                row_data = {
+                    'Model': model,
+                    'Depth': depth,
+                    'RNA_TYPE': rna_type
+                }
+                
+                type_datasets = wt_seqs[wt_seqs['RNA_TYPE'] == rna_type]['DMS_ID'].tolist()
+                type_subset = wt_seqs[wt_seqs['DMS_ID'].isin(type_datasets)]
+                
+                for metric in ['Spearman', 'AUC', 'MCC']:
+                    col_name = f'{metric}_{model}_{depth}'
+                    values = type_subset[col_name].dropna()
+                    
+                    if len(values) > 0:
+                        row_data[f'{metric}_Mean'] = np.mean(values)
+                        
+                        if calculate_se:
+                            # Calculate SE using bootstrap
+                            metric_columns = [f'{metric}_{col}_{depth}' for col in score_columns]
+                            se = bootstrap_se(type_subset, 'DMS_ID', col_name, [rna_type], 
+                                             metric_columns, number_assay_reshuffle)
+                            row_data[f'{metric}_SE'] = se[rna_type]
+                    else:
+                        row_data[f'{metric}_Mean'] = np.nan
+                        if calculate_se:
+                            row_data[f'{metric}_SE'] = np.nan
+                
+                results.append(row_data)
+            
+            # Then calculate "All RNA types" average for this depth
+            row_data = {
+                'Model': model,
+                'Depth': depth,
+                'RNA_TYPE': 'All'
+            }
+            
+            for metric in ['Spearman', 'AUC', 'MCC']:
+                # Calculate the mean of type means for this depth
+                type_means = []
+                for rna_type in types:
+                    type_datasets = wt_seqs[wt_seqs['RNA_TYPE'] == rna_type]['DMS_ID'].tolist()
+                    type_subset = wt_seqs[wt_seqs['DMS_ID'].isin(type_datasets)]
+                    
+                    col_name = f'{metric}_{model}_{depth}'
+                    values = type_subset[col_name].dropna()
+                    if len(values) > 0:
+                        type_means.append(np.mean(values))
+                
+                if type_means:
+                    # 'All' is average of type means
+                    row_data[f'{metric}_Mean'] = np.mean(type_means)
+                    
+                    if calculate_se:
+                        # For "All", combine SEs from individual types
+                        ses = []
+                        for rna_type in types:
+                            type_datasets = wt_seqs[wt_seqs['RNA_TYPE'] == rna_type]['DMS_ID'].tolist()
+                            if type_datasets:
+                                type_subset = wt_seqs[wt_seqs['DMS_ID'].isin(type_datasets)]
+                                col_name = f'{metric}_{model}_{depth}'
+                                metric_columns = [f'{metric}_{col}_{depth}' for col in score_columns]
+                                
+                                se = bootstrap_se(type_subset, 'DMS_ID', col_name, [rna_type], 
+                                                metric_columns, number_assay_reshuffle)
+                                if not np.isnan(se[rna_type]):
+                                    ses.append(se[rna_type] ** 2)  # Variance
+                        
+                        if ses:
+                            # Standard error is sqrt of average variance
+                            row_data[f'{metric}_SE'] = np.sqrt(np.mean(ses))
+                        else:
+                            row_data[f'{metric}_SE'] = np.nan
+                else:
+                    row_data[f'{metric}_Mean'] = np.nan
+                    if calculate_se:
+                        row_data[f'{metric}_SE'] = np.nan
+            
+            results.append(row_data)
+    
+    return pd.DataFrame(results)
+
 def main(args):
     wt_seqs = pd.read_csv(args.reference_file)
-    model_list = ['evo1','evo1.5','GenSLM','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
+    model_list = ['evo1','evo1.5','evo2','GenSLM_pll', 'GenSLM_mm','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
     score_columns = [model+str("_score") for model in model_list]
     wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns)
-    types = ['mRNA', 'tRNA', 'Aptamer', 'Ribozyme']
+    types = ['mRNA-splicing', 'mRNA-coding', 'tRNA', 'Aptamer', 'Ribozyme']
     
     # Calculate averages and standard errors per RNA type
     result_df_type = calculate_RNA_types_averages_with_se(wt_seqs, types, score_columns, args.calculate_se)
     
     # Calculate averages and standard errors per mutation depth
     result_df_mutation_depth = calculate_mutation_depth_averages_with_se(wt_seqs, score_columns, args.combined_dir, False)
+    
+    # Calculate combined averages (RNA type + mutation depth)
+    result_df_combined = calculate_combined_averages_with_se(wt_seqs, types, score_columns, 
+                                                           args.combined_dir, False)
 
     # Ensure the performance directory exists
     os.makedirs(args.performance_dir, exist_ok=True)
@@ -299,6 +423,7 @@ def main(args):
     # Save results to CSV
     result_df_type.to_csv(os.path.join(args.performance_dir,'results_by_rna_type.csv'), index=False)
     result_df_mutation_depth.to_csv(os.path.join(args.performance_dir,'results_by_mutation_depth.csv'), index=False)
+    result_df_combined.to_csv(os.path.join(args.performance_dir,'results_by_rna_type_and_depth.csv'), index=False)
     
     # Save assay-level results
     save_assay_level_results(wt_seqs, score_columns, os.path.join(args.performance_dir,'assay_level_results.csv'))
@@ -308,6 +433,8 @@ def main(args):
     print(result_df_type)
     print("\nMetrics by Mutation Depth:")
     print(result_df_mutation_depth)
+    print("\nMetrics by RNA Type and Mutation Depth:")
+    print(result_df_combined)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze RNA datasets and calculate metrics for multiple models.")

@@ -23,30 +23,49 @@ def unpaired_probabilities(prob_matrix: np.ndarray) -> np.ndarray:
     return np.prod(1 - prob_matrix, axis=1)
 
 def compute_bins(df: pd.DataFrame, model_type: str) -> pd.DataFrame:
-    for col in ['reactivity_DMS_MaP', f'prediction_{model_type}']:
+    for col in ['reactivity_DMS', "reactivity_2A3", f'prediction_{model_type}']:
         median = df[col].median()
         df[f'{col}_bin'] = df[col] > median
     return df
 
-def process_predictions(predictions: pd.DataFrame, test_data: pd.DataFrame, model_type: str) -> pd.DataFrame:
-    merged_data = pd.merge(test_data, predictions, on=['seqID', "position_id"], how="left")
-    merged_data = merged_data[merged_data[f'prediction_{model_type}'].notna()]
-    #merged_data = merged_data[merged_data["Usage"] != "Ignored"]
-    
-    for col in ['reactivity_DMS_MaP', f'prediction_{model_type}']:
-        merged_data[col] = merged_data[col].clip(0, 1)
-    
-    return merged_data.groupby('sequence_id', group_keys=False).apply(compute_bins, model_type=model_type)
+def organize_data(df: pd.DataFrame) -> pd.DataFrame:
+    # Organize the DMS and 2A3 data
+    df_DMS = df[df["modifier"] == "DMS"]
+    df_2A3 = df[df["modifier"] == "2A3"]
 
-def collate_data(df: pd.DataFrame) -> Tuple[np.ndarray, ...]:
+    for df_mod in [df_DMS, df_2A3]:
+        # Remove duplicate sequences within each df. Select the duplicate with the highest signal-to-noise ratio (SNR)
+        df_mod = df_mod.sort_values(['sequence', 'SNR'], ascending=[False, False])
+        df_mod = df_mod.drop_duplicates(subset=['sequence'], keep="first")
+    df = pd.merge(df_DMS, df_2A3, on='sequence', how='outer', suffixes=('_DMS', '_2A3'))
+    df = df[["seqID_DMS", "seqID_2A3", "sequence", "reactivity_DMS", "reactivity_2A3"]]
+    #df = df.rename(columns={'seqID_DMS': 'seqID'})
+    return df
+
+def process_predictions(predictions, test_data, model_type):
+    merged_data = pd.merge(test_data, predictions, on='sequence', how='inner')
+    # All columns that contain array data
+    array_columns = ['reactivity_DMS', 'reactivity_2A3', f'prediction_{model_type}']
+    
+    # Check if these columns exist and handle array data appropriately
+    for col in array_columns:
+        if col in merged_data.columns:
+            # Apply clip to each array element-wise
+            merged_data[col] = merged_data[col].apply(
+                lambda arr: np.clip(arr, 0, 1) if isinstance(arr, np.ndarray) else arr
+            )
+    
+    return merged_data
+
+def collate_data(df: pd.DataFrame, clip=True) -> Tuple[np.ndarray, ...]:
     """ Compiles the true and predicted reactivity into one long np array """
     true_reactivities = []
     pred_probs = []
     for reactivity, pred in df.values:
-        reactivity = string_to_array(reactivity).clip(0, 1)
-        pred = string_to_array(pred).clip(0, 1)
+        if clip:
+            reactivity = string_to_array(reactivity).clip(0, 1)
+            pred = string_to_array(pred).clip(0, 1)
         assert(len(pred) == len(reactivity))
-        
         true_reactivities.append(reactivity)
         pred_probs.append(pred)
     true_reactivities = np.hstack(true_reactivities)
@@ -62,7 +81,7 @@ def collate_data(df: pd.DataFrame) -> Tuple[np.ndarray, ...]:
     pred_values = pred_probs > np.median(pred_probs)
     return true_reactivities, pred_probs, true_values, pred_values
 
-def compute_performance_metrics(predictions: pd.DataFrame, model_type: str) -> List[dict]:
+def compute_performance_metrics(predictions: pd.DataFrame, model_type: str, clip_values: bool=True) -> List[dict]:
     metrics = []
     for chemical_modifier in ["DMS", "2A3"]:
         reactivity_col = f"reactivity_{chemical_modifier}"
@@ -71,7 +90,7 @@ def compute_performance_metrics(predictions: pd.DataFrame, model_type: str) -> L
         # drop rows with missing reactivity data or missing prediction
         df_sub = df_sub.dropna()
 
-        true_reactivities, pred_probs, true_values, pred_values = collate_data(df_sub)
+        true_reactivities, pred_probs, true_values, pred_values = collate_data(df_sub, clip_values)
         metric = {
             'Chemical Modifier': chemical_modifier,
             'Model Type': model_type,

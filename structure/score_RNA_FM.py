@@ -4,9 +4,10 @@ from typing import List, Dict
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import fm
+import numpy as np
+#import fm
 from tqdm import tqdm
-from utils import (load_data, unpaired_probabilities, process_predictions, 
+from utils import (load_data, unpaired_probabilities, process_predictions, organize_data,
                    compute_performance_metrics, save_predictions, save_performance_metrics)
 
 def setup_argparse() -> argparse.Namespace:
@@ -39,17 +40,30 @@ def score_rna_fm(model, batch_converter, device, batch_data: List[Dict[str, str]
     probabilities = F.softmax(logits, dim=-1)
     return probabilities
 
+def pivot_sequence_predictions(df):
+    # First create a series of lists using groupby
+    grouped = df.groupby(['sequence_id', 'sequence'])['prediction_RNA_FM'].apply(list).reset_index()
+    
+    # Then convert lists to numpy arrays
+    grouped['prediction_RNA_FM'] = grouped['prediction_RNA_FM'].apply(np.array)
+    
+    return grouped
+
 def main(args: argparse.Namespace):
     model_type = "RNA_FM"
     # Setup paths
-    test_data_path = os.path.join(args.data_folder, 'test_data', args.test_data_name)
-    output_path = os.path.join(args.output_folder, f'predictions_{model_type}.csv')
+    test_data_path = os.path.join(args.data_folder, args.test_data_name)
+    output_filename = os.path.splitext(args.test_data_name)[0] + "_predictions.csv"
+    output_path = os.path.join(args.output_folder, output_filename)
+    print(output_path)
     
     # Load data
     test_data = load_data(test_data_path)
+    test_data = organize_data(test_data)
     
     # Check if predictions already exist
     if os.path.exists(output_path):
+        print("Loading predictions from disk")
         predictions = load_data(output_path)
     else:
         unique_sequences = test_data[["sequence_id", "sequence"]].drop_duplicates()
@@ -76,8 +90,9 @@ def main(args: argparse.Namespace):
         save_predictions(predictions, output_path)
     
     # Process predictions and compute performance metrics
+    predictions = pivot_sequence_predictions(predictions)
     processed_data = process_predictions(predictions, test_data, model_type)
-    metrics = compute_performance_metrics(processed_data, model_type)
+    metrics = compute_performance_metrics(processed_data, model_type, clip_values=False) #Clipping values already done in process_predictions
     
     # Save and print performance metrics
     save_performance_metrics(metrics, args.performance_file)

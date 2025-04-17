@@ -5,24 +5,11 @@ import pandas as pd
 from tqdm import tqdm
 import numpy as np
 from arnie.bpps import bpps
-from utils import (load_data, unpaired_probabilities, process_predictions, 
+from utils import (load_data, unpaired_probabilities, process_predictions, organize_data,
                    compute_performance_metrics, save_predictions, save_performance_metrics,
                    array_to_string, string_to_array)
 from tqdm.contrib.concurrent import process_map
 from functools import partial
-
-def organize_data(df: pd.DataFrame) -> pd.DataFrame:
-    # Organize the DMS and 2A3 data
-    df_DMS = df[df["modifier"] == "DMS"]
-    df_2A3 = df[df["modifier"] == "2A3"]
-
-    for df_mod in [df_DMS, df_2A3]:
-        # Remove duplicate sequences within each df. Select the duplicate with the highest signal-to-noise ratio (SNR)
-        df_mod = df_mod.sort_values(['sequence', 'SNR'], ascending=[False, False])
-        df_mod = df_mod.drop_duplicates(subset=['sequence'], keep="first")
-    df = pd.merge(df_DMS, df_2A3, on='sequence', how='outer', suffixes=('_DMS', '_2A3'))
-    df = df[["seqID_DMS", "seqID_2A3", "sequence", "reactivity_DMS", "reactivity_2A3"]]
-    return df
 
 def predict_structures_arnie(seq: str, model_type: str) -> np.ndarray:
     # clean sequence
@@ -37,7 +24,7 @@ def predict_sequence(seq: str, model_type: str) -> str:
 
 def setup_argparse() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RNA Structure Prediction using Arnie")
-    parser.add_argument("model_type", type=str, help="Arnie model type to use for prediction")
+    parser.add_argument("--model_type", type=str, help="Arnie model type to use for prediction")
     parser.add_argument("--data_folder", type=str, default="./data", help="Path to data folder")
     parser.add_argument("--output_folder", type=str, default="./output", help="Path to output folder")
     parser.add_argument("--test_data_name", type=str, default="final_test_set.csv", help="Name of test data file")
@@ -60,7 +47,7 @@ def main(args: argparse.Namespace):
 
     # Check if predictions already exist
     if os.path.exists(output_path):
-        predictions = load_data(output_path)
+        df = load_data(output_path)
     else:
         func = partial(predict_sequence, model_type=args.model_type)
         if args.num_workers == 0:
@@ -76,7 +63,7 @@ def main(args: argparse.Namespace):
         save_predictions(df, output_path)
 
     # Process predictions and compute performance metrics
-    metrics = compute_performance_metrics(processed_data, args.model_type)
+    metrics = compute_performance_metrics(df, args.model_type)
     
     # Save and print performance metrics
     save_performance_metrics(metrics, args.performance_file)
