@@ -39,32 +39,16 @@ def organize_data(df: pd.DataFrame) -> pd.DataFrame:
         df_mod = df_mod.drop_duplicates(subset=['sequence'], keep="first")
     df = pd.merge(df_DMS, df_2A3, on='sequence', how='outer', suffixes=('_DMS', '_2A3'))
     df = df[["seqID_DMS", "seqID_2A3", "sequence", "reactivity_DMS", "reactivity_2A3"]]
-    #df = df.rename(columns={'seqID_DMS': 'seqID'})
+    df = df.drop_duplicates(subset=['sequence'], keep="first")
     return df
 
-def process_predictions(predictions, test_data, model_type):
-    merged_data = pd.merge(test_data, predictions, on='sequence', how='inner')
-    # All columns that contain array data
-    array_columns = ['reactivity_DMS', 'reactivity_2A3', f'prediction_{model_type}']
-    
-    # Check if these columns exist and handle array data appropriately
-    for col in array_columns:
-        if col in merged_data.columns:
-            # Apply clip to each array element-wise
-            merged_data[col] = merged_data[col].apply(
-                lambda arr: np.clip(arr, 0, 1) if isinstance(arr, np.ndarray) else arr
-            )
-    
-    return merged_data
-
-def collate_data(df: pd.DataFrame, clip=True) -> Tuple[np.ndarray, ...]:
+def collate_data(df: pd.DataFrame) -> Tuple[np.ndarray, ...]:
     """ Compiles the true and predicted reactivity into one long np array """
     true_reactivities = []
     pred_probs = []
     for reactivity, pred in df.values:
-        if clip:
-            reactivity = string_to_array(reactivity).clip(0, 1)
-            pred = string_to_array(pred).clip(0, 1)
+        reactivity = string_to_array(reactivity).clip(0, 1)
+        pred = string_to_array(pred).clip(0, 1) if isinstance(pred,str) else (np.clip(pred, 0, 1) if isinstance(pred, np.ndarray) else pred)
         assert(len(pred) == len(reactivity))
         true_reactivities.append(reactivity)
         pred_probs.append(pred)
@@ -81,7 +65,7 @@ def collate_data(df: pd.DataFrame, clip=True) -> Tuple[np.ndarray, ...]:
     pred_values = pred_probs > np.median(pred_probs)
     return true_reactivities, pred_probs, true_values, pred_values
 
-def compute_performance_metrics(predictions: pd.DataFrame, model_type: str, clip_values: bool=True) -> List[dict]:
+def compute_performance_metrics(predictions: pd.DataFrame, model_type: str) -> List[dict]:
     metrics = []
     for chemical_modifier in ["DMS", "2A3"]:
         reactivity_col = f"reactivity_{chemical_modifier}"
@@ -90,7 +74,7 @@ def compute_performance_metrics(predictions: pd.DataFrame, model_type: str, clip
         # drop rows with missing reactivity data or missing prediction
         df_sub = df_sub.dropna()
 
-        true_reactivities, pred_probs, true_values, pred_values = collate_data(df_sub, clip_values)
+        true_reactivities, pred_probs, true_values, pred_values = collate_data(df_sub)
         metric = {
             'Chemical Modifier': chemical_modifier,
             'Model Type': model_type,

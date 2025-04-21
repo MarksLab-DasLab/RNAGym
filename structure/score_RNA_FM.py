@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 #import fm
 from tqdm import tqdm
-from utils import (load_data, unpaired_probabilities, process_predictions, organize_data,
+from utils import (load_data, unpaired_probabilities, organize_data,
                    compute_performance_metrics, save_predictions, save_performance_metrics)
 
 def setup_argparse() -> argparse.Namespace:
@@ -15,6 +15,7 @@ def setup_argparse() -> argparse.Namespace:
     parser.add_argument("--data_folder", type=str, default="./data", help="Path to data folder")
     parser.add_argument("--output_folder", type=str, default="./output", help="Path to output folder")
     parser.add_argument("--test_data_name", type=str, default="final_test_set.csv", help="Name of test data file")
+    parser.add_argument("--predictions_data_name", type=str, default="test_predictions.csv", help="Name of file with model predictions")
     parser.add_argument("--performance_file", type=str, default="performance_SS_pred.csv", help="Name of performance summary file")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for RNA-FM model")
     return parser.parse_args()
@@ -53,7 +54,7 @@ def main(args: argparse.Namespace):
     model_type = "RNA_FM"
     # Setup paths
     test_data_path = os.path.join(args.data_folder, args.test_data_name)
-    output_filename = os.path.splitext(args.test_data_name)[0] + "_predictions.csv"
+    output_filename = args.predictions_data_name
     output_path = os.path.join(args.output_folder, output_filename)
     print(output_path)
     
@@ -89,10 +90,13 @@ def main(args: argparse.Namespace):
         # Save predictions
         save_predictions(predictions, output_path)
     
+    print(f"Length input predictions: {len(predictions)} (one row per sequence and per position)")
     # Process predictions and compute performance metrics
     predictions = pivot_sequence_predictions(predictions)
-    processed_data = process_predictions(predictions, test_data, model_type)
-    metrics = compute_performance_metrics(processed_data, model_type, clip_values=False) #Clipping values already done in process_predictions
+    print(f"Length predictions after pivot: {len(predictions)} (one row per unique sequence)")
+    processed_predictions = pd.merge(test_data, predictions, on='sequence', how='inner')
+    print(f"Length predictions after merge: {len(processed_predictions)} (one row per sequence and measurement type of interest (ie., DMS, 2A3))")
+    metrics = compute_performance_metrics(processed_predictions, model_type)
     
     # Save and print performance metrics
     save_performance_metrics(metrics, args.performance_file)
