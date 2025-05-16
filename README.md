@@ -94,6 +94,3 @@ arnie | https://github.com/DasLab/arnie
 
 ## License
 This project is available under the MIT license found in the LICENSE file in this GitHub repository.
-
-## Links
-- Website: https://www.rnagym.org/
