@@ -10,8 +10,9 @@ and `multimers.csv`.
 
 ### Data Sources
 
-RNA chain candidates were collected from [RNA3DB][22]. Where
-appropriate, overlaps with the following datasets were noted:
+RNA chain candidates were collected from [RNA3DB][22] prior to
+processing and filtering. Where appropriate, overlaps with the following
+datasets were noted:
 
 | Dataset                                                                                              | # of PDBs |
 | ---------------------------------------------------------------------------------------------------- | --------- |
@@ -24,9 +25,9 @@ appropriate, overlaps with the following datasets were noted:
 
 ## Generating the datasets
 
-To generate your own editions of the RNAGym datasets:
+To run the RNAGym dataset curation pipeline:
 
-1. Modify `util/config.py` to suit your needs
+1. Modify `util/config.py` to suit your system & needs
 2. Install the required dependencies:
     <!--TODO(MCA): Add these to the parent environment.yml-->
     - `bioconda::infernal` (from `conda`)
@@ -96,7 +97,6 @@ Analysis can be conducted using `./gym.py evcouplings` followed by
 [10]: https://github.com/murfalo/evcouplings
 [11]: https://github.com/BGSU-RNA/fr3d-python
 [12]: https://docs.google.com/spreadsheets/d/1AORpL9zm9m-Tvdw5xvg7cbyo4C-blKD5
-[13]: TBD
 [14]: https://www.biorxiv.org/content/10.1101/2024.11.27.625779v1
 [15]: https://github.com/marcellszi/rna3db
 [16]: https://docs.google.com/spreadsheets/d/1AORpL9zm9m-Tvdw5xvg7cbyo4C-blKD5/edit?gid=1076929196#gid=1076929196&fvid=329186721
