@@ -1,0 +1,5 @@
+# mmseqs2 outputs
+mmseqs2_*
+
+# filter output
+filter.log

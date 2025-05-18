@@ -7,7 +7,8 @@ RNAGym is an extensive benchmark suite for RNA fitness and structure prediction.
 ## Baselines
 
 ### Fitness prediction
-We have currently implemented the following baselines:
+
+We have currently implemented the following baselines (see `./fitness`):
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -19,9 +20,9 @@ Nucleotide Transformer | Genomic Language Model | Dalla-Torre et al. "The Nucleo
 GenSLM | Genomic Language Model | Zvyagin et al. "GenSLMs: Genome-scale language models reveal SARS-CoV-2 evolutionary dynamics". The International Journal of High Performance Computing Applications, 2023.
 
 
-### Structure prediction
+### Secondary structure prediction
 
-We have currently implemented the following baselines:
+We have currently implemented the following baselines (see `./2d`).
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -31,6 +32,11 @@ CONTRAfold | Structure prediction | Do et al. "CONTRAfold: RNA secondary structu
 Vienna | Structure prediction | Gruber et al. "The vienna rna websuite." Nucleic Acids Research, 36:W70 – W74, 2008.
 RNAstructure | Structure prediction | Reuter et al. "Rnastructure: software for rna secondary structure prediction and analysis". BMC Bioinformatics, 11:129 – 129, 2010.
 RNA-FM | RNA Language Model | Chen et al. "Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions" arXiv, 2022. 
+
+### Tertiary structure prediction
+
+We have also developed a data curation pipeline, structure datasets, and
+implemented several baselines for RNA tertiary structure (see `./3d`).
 
 ## Setup
 
@@ -83,6 +89,9 @@ Task | Data | Size (unzipped) | Link
 **Structure prediction** | Additional annotations (PDB, Rfam, PseudoBase) | 29M | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_sequences_annotated.zip
 
 Model files for the structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
+
+Data is also available on our
+[HuggingFace](https://huggingface.co/datasets/Marks-lab/RNAgym).
 
 ## Acknowledgements
 
