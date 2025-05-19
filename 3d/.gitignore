@@ -1,0 +1,19 @@
+/out/
+/predictions/
+/filter.out
+/merge.out
+/split.csv
+/*.tmp
+/RNAGym_Export*
+
+# Datasets (must be downloaded directly)
+/datasets/rna3db-cmscans
+
+# Merged/annotated output
+/annotated_chain_ids.csv
+/merged_pdb_ids.csv
+/scripts/annotated_chain_ids.csv
+/scripts/msa_stats.csv
+
+# Output figures
+/figures
