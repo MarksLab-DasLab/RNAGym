@@ -1,8 +1,10 @@
-# RNAGym
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/MarksLab-DasLab/RNAGym/refs/heads/main/img/RNAGym_small.png" alt="RNAGym Logo">
 
-## Overview
+  RNAGym
+</h1>
 
-RNAGym is an extensive benchmark suite for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.
+[RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.
 
 ## Baselines
 
@@ -89,20 +91,25 @@ Task | Data | Size (unzipped) | Link
 **Fitness prediction** | Processed assay data | 73MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_processed_assays.zip
 **Fitness prediction** | Raw assay data | 88MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_raw_data.zip
 **Fitness prediction** | Model predictions | 438MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/model_predictions.zip
-**Fitness prediction** | Alignments | 319K | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_MSAs.zip
-**Fitness prediction** | 3D structures | 621K | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_assays_3D_structures.zip
-**Fitness prediction** | CV splits (supervised) | 145M | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_CV_splits.zip
-**Structure prediction** | Processed eval data | 3.2GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_data.zip
-**Structure prediction** | Raw assay data | 5.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/raw_data.zip
-**Structure prediction** | Model predictions | 34GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/model_predictions.zip
-**Structure prediction** | Model files | 441MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/models.zip
-**Structure prediction** | Training data (supervised) | 8.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/train_data.zip
-**Structure prediction** | Additional annotations (PDB, Rfam, PseudoBase) | 29M | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_sequences_annotated.zip
+**Fitness prediction** | Alignments | 319KB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_MSAs.zip
+**Fitness prediction** | 3D structures | 621KB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_assays_3D_structures.zip
+**Fitness prediction** | CV splits (supervised) | 145MB | https://marks.hms.harvard.edu/rnagym/fitness_prediction/fitness_CV_splits.zip
+**2D structure prediction** | Processed eval data | 3.2GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_data.zip
+**2D Structure prediction** | Raw assay data | 5.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/raw_data.zip
+**2D structure prediction** | Model predictions | 34GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/model_predictions.zip
+**2D structure prediction** | Model files | 441MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/models.zip
+**2D structure prediction** | Training data (supervised) | 8.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/train_data.zip
+**2D structure prediction** | Additional annotations (PDB, Rfam, PseudoBase) | 29MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_sequences_annotated.zip
+**3D structure prediction** | Alignments | 55.3MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_alignments.tar.xz
+**3D structure prediction** | Monomer scores | 7KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/monomer.csv
+**3D structure prediction** | Complex scores | 15KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/multimer.csv
+**3D structure prediction** | Model predictions (PDBs) | 165MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_model_outputs.tar.xz
 
-Model files for the structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
+Model files for 2D structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
 
 Data is also available on our
-[HuggingFace](https://huggingface.co/datasets/Marks-lab/RNAgym).
+[HuggingFace](https://huggingface.co/datasets/Marks-lab/RNAgym) and
+[website](https://rnagym.org).
 
 ## Acknowledgements
 
@@ -113,4 +120,5 @@ Model | Repo
 arnie | https://github.com/DasLab/arnie
 
 ## License
+
 This project is available under the MIT license found in the LICENSE file in this GitHub repository.
