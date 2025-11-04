@@ -13,7 +13,7 @@
   <a href="https://github.com/MarksLab-DasLab/RNAGym"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a>
 </p>
 
-[RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.
+[RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.  If you have any questions or comments, please [report an issue][0] and our team will work to get back to you as soon as possible.
 
 ## Baselines
 
@@ -132,3 +132,5 @@ arnie | https://github.com/DasLab/arnie
 ## License
 
 This project is available under the MIT license found in the LICENSE file in this GitHub repository.
+
+[0]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
