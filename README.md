@@ -50,7 +50,7 @@ Mxfold2 | Structure prediction | Sato et al. "RNA secondary structure prediction
 ### Tertiary structure prediction
 
 We have also developed a data curation pipeline, structure datasets, and
-implemented several baselines for RNA tertiary structure (see `./3d`).
+implemented several baselines for RNA tertiary structure (see [`./3d`][1]).
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -69,7 +69,7 @@ conda activate rnagym_env
 ```
 For the fitness prediction task, we recommend the following folder structure:
 ```
-fitness_prediction/
+fitness/
 ├── processed_DMS_files/
 ├── model_predictions/
 └── model_checkpoints/
@@ -77,14 +77,16 @@ fitness_prediction/
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
 ```
-structure_prediction/
+2d/
 ├── test_data/
 ├── raw_data/
 ├── model_predictions/
 └── models/
 ```
 The content for `models`, `model_predictions`, `raw_data` and `test_data` may all be downloaded via the links in the next section.
-The `data_folder` argument in the data and scoring scripts should be set to the location of the `structure_prediction` folder.
+The `data_folder` argument in the data and scoring scripts should be set to the location of the `2d` folder.
+
+For information on setting up the tertiary structure benchmark, see [`./3d`][1].
 
 ## Resources
 
@@ -134,3 +136,4 @@ arnie | https://github.com/DasLab/arnie
 This project is available under the MIT license found in the LICENSE file in this GitHub repository.
 
 [0]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
+[1]: https://github.com/MarksLab-DasLab/RNAGym/tree/main/3d
