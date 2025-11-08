@@ -13,7 +13,7 @@
   <a href="https://github.com/MarksLab-DasLab/RNAGym"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a>
 </p>
 
-[RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.  For questions or comments, please [report an issue][0] and we will get back to you as soon as possible.
+[RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.
 
 ## Baselines
 
@@ -122,6 +122,10 @@ Model files for 2D structure prediction task were prepared for a linux 64-bit sy
 Data is also available on our
 [HuggingFace](https://huggingface.co/datasets/Marks-lab/RNAgym) and
 [website](https://rnagym.org).
+
+## Contact us
+
+Please report questions, comments, and concerns on [our issue tracker][0] and we will get back to you as soon as possible.
 
 ## Acknowledgements
 
