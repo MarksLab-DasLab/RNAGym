@@ -24,6 +24,7 @@ We have currently implemented the following baselines (see `./fitness`):
 Model name | Model type | Reference
 --- | --- | --- |
 Evo 1 | Genomic Language Model | Nguyen et al. "Sequence modeling and design from molecular to genome scale with Evo". Science, 2024.
+Evo 1.5 | Genomic Language Model | Merchant et al. "Semantic mining of functional de novo genes from a genomic language model". bioRxiv, 2024.
 Evo 2 | Genomic Language Model | Brixi et al. "Genome modeling and design across all domains of life with Evo 2". bioRxiv, 2025.
 RNAErnie | Genomic Language Model | Wang et al. "Multi-purpose RNA language modelling with motif-aware pretraining and type-guided fine-tuning". Nature Machine Intelligence, 2024.
 RiNALMo | RNA Language Model | Penić et al. "RiNALMo: General-Purpose RNA Language Models Can Generalize Well on Structure Prediction Tasks". arXiv, 2024.
