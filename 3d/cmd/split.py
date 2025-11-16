@@ -185,6 +185,41 @@ def main():
     print(f"{len(mul_df)=}")
     print(f"{mul_df['PDB ID'].nunique()=}")
 
+    # --- Create training set ---
+    print("\n--- Creating training set ---")
+    test_df = pd.concat([mon_df, mul_df])
+    test_ids = set(zip(test_df["PDB ID"], test_df["Asym. Chain ID"]))
+
+    # Reload and find all quality chains, then exclude those in the test set
+    all_chains_df = pd.read_csv(
+        "./annotated_chain_ids.csv",
+        keep_default_na=False,
+        na_values=[""],
+        low_memory=False,
+    )
+    all_chains_df = all_chains_df[all_chains_df["Asym. Chain ID"] != "ERROR: Failed to download"]
+    all_chains_df["Resolution"] = (
+        all_chains_df["Resolution"]
+        .str.split(",")
+        .explode()
+        .replace("N/A", NMR_SENTINEL)
+        .replace(".", None)
+        .replace("n.s.", None)
+        .astype(float)
+        .groupby(level=0)
+        .max()
+    )
+    quality_df = all_chains_df.query(
+        f"Resolution <= {Config.MAX_RESOLUTION} "
+        f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING} "
+        f"and L >= {Config.MIN_L}"
+    )
+    id_tuples = zip(quality_df["PDB ID"], quality_df["Asym. Chain ID"])
+    train_df = quality_df[[i not in test_ids for i in id_tuples]].copy()
+    train_df["Resolution"] = train_df["Resolution"].replace(NMR_SENTINEL, "N/A")
+    train_df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv("train.csv", index=False)
+    print(f"{len(train_df)} training chains written to train.csv")
+
     # --- Write to CSV ---
     def write_to_csv(df, fname):
         debug_ecs(df)

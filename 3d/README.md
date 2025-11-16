@@ -1,12 +1,17 @@
 # RNAGym 3D Structure Prediction Datasets
 
 This directory includes datasets, models, and benchmarks used by RNAGym
-for 3D structure prediction.  To get started, try `./gym.py`.
+for 3D structure prediction.
 
 ## Datasets
 
-The two datasets published with RNAGym are the eponymous `monomers.csv`
-and `multimers.csv`.
+RNAGym provides a carefully curated train/test split of 3D RNA structures that
+enables fair evaluation of models based on how well they capture known
+templates, while maximizing the available structures to train on.  The
+resulting dataset is derived from the PDB, has undergone strict quality
+filters, and is suitable for both secondary and tertiary structure prediction
+tasks.  See `train.csv` and the eponymous test sets `monomer.csv`, and
+`complex.csv`.
 
 ### Data Sources
 
@@ -28,25 +33,20 @@ datasets were noted:
 To run the RNAGym dataset curation pipeline:
 
 1. Modify `util/config.py` to suit your system & needs
-2. Install the required dependencies:
-    <!--TODO(MCA): Add these to the parent environment.yml-->
-    - `bioconda::infernal` (from `conda`)
-    - `gemmi` (from `conda`)
+2. In `rnagym_env`, install the additional dependencies:
     - `evcouplings` (from [Murphy's fork (private; request access)][10])
-    - `hhsuite` from (`bioconda`)
-    - `mmseqs=15.6` (from `conda`)
     - `rmsa` (from [source][21])
     - `rna3db` (from [source][19])
     - RNA Puzzles assessment toolkit(from [source][23])
-3. Run `./gym.py` to generate `monomer.csv` and `multimer.csv`
+3. Run `./gym.py` to generate `train.csv`, `monomer.csv`, and `complex.csv`
 
 The default workflow of `./gym.py` is as follows:
 
 1. `merge`: Merges the initial datasets into `merged_pdb_ids.csv`, a
    list of unique PDB IDs containing RNA chains.
 2. `annotate`: Individual RNA chains are annotated into `annotated_pdb_ids.csv`.
-3. `split`: Splits the annotated chains into the `monomers.csv` and
-   `multimers.csv` datasets published by RNAGym.
+3. `split`: Splits the annotated chains into the `monomer.csv` and
+   `complex.csv` datasets published by RNAGym.
    - To determine the best split, RNAGym calculates the maximal TM score
      between each candidate chain and any chain from the baseline
      training sets. This requires about 5-60 minutes per CPU per
@@ -55,6 +55,26 @@ The default workflow of `./gym.py` is as follows:
      be cached for the next `split`.
 
 You can run any of these steps individually with `./gym.py <command>`.
+
+> [!TIP]
+> Creating the RNAGym split requires an all-to-all 3D structure alignment
+> between train and test splits.  To avoid having to do this yourself, use
+> our pre-computed outputs.  For more info, see `Using the precomputed 3D
+> structural alignments` below.
+
+### Using the precomputed 3D structural alignments
+
+To use our precomputed 3D USAlign outputs rather than computing them yourself
+(tricky and expensive), do the following steps:
+
+```bash
+> # Extract "./usalign" (our precomputed USAlign outputs)
+> wget https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_train_to_test_usalign.tar.xz
+> tar -xvJf 3D_train_to_test_usalign.tar.xz
+> # Put USAlign outputs where RNAGym expects them
+> mkdir -p ./out/chains
+> mv usalign/*.out ./out/chains
+```
 
 ## Launching RNA predictions
 

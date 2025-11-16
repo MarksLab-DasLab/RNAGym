@@ -91,7 +91,7 @@ if __name__ == "__main__":
                         name = pred_dir.name
 
                         # Only launch jobs for chain keys or PDB IDs currently
-                        # found in `monomer.csv` or `multimer.csv`
+                        # found in `monomer.csv` or `complex.csv`
                         if chain_dir == "monomers" and name not in mon_chain_keys:
                             continue
                         if chain_dir == "multimers" and name not in mul_pdb_ids:

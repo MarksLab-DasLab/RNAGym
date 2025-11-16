@@ -94,7 +94,7 @@ TOP_N = 3  # The top # of sequence clusters to select from each Rfam
 MIN_L = RNA_MIN_NT * 2
 MAX_N = 2000  # Multimers up to this many AA/NA residues will be considered
 MONOMER_CSV = Path("monomer.csv").resolve()
-MULTIMER_CSV = Path("multimer.csv").resolve()
+MULTIMER_CSV = Path("complex.csv").resolve()
 MONOMER_ANALYZED_CSV = Path("out/monomer.analyzed.csv").resolve()
 MULTIMER_ANALYZED_CSV = Path("out/multimer.analyzed.csv").resolve()
 

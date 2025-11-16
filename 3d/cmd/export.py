@@ -15,7 +15,7 @@ from util.analysis import get_rf2na_chain_ids, write_chain_minimal_pdb
 
 def main():
     mon_df = pd.read_csv("./monomer.csv")
-    mul_df = pd.read_csv("./multimer.csv")
+    mul_df = pd.read_csv("./complex.csv")
 
     now_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     export_dir = Path(f"./RNAGym_Export_{now_str}")
@@ -112,14 +112,14 @@ def main():
         "- `msa/`: Input multiple sequence alignments (MSAs)\n"
         "- `usalign/`: USAlign output files (test-to-train TM scores)\n"
         "- `monomer.csv`: Monomer results\n"
-        "- `multimer.csv`: Multimer results\n".format(now_str)
+        "- `complex.csv`: Multimer results\n".format(now_str)
     )
 
     # Copy in final analysis results with only interesting columns
     mon_analyzed = pd.read_csv(Config.MONOMER_ANALYZED_CSV)[Config.MON_EXPORT_COLS]
     mon_analyzed.to_csv(export_dir / "monomer.csv", index=False)
     mul_analyzed = pd.read_csv(Config.MULTIMER_ANALYZED_CSV)[Config.MUL_EXPORT_COLS]
-    mul_analyzed.to_csv(export_dir / "multimer.csv", index=False)
+    mul_analyzed.to_csv(export_dir / "complex.csv", index=False)
 
 
 if __name__ == "__main__":

@@ -935,7 +935,7 @@ def prep_af3(out_dir=Config.AF3.out_dir):
             out_fp = out_dir / "config.json"
             out_fp.parent.mkdir(exist_ok=True)
 
-            # If this chain is RNA *and* is in multimer.csv then we have a custom MSA
+            # If this chain is RNA *and* is in complex.csv then we have a custom MSA
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
                 seq_unmod = prep_fasta(sequence_a3m, out_a3m, str(seq_unmod))
@@ -1095,7 +1095,7 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
             out_fp = out_dir / "launch.sh"
             out_fp.parent.mkdir(exist_ok=True)
 
-            # If this chain is RNA *and* is in multimer.csv then we have a custom MSA
+            # If this chain is RNA *and* is in complex.csv then we have a custom MSA
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
                 seq_unmodified = prep_fasta(

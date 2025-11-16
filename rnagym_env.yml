@@ -6,6 +6,7 @@ channels:
   - anaconda
   - defaults
   - pypi
+  - bioconda
 dependencies:
   - python
   - numpy
@@ -17,6 +18,12 @@ dependencies:
   - biopython
   - pytorch=2.2.0
   - pytorch-cuda=11.8
+  - infernal
+  - gemmi
+  - mmseqs2=15.6
+  - hhsuite
+  - matplotlib
+  - usalign
   - pip:
       - wandb
       - transformers
