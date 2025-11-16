@@ -15,6 +15,8 @@
 
 [RNAGym](https://rnagym.org) is an extensive benchmark suite and resource for RNA fitness and structure prediction. This code repository provides unified access to all baselines leveraged in our paper, as well as to the underlying datasets used to assess their respective fitness and/or structure prediction performance.
 
+RNAGym is under active development.  Please refer to our [releases](https://github.com/MarksLab-DasLab/RNAGym/releases) page to track the latest updates and stable releases.
+
 ## Baselines
 
 ### Fitness prediction
