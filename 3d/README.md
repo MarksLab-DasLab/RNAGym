@@ -10,7 +10,7 @@ enables fair evaluation of models based on how well they capture known
 templates, while maximizing the available structures to train on.  The
 resulting dataset is derived from the PDB, has undergone strict quality
 filters, and is suitable for both secondary and tertiary structure prediction
-tasks.  See `train.csv` and the eponymous test sets `monomer.csv`, and
+tasks.  See `train.csv` and the eponymous test sets `monomer.csv` and
 `complex.csv`.
 
 ### Data Sources
