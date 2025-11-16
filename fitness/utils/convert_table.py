@@ -2,59 +2,8 @@ import csv
 import argparse
 import re
 from pathlib import Path
-
-# Standard codon table (for E. coli - bacterial genetic code)
-codon_table = {
-    # Phenylalanine (F)
-    'TTT': 'F', 'TTC': 'F',
-    # Leucine (L)
-    'TTA': 'L', 'TTG': 'L', 'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
-    # Isoleucine (I)
-    'ATT': 'I', 'ATC': 'I', 'ATA': 'I',
-    # Methionine (M) - Start
-    'ATG': 'M',
-    # Valine (V)
-    'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
-    # Serine (S)
-    'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S', 'AGT': 'S', 'AGC': 'S',
-    # Proline (P)
-    'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
-    # Threonine (T)
-    'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
-    # Alanine (A)
-    'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
-    # Tyrosine (Y)
-    'TAT': 'Y', 'TAC': 'Y',
-    # Histidine (H)
-    'CAT': 'H', 'CAC': 'H',
-    # Glutamine (Q)
-    'CAA': 'Q', 'CAG': 'Q',
-    # Asparagine (N)
-    'AAT': 'N', 'AAC': 'N',
-    # Lysine (K)
-    'AAA': 'K', 'AAG': 'K',
-    # Aspartic Acid (D)
-    'GAT': 'D', 'GAC': 'D',
-    # Glutamic Acid (E)
-    'GAA': 'E', 'GAG': 'E',
-    # Cysteine (C)
-    'TGT': 'C', 'TGC': 'C',
-    # Tryptophan (W)
-    'TGG': 'W',
-    # Arginine (R)
-    'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R', 'AGA': 'R', 'AGG': 'R',
-    # Glycine (G)
-    'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G',
-    # Stop codons
-    'TAA': '*', 'TAG': '*', 'TGA': '*'
-}
-
-# Create reverse codon table (amino acid to possible codons)
-reverse_codon_table = {}
-for codon, aa in codon_table.items():
-    if aa not in reverse_codon_table:
-        reverse_codon_table[aa] = []
-    reverse_codon_table[aa].append(codon)
+from Bio import Data
+from Bio.Data import CodonTable
 
 def parse_fasta(fasta_file):
     """Parse a FASTA file and return the sequence."""
@@ -65,8 +14,70 @@ def parse_fasta(fasta_file):
                 sequence += line.strip()
     return sequence.upper()
 
-def translate_dna(dna_sequence):
-    """Translate DNA sequence to protein."""
+def get_codon_table(table_id=1):
+    """Get the codon table based on NCBI table ID.
+    
+    Args:
+        table_id (int): NCBI genetic code table ID
+                        1 = Standard (default)
+                        2 = Vertebrate Mitochondrial
+                        3 = Yeast Mitochondrial
+                        4 = Mold, Protozoan, Coelenterate Mitochondrial and Mycoplasma/Spiroplasma
+                        5 = Invertebrate Mitochondrial
+                        6 = Ciliate Nuclear and Dasycladacean
+                        9 = Echinoderm Mitochondrial and Flatworm Mitochondrial
+                        10 = Euplotid Nuclear
+                        11 = Bacterial, Archaeal and Plant Plastid
+                        12 = Alternative Yeast Nuclear
+                        13 = Ascidian Mitochondrial
+                        14 = Alternative Flatworm Mitochondrial
+                        16 = Chlorophycean Mitochondrial
+                        21 = Trematode Mitochondrial
+                        22 = Scenedesmus obliquus Mitochondrial
+                        23 = Thraustochytrium Mitochondrial
+                        24 = Rhabdopleuridae Mitochondrial
+                        25 = Candidate Division SR1 and Gracilibacteria
+                        26 = Pachysolen tannophilus Nuclear
+                        27 = Karyorelict Nuclear
+                        28 = Condylostoma Nuclear
+                        29 = Mesodinium Nuclear
+                        30 = Peritrich Nuclear
+                        31 = Blastocrithidia Nuclear
+                        33 = Cephalodiscidae Mitochondrial
+    """
+    biopython_table = CodonTable.unambiguous_dna_by_id[table_id]
+    
+    # Create our own codon table dictionary from the Biopython table
+    codon_table = {}
+    for codon, aa in biopython_table.forward_table.items():
+        codon_table[codon] = aa
+    
+    # Add stop codons
+    for stop_codon in biopython_table.stop_codons:
+        codon_table[stop_codon] = '*'
+    
+    return codon_table
+
+def get_reverse_codon_table(codon_table):
+    """Create reverse codon table (amino acid to possible codons)."""
+    reverse_codon_table = {}
+    for codon, aa in codon_table.items():
+        if aa not in reverse_codon_table:
+            reverse_codon_table[aa] = []
+        reverse_codon_table[aa].append(codon)
+    return reverse_codon_table
+
+def list_available_codon_tables():
+    """List all available codon tables with names and IDs."""
+    print("Available codon tables:")
+    print("ID | Name")
+    print("---|-------------------")
+    for table_id in sorted(CodonTable.unambiguous_dna_by_id.keys()):
+        table = CodonTable.unambiguous_dna_by_id[table_id]
+        print(f"{table_id:2d} | {table.names[0]}")
+
+def translate_dna(dna_sequence, codon_table):
+    """Translate DNA sequence to protein using specified codon table."""
     protein = ''
     for i in range(0, len(dna_sequence), 3):
         if i + 3 <= len(dna_sequence):
@@ -87,7 +98,7 @@ def parse_mutation(mutation_code):
     
     return orig_aa, pos_1based, new_aa
 
-def apply_mutation_and_get_nucleotide_change(original_dna, position_1based, new_aa, original_protein):
+def apply_mutation_and_get_nucleotide_change(original_dna, position_1based, new_aa, original_protein, reverse_codon_table):
     """Apply a protein mutation to DNA and return both the nucleotide changes and the new DNA."""
     # Convert to 0-based for internal use
     pos_0based = position_1based - 1
@@ -134,7 +145,7 @@ def apply_mutation_and_get_nucleotide_change(original_dna, position_1based, new_
     
     return nt_changes, new_dna
 
-def process_mutations_file(dms_file, output_file, original_dna, original_protein):
+def process_mutations_file(dms_file, output_file, original_dna, original_protein, reverse_codon_table):
     """Process the mutations file and convert protein mutations to DNA sequences."""
     # Create output file
     with open(output_file, 'w', newline='') as outfile:
@@ -159,39 +170,25 @@ def process_mutations_file(dms_file, output_file, original_dna, original_protein
                     if not protein_mutant:
                         continue
                     
-                    # Check if it's a multiple mutation (comma-separated)
+                    # Split mutations - now handling both comma and colon separators
+                    protein_mutations = []
                     if ',' in protein_mutant:
                         protein_mutations = protein_mutant.split(',')
-                        current_dna = original_dna
-                        all_nt_changes = []
-                        
-                        for mut in protein_mutations:
-                            mut = mut.strip('" ')  # Remove quotes and spaces
-                            if not mut:  # Skip empty mutations
-                                continue
-                            
-                            orig_aa, pos_1based, new_aa = parse_mutation(mut)
-                            pos_0based = pos_1based - 1
-                            
-                            # Verify the original amino acid matches
-                            if 0 <= pos_0based < len(original_protein) and original_protein[pos_0based] != orig_aa:
-                                print(f"Mismatch at position {pos_1based}: expected {orig_aa}, found {original_protein[pos_0based]}")
-                                raise ValueError(f"Mismatch at position {pos_1based}: expected {orig_aa}, found {original_protein[pos_0based]}")
-                            
-                            # Apply the mutation to DNA and get nucleotide changes
-                            nt_changes, current_dna = apply_mutation_and_get_nucleotide_change(
-                                current_dna, pos_1based, new_aa, original_protein
-                            )
-                            all_nt_changes.extend(nt_changes)
-                        
-                        # Convert nucleotide changes to comma-separated string
-                        nt_mutant = ','.join(all_nt_changes)
-                        
-                        # Write the output row with nucleotide mutations
-                        writer.writerow([nt_mutant, dms_score, current_dna])
+                    elif ':' in protein_mutant:
+                        protein_mutations = protein_mutant.split(':')
                     else:
                         # Single mutation
-                        orig_aa, pos_1based, new_aa = parse_mutation(protein_mutant)
+                        protein_mutations = [protein_mutant]
+                    
+                    current_dna = original_dna
+                    all_nt_changes = []
+                    
+                    for mut in protein_mutations:
+                        mut = mut.strip('" ')  # Remove quotes and spaces
+                        if not mut:  # Skip empty mutations
+                            continue
+                        
+                        orig_aa, pos_1based, new_aa = parse_mutation(mut)
                         pos_0based = pos_1based - 1
                         
                         # Verify the original amino acid matches
@@ -200,15 +197,16 @@ def process_mutations_file(dms_file, output_file, original_dna, original_protein
                             raise ValueError(f"Mismatch at position {pos_1based}: expected {orig_aa}, found {original_protein[pos_0based]}")
                         
                         # Apply the mutation to DNA and get nucleotide changes
-                        nt_changes, mutated_dna = apply_mutation_and_get_nucleotide_change(
-                            original_dna, pos_1based, new_aa, original_protein
+                        nt_changes, current_dna = apply_mutation_and_get_nucleotide_change(
+                            current_dna, pos_1based, new_aa, original_protein, reverse_codon_table
                         )
-                        
-                        # Convert nucleotide changes to comma-separated string
-                        nt_mutant = ','.join(nt_changes)
-                        
-                        # Write the output row with nucleotide mutations
-                        writer.writerow([nt_mutant, dms_score, mutated_dna])
+                        all_nt_changes.extend(nt_changes)
+                    
+                    # Convert nucleotide changes to comma-separated string
+                    nt_mutant = ','.join(all_nt_changes)
+                    
+                    # Write the output row with nucleotide mutations
+                    writer.writerow([nt_mutant, dms_score, current_dna])
                     
                 except Exception as e:
                     print(f"Error processing mutation {row.get('mutant', 'unknown')}: {e}")
@@ -228,7 +226,16 @@ def main():
     parser.add_argument('fasta_file', help='Input FASTA file with nucleotide sequence')
     parser.add_argument('dms_file', help='Input DMS file with mutations')
     parser.add_argument('--output', '-o', default=None, help='Output CSV file (default: input_with_nucleotides.csv)')
+    parser.add_argument('--table', '-t', type=int, default=1, 
+                        help='NCBI genetic code table ID (default: 1, Standard)')
+    parser.add_argument('--list-tables', action='store_true', 
+                        help='List all available codon tables and exit')
     args = parser.parse_args()
+    
+    # List tables if requested
+    if args.list_tables:
+        list_available_codon_tables()
+        return
     
     # Determine output filename if not specified
     if args.output is None:
@@ -236,25 +243,31 @@ def main():
     else:
         output_file = args.output
     
+    # Get the appropriate codon table
+    codon_table = get_codon_table(args.table)
+    reverse_codon_table = get_reverse_codon_table(codon_table)
+    
+    # Print the selected table
+    table_name = CodonTable.unambiguous_dna_by_id[args.table].names[0]
+    print(f"Using codon table {args.table}: {table_name}")
+    
     print(f"Reading nucleotide sequence from {args.fasta_file}")
     original_dna = parse_fasta(args.fasta_file)
     print(f"Nucleotide sequence length: {len(original_dna)} bp")
     
     # Translate to protein
-    original_protein = translate_dna(original_dna)
+    original_protein = translate_dna(original_dna, codon_table)
+    print(original_protein)
     print(f"Translated protein length: {len(original_protein)} amino acids")
     print(f"First 10 amino acids: {original_protein[:10]}")
     print(f"Last 10 amino acids: {original_protein[-10:]}")
     
-    # Print the wild-type sequence for reference
-    print("\nWild-type nucleotide sequence:")
-    print(original_dna)
-    
     # Process the mutations file
     print(f"\nProcessing mutations from {args.dms_file}")
-    process_mutations_file(args.dms_file, output_file, original_dna, original_protein)
-    print(f"Processing complete. Output saved to {output_file}")
+    process_mutations_file(args.dms_file, output_file, original_dna, original_protein, reverse_codon_table)
     print(original_dna)
+    print(f"Processing complete. Output saved to {output_file}")
+
 
 if __name__ == "__main__":
     main()
