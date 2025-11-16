@@ -116,7 +116,7 @@ Task | Data | Size (unzipped) | Link
 **3D structure prediction** | Monomer scores | 7KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/monomer.csv
 **3D structure prediction** | Complex scores | 15KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/multimer.csv
 **3D structure prediction** | Model predictions (PDBs) | 165MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_model_outputs.tar.xz
-**3D structure prediction** | Test-to-train TM scores | 150MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_train_to_test_usalign.tar.xz
+**3D structure prediction** | Test-to-train TM scores | 267MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_train_to_test_usalign.tar.xz
 
 Model files for 2D structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
 
