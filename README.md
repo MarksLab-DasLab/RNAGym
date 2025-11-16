@@ -125,9 +125,9 @@ Model files for 2D structure prediction task were prepared for a linux 64-bit sy
 
 | Data | Size (unzipped) | Link |
 | --- | --- | --- |
-| Train set | 19MB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/train.csv |
-| Test set (monomers) | 84KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/monomer.csv |
-| Test set (complexes) | 140KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/complex.csv |
+| Train.csv | 3.6MB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/train.csv |
+| Test.csv (monomers) | 84KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/monomer.csv |
+| Test.csv (complexes) | 140KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/complex.csv |
 | Alignments | 55.3MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_alignments.tar.xz |
 | Monomer scores | 7KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/monomer.csv |
 | Complex scores | 15KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/multimer.csv |

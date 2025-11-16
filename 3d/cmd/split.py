@@ -10,54 +10,34 @@ from util import Config
 from util.analysis import add_seq_id, add_tm_id, prep_usalign
 
 
-def debug_ecs(df: pd.DataFrame) -> None:
-    """
-    Prints debug information about the input DataFrame.
-    """
-    # --- Print info about Rfam clusters ---
-    unique_rfam_names = set(df["Rfam"].unique())
-    component_rfams = (
-        pd.read_csv(
-            "annotated_chain_ids.csv",
-            keep_default_na=False,
-            na_values=[""],
-            low_memory=False,
-        )
-        .groupby("Rfam Cluster")["Rfam"]
-        .apply(set)
-        .to_dict()
-    )
-    for comp_id in sorted(df["Rfam Cluster"].unique()):
-        if not pd.isna(comp_id):
-            rfam_names = component_rfams[comp_id]
-            print(
-                f"{comp_id} ({len(rfam_names)} fams): "
-                + ", ".join(
-                    rfam_name
-                    for rfam_name in rfam_names
-                    if rfam_name in unique_rfam_names
-                )
-            )
-
-    # --- Print info about good/bad EC structures ---
-    good_ecs = df.query(f"`Rfam E-value` < {Config.RFAM_GOOD_CUTOFF}")
-    bad_ecs = df.query(f"`Rfam E-value` >= {Config.RFAM_BAD_CUTOFF} or Rfam != Rfam")
-    label_to_ecs = {"good": good_ecs, "bad": bad_ecs}
-    for label, ecs in label_to_ecs.items():
-        n_seqs = ecs["Sequence (unmod.)"].nunique()
-        n_seq_clusts = ecs["Sequence Cluster"].nunique()
-        n_struct_clusts = ecs["Rfam Cluster"].nunique()
-        print(
-            "%d %s EC sequences belonging to %d|%d sequence|structure clusters"
-            % (n_seqs, label, n_seq_clusts, n_struct_clusts)
-        )
-        print(f"{ecs['Rfam'].nunique()} unique {label} Rfams")
-
-
 NMR_SENTINEL = 1.23456789
 
 
-def get_split_candidates() -> (pd.DataFrame, pd.DataFrame):
+def debug_df(df: pd.DataFrame) -> None:
+    """
+    Prints debug information about the input DataFrame.
+    """
+    # Count Rfam hits (E-value < 1)
+    rfam_hits = df.query("`Rfam E-value` < 1")["Rfam"].nunique()
+    print(f"{rfam_hits} unique Rfam hits (E-value < 1)")
+
+    # Count unique Rfam signatures (any detected Rfam)
+    rfam_sigs = df[df["Rfam"] != ""]["Rfam"].nunique()
+    print(f"{rfam_sigs} unique Rfam signatures (any detected)")
+
+    # Average length
+    avg_length = df["L"].mean()
+    print(f"Average length: {avg_length:.0f} nt")
+
+    # Average resolution (excluding NMR and N/A)
+    res_numeric = df[(df["Resolution"] != NMR_SENTINEL) & (df["Resolution"] != "N/A")][
+        "Resolution"
+    ]
+    avg_res = res_numeric.mean()
+    print(f"Average resolution: {avg_res:.2f} Å")
+
+
+def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     """
     Retrives all candidate monomer and multimer chains based on the criteria in
     `util/config.py`.  Note that TM_train and %ID_train are not yet processed.
@@ -190,14 +170,16 @@ def main():
     test_df = pd.concat([mon_df, mul_df])
     test_ids = set(zip(test_df["PDB ID"], test_df["Asym. Chain ID"]))
 
-    # Reload and find all quality chains, then exclude those in the test set
+    # Reload and apply quality filters (but not date filter)
     all_chains_df = pd.read_csv(
         "./annotated_chain_ids.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
     )
-    all_chains_df = all_chains_df[all_chains_df["Asym. Chain ID"] != "ERROR: Failed to download"]
+    all_chains_df = all_chains_df[
+        all_chains_df["Asym. Chain ID"] != "ERROR: Failed to download"
+    ]
     all_chains_df["Resolution"] = (
         all_chains_df["Resolution"]
         .str.split(",")
@@ -209,20 +191,61 @@ def main():
         .groupby(level=0)
         .max()
     )
-    quality_df = all_chains_df.query(
+
+    # Apply quality filters and date filter for TRAINING (before cutoff)
+    train_df = all_chains_df.query(
         f"Resolution <= {Config.MAX_RESOLUTION} "
         f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING} "
-        f"and L >= {Config.MIN_L}"
+        f"and L >= {Config.MIN_L} "
+        f'and Published < "{Config.TRAINING_CUTOFF}"'
     )
-    id_tuples = zip(quality_df["PDB ID"], quality_df["Asym. Chain ID"])
-    train_df = quality_df[[i not in test_ids for i in id_tuples]].copy()
+
+    # Remove test set chains and deduplicate by sequence
+    id_tuples = zip(train_df["PDB ID"], train_df["Asym. Chain ID"])
+    train_df = train_df[[i not in test_ids for i in id_tuples]].copy()
+    train_df = (
+        train_df.sort_values(
+            by=["Resolution", "L", "PDB ID", "Asym. Chain ID"],
+            ascending=[True, False, True, True],
+        )
+        .groupby("Sequence (unmod.)")
+        .first()
+        .reset_index()
+    )
+
+    # Count monomers and multimers
+    train_mon = train_df[
+        train_df["% covered (any polymer)"] <= Config.MAX_PCT_COVER_MONOMER
+    ]
+    train_mul = train_df[
+        train_df["% covered (any polymer)"] > Config.MAX_PCT_COVER_MONOMER
+    ]
+    print(f"Training set: {len(train_mon)} monomers, {len(train_mul)} multimers")
+
+    # Write to CSV
     train_df["Resolution"] = train_df["Resolution"].replace(NMR_SENTINEL, "N/A")
-    train_df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv("train.csv", index=False)
+    train_df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(
+        "train.csv", index=False
+    )
     print(f"{len(train_df)} training chains written to train.csv")
+    debug_df(train_df)
+    print("")
+
+    # Debug the RNAGym test dataset
+    print("--- Debug info for test dataset ---")
+    debug_df(test_df)
+    print("")
+
+    # Debug the full RNAGym dataset
+    print("--- Debug info for full dataset ---")
+    all_data = pd.concat([train_df, test_df])
+    debug_df(all_data)
+    print("")
 
     # --- Write to CSV ---
     def write_to_csv(df, fname):
-        debug_ecs(df)
+        print(f"--- Writing {fname}... ---")
+        debug_df(df)
         df.columns = df.columns.str.replace("no.", "#")
         target_cols = og_cols
         for bl_name in Config.BASELINES.keys():
@@ -243,6 +266,7 @@ def main():
         df = df[target_cols]
         df["Resolution"] = df["Resolution"].replace(NMR_SENTINEL, "N/A")
         df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(fname, index=False)
+        print("")
 
     write_to_csv(mon_df, Config.MONOMER_CSV)
     write_to_csv(mul_df, Config.MULTIMER_CSV)
