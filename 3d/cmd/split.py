@@ -242,6 +242,18 @@ def main():
     debug_df(all_data)
     print("")
 
+    # Calculate TM_train between test and train using AF3 TM_train, since it is
+    # the most recent model and therefore sets the training set date cutoff.
+    # Note this is slightly approximate, as our train set was filtered for high
+    # quality structures only.
+    print("\n--- Approximate test-to-train homology ---")
+    test_tm = pd.to_numeric(test_df["AF3 TM Homolog Score"], errors="coerce").dropna()
+    print(
+        f"min={test_tm.min():.3f}, max={test_tm.max():.3f}, "
+        f"avg={test_tm.mean():.3f}, median={test_tm.median():.3f}"
+    )
+    print("")
+
     # --- Write to CSV ---
     def write_to_csv(df, fname):
         print(f"--- Writing {fname}... ---")
