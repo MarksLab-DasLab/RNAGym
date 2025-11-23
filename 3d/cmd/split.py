@@ -22,8 +22,9 @@ def debug_df(df: pd.DataFrame) -> None:
     print(f"{rfam_hits} unique Rfam hits (E-value < 1)")
 
     # Count unique Rfam signatures (any detected Rfam)
-    rfam_sigs = df[df["Rfam"] != ""]["Rfam"].nunique()
-    print(f"{rfam_sigs} unique Rfam signatures (any detected)")
+    df["Rfam E-value"] = pd.to_numeric(df["Rfam E-value"], errors="coerce")
+    count = len(df.query('Rfam == "" or `Rfam E-value` > 10'))
+    print(f"RNAs with Rfam E-value >10.0: {count}")
 
     # Average length
     avg_length = df["L"].mean()
