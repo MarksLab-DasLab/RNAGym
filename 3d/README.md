@@ -13,6 +13,12 @@ filters, and is suitable for both secondary and tertiary structure prediction
 tasks.  See `train.csv` and the eponymous test sets `monomer.csv` and
 `complex.csv`.
 
+`annotated_chain_ids.csv` contains all RNA chains >16nt with useful annotations
+like Rfams hits, heteroatoms bound, % bound by polymer, resolution, and much
+more.  This can be used to easily filter the RNAs in the PDB by different
+selection criteria, for example identifying self-structured RNA monomers in the
+PDB that bind ligands.
+
 ### Data Sources
 
 RNA chain candidates were collected from [RNA3DB][22] prior to
