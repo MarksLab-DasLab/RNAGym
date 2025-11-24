@@ -10,8 +10,9 @@
 /datasets/rna3db-cmscans
 
 # Merged/annotated output
-/annotated_chain_ids.csv
-/merged_pdb_ids.csv
+# NOTE(MCA): Made merged/annotated visible on 2025/11/24 for reference purposes
+# /merged_pdb_ids.csv
+# /annotated_chain_ids.csv
 /scripts/annotated_chain_ids.csv
 /scripts/msa_stats.csv
 
