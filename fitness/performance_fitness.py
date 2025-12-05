@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import os
 from typing import List, Dict, Tuple
@@ -400,9 +402,21 @@ def calculate_combined_averages_with_se(wt_seqs: pd.DataFrame, types: List[str],
     
     return pd.DataFrame(results)
 
+def save_assay_level_results_transposed(wt_seqs: pd.DataFrame, score_columns: List[str], output_file: str):
+    """Save assay-level results grouped by metric type."""
+    output_columns = ['DMS_ID', 'RNA_TYPE']
+    
+    # Outer loop: Metric, Inner loop: Model -> Groups by Metric
+    for metric in ['Spearman', 'AUC', 'MCC']:
+        for model in score_columns:
+            output_columns.append(f'{metric}_{model}')
+            
+    final_columns = [col for col in output_columns if col in wt_seqs.columns]
+    wt_seqs.to_csv(output_file, columns=final_columns, index=False)
+
 def main(args):
     wt_seqs = pd.read_csv(args.reference_file)
-    model_list = ['evo1','evo1.5','evo2','GenSLM_pll', 'GenSLM_mm','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
+    model_list = ['evo1','evo1.5','evo2','GenSLM', 'NT', 'rinalmo','RNAErnie','RNA-FM']
     score_columns = [model+str("_score") for model in model_list]
     wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns)
     types = ['mRNA-splicing', 'mRNA-coding', 'tRNA', 'Aptamer', 'Ribozyme']
@@ -427,6 +441,11 @@ def main(args):
     
     # Save assay-level results
     save_assay_level_results(wt_seqs, score_columns, os.path.join(args.performance_dir,'assay_level_results.csv'))
+    save_assay_level_results_transposed(
+        wt_seqs, 
+        score_columns, 
+        os.path.join(args.performance_dir, 'assay_level_results_transposed.csv')
+    )
 
     # Print results
     print("\nMetrics by RNA Type:")

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import pandas as pd
 from pathlib import Path
@@ -75,18 +76,15 @@ def main():
     if args.assays_with_MSAs_only:
         model_list = ['PSSM', 'EVmutation']
     else:
-        model_list = ['evo1','evo1.5','evo2','GenSLM_pll', 'GenSLM_mm','NT_mm','NT_pll','rinalmo','RNAErnie','RNA-FM_wt','RNA-FM_masked']
+        model_list = ['evo1','evo1.5','evo2','GenSLM', 'NT','rinalmo','RNAErnie','RNA-FM']
     
     score_cols_dict = {
         'evo1': 'evo_1_131k_base_score',
         'evo1.5': 'evo_1.5_8k_base_score',
         'evo2': 'evo2_7b_score',
-        'GenSLM_pll': 'logit_scores',
-        'GenSLM_mm': 'logit_scores',
-        'NT_mm': 'kmer_pseudo_LL',
-        'NT_pll': 'avg_pseudo_LL',
-        'RNA-FM_wt': 'RNA_FM_scores',
-        'RNA-FM_masked': 'RNA_FM_score',
+        'GenSLM': 'logit_scores',
+        'NT': 'kmer_pseudo_LL',
+        'RNA-FM': 'RNA_FM_scores',
         'rinalmo': 'logit_scores',
         'RNAErnie': 'Mutation_Scores',
         'PSSM': 'prediction_independent',
