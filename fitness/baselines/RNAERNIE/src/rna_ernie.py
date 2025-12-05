@@ -14,10 +14,17 @@ from src.tokenizer_nuc import NUCTokenizer
 
 
 class BatchConverter(object):
-    """Convert sequences to batch inputs.
-    """
+    """Convert sequences to batch inputs."""
 
-    def __init__(self, k_mer=1, vocab_path="./vocab_1MER.txt", batch_size=256, max_seq_len=512, is_pad=True, st_pos=0):
+    def __init__(
+        self,
+        k_mer=1,
+        vocab_path="./vocab_1MER.txt",
+        batch_size=256,
+        max_seq_len=512,
+        is_pad=True,
+        st_pos=0,
+    ):
         """this class predicts embeddings from RNA sequences list
 
         Args:
@@ -48,23 +55,23 @@ class BatchConverter(object):
         if type(data) == list:
             # convert sequences to batch inputs
             self.data = data
-        elif type(data) == str and (data.split(".")[-1] == "fasta" or data.split(".")[-1] == "fa"):
+        elif type(data) == str and (
+            data.split(".")[-1] == "fasta" or data.split(".")[-1] == "fa"
+        ):
             # load .fasta file with SeqIO
             records = list(SeqIO.parse(data, "fasta"))
             self.data = [(str(x.description), str(x.seq)) for x in records]
         # return generator to iterate data by step batch_size
         for d in range(0, len(self.data), self.batch_size):
-            raw_data = self.data[d:d + self.batch_size]
+            raw_data = self.data[d : d + self.batch_size]
             names = [x[0] for x in raw_data]
             seqs = [x[1] for x in raw_data]
-            seqs = [x[self.st_pos:self.st_pos + self.max_seq_len - 2]
-                    for x in seqs]
+            seqs = [x[self.st_pos : self.st_pos + self.max_seq_len - 2] for x in seqs]
             seqs = [x.upper().replace("U", "T") for x in seqs]
             # 2 means [CLS] and [SEP]
             input_ids = [seq2input_ids(x, self.tokenizer) for x in seqs]
             if self.is_pad:
-                input_ids = [x + [0] * (self.max_seq_len - len(x))
-                             for x in input_ids]
+                input_ids = [x + [0] * (self.max_seq_len - len(x)) for x in input_ids]
                 input_ids = self.stack_fn(input_ids)
             input_ids = paddle.to_tensor(input_ids)
             yield names, seqs, input_ids
@@ -78,21 +85,27 @@ if __name__ == "__main__":
     # ========== Prepare Data
     data = [
         ("RNA1", "GGGUGCGAUCAUACCAGCACUAAUGCCCUCCUGGGAAGUCCUCGUGUUGCACCCCU"),
-        ("RNA2", "GGGUGUCGCUCAGUUGGUAGAGUGCUUGCCUGGCAUGCAAGAAACCUUGGUUCAAUCCCCAGCACUGCA"),
+        (
+            "RNA2",
+            "GGGUGUCGCUCAGUUGGUAGAGUGCUUGCCUGGCAUGCAAGAAACCUUGGUUCAAUCCCCAGCACUGCA",
+        ),
         ("RNA3", "CGAUUCNCGUUCCC--CCGCCUCCA"),
     ]
     data = "./data/ft/seq_cls/nRC/test.fa"
 
     # ========== Batch Converter
     logger.debug("Loading converter.")
-    batch_converter = BatchConverter(k_mer=1,
-                                     vocab_path="./data/vocab/vocab_1MER.txt",
-                                     batch_size=256,
-                                     max_seq_len=512)
+    batch_converter = BatchConverter(
+        k_mer=1,
+        vocab_path="./data/vocab/vocab_1MER.txt",
+        batch_size=256,
+        max_seq_len=512,
+    )
 
     # ========== RNAErnie Model
     rna_ernie = ErnieModel.from_pretrained(
-        "./output/BERT,ERNIE,MOTIF,PROMPT/checkpoint_final")
+        "./output/BERT,ERNIE,MOTIF,PROMPT/checkpoint_final"
+    )
 
     # call batch_converter to convert sequences to batch inputs
     for names, _, inputs_ids in batch_converter(data):

@@ -4,6 +4,7 @@ This module builds base trainer for all pre & downstream tasks.
 Author: wangning(wangning.roci@gmail.com)
 Date  : 2022/12/8 2:43 PM
 """
+
 import copy
 import os
 import shutil
@@ -17,7 +18,7 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
     matthews_corrcoef,
-    roc_auc_score
+    roc_auc_score,
 )
 
 import paddle
@@ -30,8 +31,7 @@ from paddlenlp.transformers import ErnieForMaskedLM
 
 # ===================== Common Modules =====================
 class MlpProjector(nn.Layer):
-    """MLP projection head.
-    """
+    """MLP projection head."""
 
     def __init__(self, n_in, output_size=128):
         """
@@ -61,8 +61,7 @@ class MlpProjector(nn.Layer):
 
 
 class IndicatorClassifier(nn.Layer):
-    """This class indicate coarse class after token [IND].
-    """
+    """This class indicate coarse class after token [IND]."""
 
     def __init__(self, model_name_or_path):
         """
@@ -72,9 +71,7 @@ class IndicatorClassifier(nn.Layer):
         super(IndicatorClassifier, self).__init__()
         self.indicator = ErnieForMaskedLM.from_pretrained(model_name_or_path)
 
-    def forward(self,
-                input_ids,
-                masked_positions):
+    def forward(self, input_ids, masked_positions):
         """
         Args:
             input_ids:
@@ -83,18 +80,15 @@ class IndicatorClassifier(nn.Layer):
 
         """
         with paddle.no_grad():
-            outputs = self.indicator(
-                input_ids, masked_positions=masked_positions)
+            outputs = self.indicator(input_ids, masked_positions=masked_positions)
             return outputs
 
 
 class MajorityVoter(nn.Layer):
-    """Stack top k logits.
-    """
+    """Stack top k logits."""
 
     def __init__(self):
-        """
-        """
+        """ """
         super(MajorityVoter, self).__init__()
 
     def forward(self, k_logits, topk_probs):
@@ -108,29 +102,30 @@ class MajorityVoter(nn.Layer):
         Returns:
 
         """
-        ensemble_logits = paddle.einsum('ijk,ij->ik', k_logits, topk_probs)
+        ensemble_logits = paddle.einsum("ijk,ij->ik", k_logits, topk_probs)
         return ensemble_logits
 
 
 # ===================== Base Classes =====================
 class BaseTrainer(object):
-    """Base trainer
-    """
+    """Base trainer"""
 
-    def __init__(self,
-                 args,
-                 tokenizer,
-                 model,
-                 pretrained_model=None,
-                 indicator=None,
-                 ensemble=None,
-                 train_dataset=None,
-                 eval_dataset=None,
-                 data_collator=None,
-                 loss_fn=None,
-                 optimizer=None,
-                 compute_metrics=None,
-                 visual_writer=None):
+    def __init__(
+        self,
+        args,
+        tokenizer,
+        model,
+        pretrained_model=None,
+        indicator=None,
+        ensemble=None,
+        train_dataset=None,
+        eval_dataset=None,
+        data_collator=None,
+        loss_fn=None,
+        optimizer=None,
+        compute_metrics=None,
+        visual_writer=None,
+    ):
         """init function
 
         Args:
@@ -166,7 +161,7 @@ class BaseTrainer(object):
         # default name_pbar is the first metric
         self.name_pbar = self.compute_metrics.metrics[0]
         self.visual_writer = visual_writer
-        self.max_metric = 0.
+        self.max_metric = 0.0
         self.max_model_dir = ""
         # init dataloaders
         self._prepare_dataloaders()
@@ -195,10 +190,12 @@ class BaseTrainer(object):
         Returns:
             paddle.io.BatchSampler: data sampler
         """
-        return BatchSampler(dataset=dataset,
-                            shuffle=True,
-                            batch_size=self.args.batch_size,
-                            drop_last=self.args.dataloader_drop_last)
+        return BatchSampler(
+            dataset=dataset,
+            shuffle=True,
+            batch_size=self.args.batch_size,
+            drop_last=self.args.dataloader_drop_last,
+        )
 
     def _prepare_dataloaders(self):
         """prepare dataloaders, private function
@@ -208,12 +205,12 @@ class BaseTrainer(object):
         if self.train_dataset:
             train_sampler = self._get_sampler(self.train_dataset)
             self.train_dataloader = self._get_dataloader(
-                self.train_dataset, train_sampler)
+                self.train_dataset, train_sampler
+            )
 
         if self.eval_dataset:
             eval_sampler = self._get_sampler(self.eval_dataset)
-            self.eval_dataloader = self._get_dataloader(
-                self.eval_dataset, eval_sampler)
+            self.eval_dataloader = self._get_dataloader(self.eval_dataset, eval_sampler)
 
     def save_model(self, metrics_dataset, epoch):
         """
@@ -231,11 +228,9 @@ class BaseTrainer(object):
                 print("Remove old max model dir:", self.max_model_dir)
                 shutil.rmtree(self.max_model_dir)
 
-            self.max_model_dir = osp.join(
-                self.args.output, "epoch_" + str(epoch))
+            self.max_model_dir = osp.join(self.args.output, "epoch_" + str(epoch))
             os.makedirs(self.max_model_dir)
-            save_model_path = osp.join(
-                self.max_model_dir, "model_state.pdparams")
+            save_model_path = osp.join(self.max_model_dir, "model_state.pdparams")
             paddle.save(self.model.state_dict(), save_model_path)
             print("Model saved at:", save_model_path)
 
@@ -257,9 +252,8 @@ class BaseTrainer(object):
         ind_id = token_to_idx[self.tokenizexr.ind_token]
         sep_id = token_to_idx[self.tokenizer.sep_token]
 
-        is_cross = (seq_lens <= max_seq_len - 2)  # remove [SEP] & [LABEL] token
-        ind_positions = paddle.where(
-            is_cross, x=seq_lens - 1, y=max_seq_len - 3)
+        is_cross = seq_lens <= max_seq_len - 2  # remove [SEP] & [LABEL] token
+        ind_positions = paddle.where(is_cross, x=seq_lens - 1, y=max_seq_len - 3)
         label_positions = ind_positions + 1
         sep_positions = ind_positions + 2
         for b in range(B):
@@ -270,20 +264,23 @@ class BaseTrainer(object):
         for i in range(1, B):
             masked_positions[i] += i * max_seq_len
         with paddle.no_grad():
-            ind_logtis = indicator(input_ids=input_ids,
-                                   masked_positions=masked_positions)
+            ind_logtis = indicator(
+                input_ids=input_ids, masked_positions=masked_positions
+            )
             ind_logits = ind_logtis.detach()  # [B, vocab_size]
 
         # remove special tokens and bases (A, T, C, G)
-        ind_logits[:, :7] = float('-inf')
-        ind_logits[:, 35:] = float('-inf')
+        ind_logits[:, :7] = float("-inf")
+        ind_logits[:, 35:] = float("-inf")
         ind_probs = F.softmax(ind_logits, axis=-1)
         # (B, k), (B)
         topk_probs, topk_ind_ids = paddle.topk(
-            ind_probs, self.args.top_k, axis=-1, largest=True)
+            ind_probs, self.args.top_k, axis=-1, largest=True
+        )
         # (B*Ch, k, max_seq_len)
-        input_ids_inds = paddle.tile(input_ids.unsqueeze(
-            axis=1), repeat_times=(1, self.args.top_k, 1))
+        input_ids_inds = paddle.tile(
+            input_ids.unsqueeze(axis=1), repeat_times=(1, self.args.top_k, 1)
+        )
 
         for b in range(B):
             input_ids_inds[b, :, label_positions[b]] = paddle.t(topk_ind_ids[b])
@@ -314,12 +311,10 @@ class BaseTrainer(object):
 
 
 class BaseCollator(object):
-    """Data collator that will dynamically pad the inputs to the longest sequence in the batch and process them.
-    """
+    """Data collator that will dynamically pad the inputs to the longest sequence in the batch and process them."""
 
     def __init__(self):
-        """
-        """
+        """ """
         self.stack_fn = Stack()
 
     def __call__(self, data):
@@ -334,12 +329,10 @@ class BaseCollator(object):
 
 
 class BaseInstance(object):
-    """A single instance for data collator.
-    """
+    """A single instance for data collator."""
 
     def __init__(self):
-        """
-        """
+        """ """
         pass
 
     def __call__(self):
@@ -351,8 +344,7 @@ class BaseInstance(object):
 
 
 class BaseMetrics(abc.ABC):
-    """Base class for functional tasks metrics
-    """
+    """Base class for functional tasks metrics"""
 
     def __init__(self, metrics):
         """
@@ -371,10 +363,10 @@ class BaseMetrics(abc.ABC):
             metrics in dict
         """
         preds = paddle.argmax(outputs, axis=-1)
-        preds = paddle.cast(preds, 'int32')
+        preds = paddle.cast(preds, "int32")
         preds = preds.numpy()
 
-        labels = paddle.cast(labels, 'int32')
+        labels = paddle.cast(labels, "int32")
         labels = labels.numpy()
 
         res = {}
@@ -417,7 +409,7 @@ class BaseMetrics(abc.ABC):
         Returns:
             precision
         """
-        return precision_score(labels, preds, average='macro')
+        return precision_score(labels, preds, average="macro")
 
     @staticmethod
     def recall(preds, labels):
@@ -430,7 +422,7 @@ class BaseMetrics(abc.ABC):
         Returns:
             precision
         """
-        return recall_score(labels, preds, average='macro')
+        return recall_score(labels, preds, average="macro")
 
     @staticmethod
     def f1s(preds, labels):
@@ -443,7 +435,7 @@ class BaseMetrics(abc.ABC):
         Returns:
             precision
         """
-        return f1_score(labels, preds, average='macro')
+        return f1_score(labels, preds, average="macro")
 
     @staticmethod
     def mcc(preds, labels):
@@ -475,8 +467,7 @@ class BaseMetrics(abc.ABC):
 
 
 class BaseStructMetrics(abc.ABC):
-    """Base class for evaluation metrics
-    """
+    """Base class for evaluation metrics"""
 
     def __init__(self, metrics):
         """
@@ -509,16 +500,22 @@ class BaseStructMetrics(abc.ABC):
             accuracy
         """
         if mask is not None:
-            tp = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)), mask))
-            tn = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 0), np.equal(logits, 0)), mask))
+            tp = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 1), np.equal(logits, 1)), mask
+                )
+            )
+            tn = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 0), np.equal(logits, 0)), mask
+                )
+            )
             return (tp + tn) / np.sum(np.equal(mask, 1))
         else:
-            tp = np.sum(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)))
-            tn = np.sum(np.logical_and(
-                np.equal(labels, 0), np.equal(logits, 0)), )
+            tp = np.sum(np.logical_and(np.equal(labels, 1), np.equal(logits, 1)))
+            tn = np.sum(
+                np.logical_and(np.equal(labels, 0), np.equal(logits, 0)),
+            )
             return (tp + tn) / labels.shape[0]
 
     @staticmethod
@@ -534,15 +531,21 @@ class BaseStructMetrics(abc.ABC):
             precision
         """
         if mask is not None:
-            tp = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)), mask))
-            fp = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 0), np.equal(logits, 1)), mask))
+            tp = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 1), np.equal(logits, 1)), mask
+                )
+            )
+            fp = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 0), np.equal(logits, 1)), mask
+                )
+            )
         else:
-            tp = np.sum(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)))
-            fp = np.sum(np.logical_and(
-                np.equal(labels, 0), np.equal(logits, 1)), )
+            tp = np.sum(np.logical_and(np.equal(labels, 1), np.equal(logits, 1)))
+            fp = np.sum(
+                np.logical_and(np.equal(labels, 0), np.equal(logits, 1)),
+            )
         return tp / (tp + fp)
 
     @staticmethod
@@ -558,15 +561,21 @@ class BaseStructMetrics(abc.ABC):
             recall
         """
         if mask is not None:
-            tp = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)), mask))
-            fn = np.sum(np.logical_and(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 0)), mask))
+            tp = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 1), np.equal(logits, 1)), mask
+                )
+            )
+            fn = np.sum(
+                np.logical_and(
+                    np.logical_and(np.equal(labels, 1), np.equal(logits, 0)), mask
+                )
+            )
         else:
-            tp = np.sum(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 1)))
-            fn = np.sum(np.logical_and(
-                np.equal(labels, 1), np.equal(logits, 0)), )
+            tp = np.sum(np.logical_and(np.equal(labels, 1), np.equal(logits, 1)))
+            fn = np.sum(
+                np.logical_and(np.equal(labels, 1), np.equal(logits, 0)),
+            )
         return tp / (tp + fn)
 
     def f1s(self, logits, labels, mask=None):
@@ -587,8 +596,7 @@ class BaseStructMetrics(abc.ABC):
 
 
 class FuncMetrics(object):
-    """Metrics for classification
-    """
+    """Metrics for classification"""
 
     def __init__(self, metrics):
         """
@@ -616,6 +624,5 @@ class FuncMetrics(object):
                 m = func(preds, labels)
                 res[name] = m
             else:
-                raise NotImplementedError(
-                    "Metric {} is not implemented.".format(name))
+                raise NotImplementedError("Metric {} is not implemented.".format(name))
         return res
