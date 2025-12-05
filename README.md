@@ -68,7 +68,7 @@ trRosettaRNA | Structure prediction | Wang et al. "trRosettaRNA: automated predi
 The RNAGym environment may be created via conda and the provided rnagym_env.yml file as follows:
 ```
 conda env create -f rnagym_env.yml
-conda activate rnagym_env
+conda activate rnagym
 ```
 For the fitness prediction task, we recommend the following folder structure:
 ```

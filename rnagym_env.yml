@@ -1,4 +1,4 @@
-name: rnagym_env
+name: rnagym
 channels:
   - pytorch
   - nvidia
