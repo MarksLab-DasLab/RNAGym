@@ -5,6 +5,7 @@ This module builds RNA nucleotide tokenizer.
 # built-in modules
 import os
 import io
+
 # paddle modules
 from paddlenlp.transformers import BasicTokenizer, PretrainedTokenizer
 from paddlenlp.data.vocab import Vocab
@@ -67,7 +68,21 @@ class NUCTokenizer(PretrainedTokenizer):
     # pretrained_resource_files_map = None
     # pretrained_init_configuration = None
 
-    def __init__(self, k_mer, vocab_file, do_lower_case=False, unk_token="[UNK]", pad_token="[PAD]", cls_token="[CLS]", sep_token="[SEP]", mask_token="[MASK]", del_token="[DEL]", ind_token="[IND]", label_tokens=None, normal_tokens_start=35):
+    def __init__(
+        self,
+        k_mer,
+        vocab_file,
+        do_lower_case=False,
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        sep_token="[SEP]",
+        mask_token="[MASK]",
+        del_token="[DEL]",
+        ind_token="[IND]",
+        label_tokens=None,
+        normal_tokens_start=35,
+    ):
         """init tokenizer
 
         Args:
@@ -89,9 +104,13 @@ class NUCTokenizer(PretrainedTokenizer):
         """
 
         if not os.path.isfile(vocab_file):
-            raise ValueError("Can't find a vocabulary file at path '{}'. "
-                             "To load the vocabulary from a pretrained model please use "
-                             "`tokenizer = ErnieTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. "
+                "To load the vocabulary from a pretrained model please use "
+                "`tokenizer = ErnieTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
+                    vocab_file
+                )
+            )
         self.k_mer = k_mer
         self.vocab_file = vocab_file
         # self.do_lower_case = do_lower_case
@@ -102,11 +121,13 @@ class NUCTokenizer(PretrainedTokenizer):
                 if v == "-":
                     extra_label_tokens.append(k.replace("_", ""))
 
-        self.vocab = self.load_vocabulary(vocab_file,
-                                          unk_token=unk_token,
-                                          pad_token=pad_token,
-                                          eos_token=sep_token,
-                                          label_tokens=extra_label_tokens)
+        self.vocab = self.load_vocabulary(
+            vocab_file,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            eos_token=sep_token,
+            label_tokens=extra_label_tokens,
+        )
 
         self.vocab_id_list = list(self.vocab.idx_to_token.keys())
         self.normal_vocab_id_list = self.vocab_id_list[normal_tokens_start:]
@@ -128,7 +149,16 @@ class NUCTokenizer(PretrainedTokenizer):
         """
         return len(self.vocab)
 
-    def load_vocabulary(self, filepath, unk_token=None, pad_token=None, bos_token=None, eos_token=None, label_tokens=None, **kwargs):
+    def load_vocabulary(
+        self,
+        filepath,
+        unk_token=None,
+        pad_token=None,
+        bos_token=None,
+        eos_token=None,
+        label_tokens=None,
+        **kwargs,
+    ):
         """load vocabulary from file
 
         Args:
@@ -143,21 +173,23 @@ class NUCTokenizer(PretrainedTokenizer):
             Vocab: vocabulary instance
         """
         token_to_idx = {}
-        with io.open(filepath, 'r', encoding='utf-8') as f:
+        with io.open(filepath, "r", encoding="utf-8") as f:
             for index, line in enumerate(f):
-                token = line.rstrip('\n')
+                token = line.rstrip("\n")
                 token_to_idx[token] = int(index)
 
         for extra_label in label_tokens:
             index += 1
             token_to_idx[extra_label] = index
 
-        vocab = Vocab.from_dict(token_to_idx,
-                                unk_token=unk_token,
-                                pad_token=pad_token,
-                                bos_token=bos_token,
-                                eos_token=eos_token,
-                                **kwargs)
+        vocab = Vocab.from_dict(
+            token_to_idx,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            **kwargs,
+        )
         return vocab
 
     def _tokenize(self, text):

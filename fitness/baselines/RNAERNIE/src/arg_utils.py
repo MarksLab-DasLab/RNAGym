@@ -48,9 +48,9 @@ def str2bool(v):
     """
     if isinstance(v, bool):
         return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    if v.lower() in ("yes", "true", "t", "y", "1"):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
         raise argparse.ArgumentTypeError("Boolean value expected.")
@@ -123,8 +123,8 @@ def print_config(args=None, key=""):
     """
     logger.debug("=" * 60)
 
-    logger.debug('{:^40}'.format("{} Configuration Arguments".format(key)))
-    logger.debug('{:30}:{}'.format("paddle commit id", paddle.version.commit))
+    logger.debug("{:^40}".format("{} Configuration Arguments".format(key)))
+    logger.debug("{:30}:{}".format("paddle commit id", paddle.version.commit))
 
     for k, v in vars(args).items():
-        logger.debug('{:30}:{}'.format(k, v))
+        logger.debug("{:30}:{}".format(k, v))
