@@ -110,13 +110,13 @@ def main():
     parser.add_argument(
         "--assays_with_MSAs_only",
         action="store_true",
-        help="Focus on assays with MSAs only (eg., PSSM, EVmutation)",
+        help="Focus on assays with MSAs only (i.e., EVmutation)",
     )
 
     args = parser.parse_args()
 
     if args.assays_with_MSAs_only:
-        model_list = ["PSSM", "EVmutation"]
+        model_list = ["EVmutation"]
     else:
         model_list = [
             "evo1",
@@ -127,6 +127,7 @@ def main():
             "rinalmo",
             "RNAErnie",
             "RNA-FM",
+            "EVmutation",
         ]
 
     score_cols_dict = {
