@@ -327,9 +327,12 @@ def calculate_mutation_depth_averages_with_se(
 
 
 def analyze_datasets(
-    wt_seqs: pd.DataFrame, combined_dir: str, score_columns: List[str]
+    wt_seqs: pd.DataFrame, combined_dir: str, score_columns: List[str], msa_only: bool = False
 ) -> pd.DataFrame:
     """Analyze all datasets and return results for all models."""
+    # Analyze all datasets and return results for all models
+    n_unfiltered = []
+    n_filtered = []
     for _, row in wt_seqs.iterrows():
         dataset = row["DMS_ID"]
         df_path = f"{combined_dir}/{dataset}.csv"
@@ -337,13 +340,27 @@ def analyze_datasets(
         if os.path.exists(df_path):
             df = pd.read_csv(df_path)
             assay_col = "DMS_score"
+
+            if msa_only:
+                n_unfiltered.append(len(df))
+                df = df[~df["EVmutation_score"].isna()]
+                n_filtered.append(len(df))
+
             dataset_results = get_performance_dataset(df, assay_col, score_columns)
 
             for model in score_columns:
-                for i, metric in enumerate(["Spearman", "AUC", "MCC"]):
+                for metric in ["Spearman", "AUC", "MCC"]:
                     wt_seqs.loc[wt_seqs["DMS_ID"] == dataset, f"{metric}_{model}"] = (
                         dataset_results[model][metric]
                     )
+
+    if msa_only:
+        pct_remaining = sum(n for n in n_filtered) / sum(n for n in n_unfiltered) * 100.
+        print(f"Filtered dataset sizes: {n_filtered}")
+        print(
+            f"{pct_remaining:.1f}% of samples remain after filtering for "
+            f"EVmutation scores"
+        )
 
     return wt_seqs
 
@@ -380,6 +397,7 @@ def calculate_combined_averages_with_se(
 ) -> pd.DataFrame:
     """Calculate average metrics for combinations of RNA type and mutation depth."""
     # First, ensure mutation depth columns are added to the dataframe
+    all_metrics = []
     for _, row in wt_seqs.iterrows():
         dataset = row["DMS_ID"]
         df_path = f"{combined_dir}/{dataset}.csv"
@@ -410,14 +428,16 @@ def calculate_combined_averages_with_se(
                             ] = dataset_results[model][metric]
 
             # Also calculate metrics for all mutations (without filtering by depth)
-            dataset_results_all = get_performance_dataset(
-                df, "DMS_score", score_columns
-            )
+            dataset_results_all = get_performance_dataset(df, "DMS_score", score_columns)
+
+            row_data = {"DMS_ID": dataset}
             for model in score_columns:
                 for metric in ["Spearman", "AUC", "MCC"]:
-                    wt_seqs.loc[
-                        wt_seqs["DMS_ID"] == dataset, f"{metric}_{model}_overall"
-                    ] = dataset_results_all[model][metric]
+                    row_data[f"{metric}_{model}_overall"] = dataset_results_all[model][metric]
+            
+            all_metrics.append(row_data)
+
+    wt_seqs = wt_seqs.merge(pd.DataFrame(all_metrics), on="DMS_ID", how="left")
 
     # Calculate averages for each combination
     results = []
@@ -540,6 +560,44 @@ def save_assay_level_results_transposed(
 
 def main(args):
     wt_seqs = pd.read_csv(args.reference_file)
+
+    # Filter based on rna type
+    is_non_coding = wt_seqs["RNA_TYPE"].str.contains(
+        "ribozyme|tRNA|aptamer|splicing", case=False, regex=True
+    )
+    if args.type == "all":
+        pass
+    elif args.type == "non-coding":
+        wt_seqs = wt_seqs[is_non_coding]
+    elif args.type == "coding":
+        wt_seqs = wt_seqs[~is_non_coding]
+    else:
+        raise ValueError(
+            f"Expected 'all', 'non-coding', or 'coding' for --type (received "
+            f"{args.type})"
+        )
+
+    # Filter based on EVmutation availability
+    if args.msa_only:
+        datasets_to_drop = []
+        for _, row in wt_seqs.iterrows():
+            dataset = row["DMS_ID"]
+            df_path = f"{args.combined_dir}/{dataset}.csv"
+                
+            if not os.path.exists(df_path):
+                datasets_to_drop.append(dataset)
+                continue
+
+            df = pd.read_csv(df_path)
+            if "EVmutation_score" not in df.columns:
+                datasets_to_drop.append(dataset)
+            elif df["EVmutation_score"].dropna().shape[0] < 10:
+                datasets_to_drop.append(dataset)
+            
+        if datasets_to_drop:
+            wt_seqs = wt_seqs[~wt_seqs["DMS_ID"].isin(datasets_to_drop)]
+            print(f"Dropped {len(datasets_to_drop)} datasets missing EVmutation scores.")
+
     model_list = [
         "evo1",
         "evo1.5",
@@ -550,8 +608,11 @@ def main(args):
         "RNAErnie",
         "RNA-FM",
     ]
+    if args.msa_only:
+        model_list.append("EVmutation")
+
     score_columns = [model + str("_score") for model in model_list]
-    wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns)
+    wt_seqs = analyze_datasets(wt_seqs, args.combined_dir, score_columns, args.msa_only)
     types = ["mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme"]
 
     # Calculate averages and standard errors per RNA type
@@ -631,6 +692,18 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Dir where performance file should be stored",
+    )
+    parser.add_argument(
+        "--msa_only",
+        action="store_true",
+        help="Only score models on assays where EVmutation has scores",
+    )
+    parser.add_argument(
+        "--type",
+        type=str,
+        default="all",
+        choices=["all", "non-coding", "coding"],
+        help="Filter assays by type",
     )
     args = parser.parse_args()
     if args.performance_dir is None:
