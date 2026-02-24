@@ -40,7 +40,6 @@ To run the RNAGym dataset curation pipeline:
 
 1. Modify `util/config.py` to suit your system & needs
 2. In the `rnagym` environment, install the additional dependencies:
-    - `evcouplings` (from [Murphy's fork (private; request access)][10])
     - `rmsa` (from [source][21])
     - `rna3db` (from [source][19])
     - RNA Puzzles assessment toolkit(from [source][23])

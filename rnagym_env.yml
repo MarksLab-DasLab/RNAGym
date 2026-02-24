@@ -24,6 +24,7 @@ dependencies:
   - hhsuite
   - matplotlib
   - usalign
+  - hmmer
   - pip:
       - wandb
       - transformers
@@ -31,3 +32,4 @@ dependencies:
       - datasets
       - arnie==0.1.6
       - rna-fm
+      - evcouplings
