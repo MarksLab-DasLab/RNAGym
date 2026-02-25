@@ -1,4 +1,4 @@
-# RNAGym 3D structure prediction
+# RNAGym 3D structure benchmark
 
 This directory includes datasets, models, and benchmarks used by RNAGym
 for 3D structure prediction.
