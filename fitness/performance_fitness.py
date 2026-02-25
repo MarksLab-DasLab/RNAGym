@@ -673,13 +673,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--reference_file",
         type=str,
-        default="reference_sheet_cleaned_CAS.csv",
+        default="reference_sheet_final.csv",
         help="Path to the reference CSV file",
     )
     parser.add_argument(
         "--combined_dir",
         type=str,
-        default="combined_results",
+        default="merged",
         help="Base directory for combined result files",
     )
     parser.add_argument(
