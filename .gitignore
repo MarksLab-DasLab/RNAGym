@@ -1,3 +1,10 @@
 **/__pycache__/
 slurm
 archives
+.vibe/
+
+# Fitness data (downloadable or generated)
+fitness/assays/
+fitness/model_predictions/
+fitness/merged/
+fitness/results_*/
