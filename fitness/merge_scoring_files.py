@@ -86,6 +86,7 @@ SCORE_COLS = {
     "RNA-FM": "RNA_FM_scores",
     "rinalmo": "logit_scores",
     "RNAErnie": "Mutation_Scores",
+    "orthrus": "orthrus_score",
     "EVmutation": "prediction_epistatic",
 }
 
@@ -98,6 +99,7 @@ ALL_MODELS = [
     "rinalmo",
     "RNAErnie",
     "RNA-FM",
+    "orthrus",
     "EVmutation",
 ]
 
