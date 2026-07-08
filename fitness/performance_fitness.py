@@ -485,6 +485,7 @@ def main(args):
         "rinalmo",
         "RNAErnie",
         "RNA-FM",
+        "orthrus",
     ]
     if args.msa_only:
         model_list.append("EVmutation")
