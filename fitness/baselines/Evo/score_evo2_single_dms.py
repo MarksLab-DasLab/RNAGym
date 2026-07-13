@@ -18,7 +18,7 @@ Notes on multi-GPU
 Vortex places and (for large models) shards the model across all CUDA devices
 that are visible. Select the GPUs with ``CUDA_VISIBLE_DEVICES`` and do NOT move
 the model manually with ``.to(device)``. ``evo2_40b`` does not fit on a single
-80 GB GPU and needs at least two (e.g. 2xH100-80GB or 2xA100-80GB — but note the
+80 GB GPU and needs at least two (e.g. 2xH100-80GB — but note the
 40B/20B/1B checkpoints require FP8 + Transformer Engine, i.e. a Hopper GPU).
 
 Offline weights
