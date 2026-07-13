@@ -480,6 +480,7 @@ def main(args):
         "evo1",
         "evo1.5",
         "evo2",
+        "evo2_40b",
         "GenSLM",
         "NT",
         "rinalmo",
