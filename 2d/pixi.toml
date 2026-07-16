@@ -1,0 +1,141 @@
+[workspace]
+name = "rnagym-2d"
+description = "RNAGym secondary structure baseline environments"
+channels = ["pytorch", "nvidia", "conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+go-shfmt = "==3.13.1"
+ruff = "==0.15.21"
+shellcheck = "==0.11.0"
+taplo = "==0.10.0"
+
+[tasks]
+fmt = "bash sh/format.sh"
+lint = "bash sh/lint.sh"
+
+# Classical models used through score_arnie.py.
+[feature.arnie.dependencies]
+python = "3.9.*"
+numpy = "1.*"
+pandas = "2.*"
+scipy = "1.*"
+scikit-learn = "1.*"
+tqdm = "4.*"
+viennarna = "==2.6.4"
+rnastructure = "==6.4"
+contrafold = "==2.02"
+cxx-compiler = "1.*"
+git = "2.*"
+make = "4.*"
+
+[feature.arnie.pypi-dependencies]
+arnie = "==0.2.7"
+
+[feature.arnie.activation.env]
+CONTRAFOLD_PATH = "$CONDA_PREFIX/bin"
+DATAPATH = "$CONDA_PREFIX/share/rnastructure/data_tables"
+ETERNAFOLD_PATH = "$PIXI_PROJECT_ROOT/.pixi/model-sources/EternaFold/src"
+ETERNAFOLD_PARAMETERS = "$PIXI_PROJECT_ROOT/.pixi/model-sources/EternaFold/parameters/EternaFoldParams.v1"
+RNASTRUCTURE_PATH = "$CONDA_PREFIX/bin"
+VIENNA_2_PATH = "$CONDA_PREFIX/bin"
+
+[feature.arnie.activation]
+scripts = ["sh/activate-rnastructure.sh"]
+
+[feature.arnie.tasks]
+source = "bash sh/fetch-source.sh eternafold"
+
+[feature.arnie.tasks.build]
+cmd = "make -C .pixi/model-sources/EternaFold/src contrafold CXX=\"$CXX\""
+depends-on = ["source"]
+
+[feature.arnie.tasks.test]
+cmd = "bash tests/test.sh arnie"
+depends-on = ["build"]
+
+[feature.ribonanzanet.dependencies]
+python = "3.9.*"
+git = "2.*"
+pytorch = "==2.1.2"
+pytorch-cuda = "==12.1"
+torchvision = "==0.16.2"
+accelerate = "==0.25.0"
+einops = "==0.7.0"
+matplotlib = "==3.8.2"
+numpy = "==1.26.2"
+pandas = "2.*"
+polars = "==0.20.2"
+pyyaml = "==6.0.1"
+scikit-learn = "==1.3.2"
+tqdm = "==4.66.1"
+
+[feature.ribonanzanet.pypi-dependencies]
+arnie = "==0.2.7"
+
+[feature.ribonanzanet.pypi-dependencies.ranger]
+git = "https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer.git"
+rev = "c82a30460684c7301086d84185a1927b1c256afa"
+
+[feature.ribonanzanet.tasks]
+source = "bash sh/fetch-source.sh ribonanzanet"
+
+[feature.ribonanzanet.tasks.test]
+cmd = "bash tests/test.sh ribonanzanet"
+depends-on = ["source"]
+
+[feature.ufold.dependencies]
+python = "3.11.*"
+git = "2.*"
+pytorch = "==2.0.1"
+pytorch-cuda = "==11.8"
+mkl = "==2023.1.0"
+numpy = "==1.24.3"
+pandas = "==2.1.1"
+scipy = "==1.11.3"
+scikit-learn = "==1.3.0"
+matplotlib = "==3.8.0"
+munch = "==4.0.0"
+
+[feature.ufold.tasks]
+source = "bash sh/fetch-source.sh ufold"
+weights = "bash sh/fetch-weight.sh ufold"
+
+[feature.ufold.tasks.test]
+cmd = "bash tests/test.sh ufold"
+depends-on = ["source", "weights"]
+
+[feature.rna-fm.dependencies]
+python = "3.9.*"
+pytorch = "==2.2.0"
+pytorch-cuda = "==11.8"
+numpy = "==1.26.4"
+
+[feature.rna-fm.pypi-dependencies]
+rna-fm = "==0.2.2"
+
+[feature.rna-fm.tasks]
+weights = "bash sh/fetch-weight.sh rna-fm"
+
+[feature.rna-fm.tasks.test]
+cmd = "bash tests/test.sh rna-fm"
+depends-on = ["weights"]
+
+[feature.mxfold2.dependencies]
+python = "3.8.*"
+pytorch = "==1.13.1"
+torchvision = "==0.14.1"
+mkl = "==2023.1.0"
+
+[feature.mxfold2.pypi-dependencies]
+mxfold2 = "==0.1.1"
+
+[feature.mxfold2.tasks]
+test = "bash tests/test.sh mxfold2"
+
+[environments]
+arnie = { features = ["arnie"], no-default-feature = true }
+ribonanzanet = { features = ["ribonanzanet"], no-default-feature = true }
+ufold = { features = ["ufold"], no-default-feature = true }
+rna-fm = { features = ["rna-fm"], no-default-feature = true }
+mxfold2 = { features = ["mxfold2"], no-default-feature = true }

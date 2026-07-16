@@ -1,21 +1,21 @@
-import os, sys
-import pandas as pd
-from arnie.bpps import bpps
-from arnie.mfe import mfe
-import pickle
-import numpy as np
 import glob
-from arnie.utils import convert_bp_list_to_dotbracket, convert_dotbracket_to_bp_list
+import os
+import pickle
+
+import pandas as pd
+from arnie.mfe import mfe
+from arnie.utils import convert_bp_list_to_dotbracket
 
 # Set DATAPATH for using RNAstructure with arnie. Either set here or in bashrc
-os.environ['DATAPATH'] = '/home/groups/rhiju/cachoe/packages/RNAstructure/data_tables'
+os.environ["DATAPATH"] = "/home/groups/rhiju/cachoe/packages/RNAstructure/data_tables"
 
 # Note:
 # RNA-FM the online webserver was used: https://proj.cse.cuhk.edu.hk/rnafm/#/
 # RibonanzaNet-ss was seperately run locally. The kaggle notebook is also available: https://www.kaggle.com/code/davidbtcox/ribonanzanet-ss-structure-inference/code
 
+
 def read_ct_ss(ct):
-    """ Function to convert .ct files to sequence and secondary structure 
+    """Function to convert .ct files to sequence and secondary structure
     .ct or connect tables are the output format for RNA-FM
     """
     with open(ct, "r") as f:
@@ -29,13 +29,13 @@ def read_ct_ss(ct):
             line = line.strip()
             line = line.split()
             base = line[1]
-    
+
             base_idx = idx
             basepair_idx = int(line[4])
             seq += base
-    
+
             if basepair_idx != 0:
-                bp = sorted([base_idx-1, basepair_idx-1]) # 1 index to 0 index
+                bp = sorted([base_idx - 1, basepair_idx - 1])  # 1 index to 0 index
                 if bp not in bp_list:
                     bp_list.append(bp)
         ss = convert_bp_list_to_dotbracket(bp_list, seq_len)
@@ -47,16 +47,16 @@ df = pd.read_csv("pseudobase_data.csv")
 prediction_d = {}
 for idx, row in df.iterrows():
     # Replace T with U and Y with C
-    seq = row["sequence"].replace("T","U").replace("Y","C")
+    seq = row["sequence"].replace("T", "U").replace("Y", "C")
     ss = row["secondary_structure"]
 
     psuedobase_ids = row["psuedobase_ids"]
 
-    result = {"seq":seq, "ss":ss, "pb_name":psuedobase_ids}
-    for pkg in ['contrafold_2', 'vienna', 'eternafold']:
+    result = {"seq": seq, "ss": ss, "pb_name": psuedobase_ids}
+    for pkg in ["contrafold_2", "vienna", "eternafold"]:
         ss_mfe = mfe(seq, package=pkg, pseudo=False)
         result[pkg] = ss_mfe
-    for pkg in ['rnastructure']:
+    for pkg in ["rnastructure"]:
         ss_mfe = mfe(seq, package=pkg, pseudo=True)
         result[pkg] = ss_mfe
     prediction_d[idx] = result
@@ -89,5 +89,5 @@ for idx in range(len(prediction_d)):
 
 # Save predictions to pickle
 
-with open('prediction_d.pkl', 'wb') as handle:
+with open("prediction_d.pkl", "wb") as handle:
     pickle.dump(prediction_d, handle, protocol=pickle.HIGHEST_PROTOCOL)
