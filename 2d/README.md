@@ -21,6 +21,15 @@ pixi run -e arnie test
 Enter an environment with `pixi shell -e <name>`, or run a command directly
 with `pixi run -e <name> <command>`.
 
+## Data setup
+
+From this directory, download and extract the data archive:
+
+```bash
+wget https://marks.hms.harvard.edu/rnagym/structure_prediction/rnagym_2d.tar.xz
+tar -xJf rnagym_2d.tar.xz
+```
+
 ## Source-only neural models
 
 RibonanzaNet and UFold are not packaged by their authors. Their `source` task

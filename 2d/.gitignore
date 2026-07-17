@@ -1,3 +1,10 @@
 /.pixi/
 /tmp/
 /todo
+
+/*.pdf
+/secondary_structure_audit.md
+
+/data/**/*
+!/data/**/*.py
+!/data/**/*.md
