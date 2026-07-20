@@ -17,6 +17,8 @@
 
 RNAGym is under active development.  Please refer to our [releases](https://github.com/MarksLab-DasLab/RNAGym/releases) page to track the latest updates and stable releases.
 
+> **Update (v0.1.1):** We updated the [leaderboard](leaderboard/fitness/) with signed Spearman. Website will update soon.
+
 ## Baselines
 
 ### Fitness prediction
