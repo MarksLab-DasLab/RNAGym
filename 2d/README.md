@@ -15,6 +15,7 @@ secondary structure baselines in RNAGym:
 
 | Environment | Tool |
 | --- | --- |
+| `(default)` | Default env for scripts and processing
 | `ribonanzanet` | RibonanzaNet
 | `arnie` | EternaFold, CONTRAfold, ViennaRNA, RNAstructure
 | `rna-fm` | RNA-FM
