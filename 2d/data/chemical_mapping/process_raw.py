@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Compile the RNAGym chemical mapping data and create the train/test split."""
+"""Compile the RNAGym chemical mapping and PseudoBase data."""
 
 import random
 import shlex
@@ -13,8 +13,10 @@ from tqdm.auto import tqdm
 
 
 DATA_DIR = Path(__file__).resolve().parent
-INPUT_DIR = DATA_DIR / "rmdb_compiled"
-OUTPUT_FILE = DATA_DIR / "rnagym_ss.parquet"
+INPUT_DIR = DATA_DIR / "raw_data"
+OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
+PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"
+PSEUDOBASE_OUTPUT_FILE = DATA_DIR / "rnagym_pseudobase.parquet"
 
 MIN_SEQUENCE_IDENTITY = 0.40
 MIN_COVERAGE = 0.80
@@ -89,6 +91,38 @@ def get_source_profiles() -> pl.DataFrame:
             )
             .collect(streaming=True)
         )
+
+
+def get_pseudobase_structures() -> pl.DataFrame:
+    """Filter and deduplicate the PseudoBase source entries."""
+    if not PSEUDOBASE_FILE.is_file():
+        raise FileNotFoundError(f"Missing source file: {PSEUDOBASE_FILE.name}")
+
+    source = pl.read_csv(PSEUDOBASE_FILE).with_columns(
+        # PseudoBase uses ":" instead of "." for unpaired bases
+        pl.col("bracket_view").str.replace_all(":", ".").alias("secondary_structure")
+    )
+    filtered = source.filter(
+        # Keep only continuous (non-concatenated) structures with valid pair symbols
+        (pl.col("continuous") == "Yes")
+        & pl.col("secondary_structure").str.contains(r"^[.()\[\]\{\}]+$")
+    )
+    structures = filtered.group_by(
+        ["sequence", "secondary_structure"], maintain_order=True
+    ).agg(
+        # Retain every ID when multiple entries have the same sequence and structure
+        pl.col("pseudobase_id").str.concat("|").alias("pseudobase_ids")
+    )
+
+    print(
+        f"PseudoBase: {source.height} source -> {filtered.height} filtered -> "
+        f"{structures.height} unique"
+    )
+    return structures.select(
+        "pseudobase_ids",
+        "sequence",
+        "secondary_structure",
+    )
 
 
 def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
@@ -174,7 +208,7 @@ def print_summary(data: pl.DataFrame) -> None:
     print(f"Unique sequences: {data['sequence'].n_unique():,}")
 
     counts = data.group_by("split").agg(
-        pl.count().alias("profiles"),
+        pl.count().alias("rows"),
         pl.col("sequence").n_unique().alias("sequences"),
     )
     print(counts.sort("split"))
@@ -191,6 +225,12 @@ def main() -> None:
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     filtered.write_parquet(OUTPUT_FILE, compression="zstd", statistics=True)
     print_summary(filtered)
+
+    pseudobase = get_pseudobase_structures()
+    pseudobase.write_parquet(
+        PSEUDOBASE_OUTPUT_FILE, compression="zstd", statistics=True
+    )
+    print(f"Wrote {pseudobase.height:,} rows to {PSEUDOBASE_OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
