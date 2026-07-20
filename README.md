@@ -17,7 +17,7 @@
 
 RNAGym is under active development.  Please refer to our [releases](https://github.com/MarksLab-DasLab/RNAGym/releases) page to track the latest updates and stable releases.
 
-> **Update (v0.1.1):** We updated the [leaderboard](leaderboard/fitness/) with signed Spearman. Website will update soon.
+> **Update (v0.1.1):** We updated the [leaderboard](leaderboard/fitness/).  Our [website][rnagym] will be updated shortly.
 
 ## Baselines
 
@@ -158,5 +158,6 @@ arnie | https://github.com/DasLab/arnie
 
 This project is available under the MIT license found in the LICENSE file in this GitHub repository.
 
+[rnagym]: https://rnagym.org/
 [0]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
 [1]: https://github.com/MarksLab-DasLab/RNAGym/tree/main/3d
