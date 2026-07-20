@@ -22,17 +22,11 @@ secondary structure baselines in RNAGym:
 | `ufold` | UFold
 | `mxfold2` | MXfold2
 
-Install and test one tool at a time:
+Install the environments with `pixi install --all`, then enter an environment
+with `pixi shell -e <name>`, or run a command directly with `pixi run -e <name>
+<command>`.
 
-```bash
-pixi install -e arnie
-pixi run -e arnie test
-```
-
-Enter an environment with `pixi shell -e <name>`, or run a command directly
-with `pixi run -e <name> <command>`.
-
-### Source-only neural models
+### Note on source-only neural models
 
 RibonanzaNet and UFold are not packaged by their authors. Their `source` task
 checks out a pinned upstream commit under `.pixi/model-sources/`; `test` runs
