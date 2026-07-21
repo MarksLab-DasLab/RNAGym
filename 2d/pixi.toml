@@ -19,11 +19,12 @@ fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 collate-2d = "python scripts/collate_2d.py"
 
-# Classical models used through score_arnie.py.
+# Classical models used through score_arnie.py
 [feature.arnie.dependencies]
 python = "3.9.*"
 numpy = "1.*"
 pandas = "2.*"
+polars = "==0.20.2"
 scipy = "1.*"
 scikit-learn = "1.*"
 tqdm = "4.*"
@@ -57,6 +58,10 @@ depends-on = ["source"]
 
 [feature.arnie.tasks.test]
 cmd = "bash tests/test.sh arnie"
+depends-on = ["build"]
+
+[feature.arnie.tasks.predict]
+cmd = "mkdir -p .rg_predict_out/ && sbatch -- scripts/predict.slurm arnie"
 depends-on = ["build"]
 
 [feature.ribonanzanet.dependencies]

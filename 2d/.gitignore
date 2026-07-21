@@ -1,10 +1,15 @@
+# --- Root stuff ---
 /.pixi/
 /tmp/
 /todo
-
-/*.pdf
 /secondary_structure_audit.md
 
+# --- Root wildcards ---
+/*.pdf
 /data/**/*
 !/data/**/*.py
 !/data/**/*.md
+
+# --- Anywhere stuff ---
+# Slurm prediction logs
+.rg_predict_out/

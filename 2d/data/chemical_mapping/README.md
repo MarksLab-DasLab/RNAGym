@@ -5,6 +5,30 @@
 | `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, split into train and test. | `seqID` |
 | `rnagym_pseudobase.parquet` | 360 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
 
+### `rnagym_2d.parquet` schema
+
+| Column | Description |
+| --- | --- |
+| `seqID` | Unique identifier for the data. |
+| `sequence` | RNA sequence. |
+| `modifier` | Chemical modifier used to modify the RNA. |
+| `SNR` | Signal-to-noise ratio. |
+| `reads` | Total number of Illumina sequencing reads assigned to the profile; not available for datasets labeled `extra`. |
+| `temperature` | Experimental temperature. |
+| `chemical` | Chemicals used in the experiment, such as buffer or salt. |
+| `reverse_transcriptase` | Reverse transcriptase used to read out the chemical modification. |
+| `note` | Additional notes about the data. |
+| `reactivity` | Sequence reactivity stored as a string, for example `[0.01,0.10,0.90,...]`. |
+| `reactivity_error` | Reactivity error stored in the same string format as `reactivity`. |
+| `split` | `train` or `test`. |
+
+### `rnagym_pseudobase.parquet` schema
+
+| Column | Description |
+| --- | --- |
+| `pseudobase_ids` | Source PseudoBase IDs. |
+| `sequence` | RNA sequence. |
+| `secondary_structure` | Structure in dot-bracket notation. |
 
 ## Reproducing the datasets
 

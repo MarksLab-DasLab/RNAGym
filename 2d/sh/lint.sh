@@ -5,4 +5,4 @@ taplo lint pixi.toml
 ruff check --extend-select I .
 ruff format --check .
 shfmt -d sh tests
-shellcheck sh/*.sh tests/*.sh
+shellcheck ./**/*.sh ./**/*.slurm
