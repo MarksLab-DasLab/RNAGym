@@ -159,7 +159,8 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
             f"--threads {MMSEQS_THREADS} -v 3"
         )
 
-        # Run the MMseqs2 command, capturing only progress bars and descriptors
+        # Run the MMseqs2 command, capturing only progress bars and descriptors.
+        # Nonfatal set-cover errors are expected: https://github.com/soedinglab/MMseqs2/issues/765
         with subprocess.Popen(
             shlex.split(command),
             stdout=subprocess.PIPE,

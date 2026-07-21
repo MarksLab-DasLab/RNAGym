@@ -17,7 +17,7 @@ tqdm = "==4.66.1"
 [tasks]
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
-collate-2d = "python util/collate_2d.py"
+collate-2d = "python scripts/collate_2d.py"
 
 # Classical models used through score_arnie.py.
 [feature.arnie.dependencies]
