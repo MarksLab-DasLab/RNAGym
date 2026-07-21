@@ -1,22 +1,17 @@
 # RNAGym 2D datasets
 
-| Dataset | Contents |
-| --- | --- |
-| `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, split into train and test. |
-| `rnagym_pseudobase.parquet` | 360 sequence/structure pairs with pseudoknots |
+| Dataset | Contents | Unique key |
+| --- | --- | --- |
+| `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, split into train and test. | `seqID` |
+| `rnagym_pseudobase.parquet` | 360 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
 
 
 ## Reproducing the datasets
 
-`process_raw.py` builds two datasets from `raw_data/`. From this directory, to
-reproduce:
+To reconstruct both datasets from `raw_data/`:
 
 ```bash
-# If already in `rnagym2d` env
-./process_raw.py
-
-# Alternatively,
-pixi run ./process_raw.py
+pixi run collate-2d
 ```
 
 Chemical mapping sequences are clustered with MMseqs2 at 40% sequence identity

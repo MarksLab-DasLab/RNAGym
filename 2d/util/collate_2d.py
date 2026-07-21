@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-"""Compile the RNAGym chemical mapping and PseudoBase data."""
+"""Collate the RNAGym chemical mapping and PseudoBase data."""
 
+import os
 import random
 import shlex
 import subprocess
@@ -11,8 +12,7 @@ from pathlib import Path
 import polars as pl
 from tqdm.auto import tqdm
 
-
-DATA_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "chemical_mapping"
 INPUT_DIR = DATA_DIR / "raw_data"
 OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
 PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"
@@ -158,7 +158,29 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
             f"--cov-mode {COVERAGE_MODE} --cluster-mode {CLUSTER_MODE} "
             f"--threads {MMSEQS_THREADS} -v 3"
         )
-        subprocess.run(shlex.split(command), check=True)
+
+        # Run the MMseqs2 command, capturing only progress bars and descriptors
+        with subprocess.Popen(
+            shlex.split(command),
+            stdout=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "TTY": "1"},
+        ) as process:
+            description = ""
+            for line in process.stdout:
+                line = line.rstrip()
+                if line.startswith("[") and "%" in line:
+                    if "] 0.00%" in line:
+                        print(description)
+                    print(
+                        line,
+                        end="\n" if "100.00%" in line else "\r",
+                        flush=True,
+                    )
+                elif line:
+                    description = line.split()[0] if f" {work_dir}/" in line else line
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, process.args)
 
         cluster_members = pl.read_csv(
             cluster_prefix.with_name(f"{cluster_prefix.name}_cluster.tsv"),
