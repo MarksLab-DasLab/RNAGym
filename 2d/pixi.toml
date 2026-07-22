@@ -58,7 +58,7 @@ cmd = "bash tests/test.sh arnie"
 depends-on = ["build"]
 
 [feature.arnie.tasks.predict]
-cmd = "mkdir -p .rg_predict_out/ && sbatch -- scripts/predict.slurm arnie"
+cmd = "bash sh/predict.sh arnie"
 depends-on = ["build"]
 
 [feature.ribonanzanet.dependencies]

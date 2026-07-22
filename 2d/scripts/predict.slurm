@@ -2,11 +2,6 @@
 
 #SBATCH --job-name=rg-predict
 #SBATCH --output=.rg_predict_out/%x-%A_%a.out
-#SBATCH --array=0-63
-#SBATCH --time=12:00:00
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=8G
-#SBATCH --partition=short
 
 set -euo pipefail
 

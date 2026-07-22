@@ -42,8 +42,8 @@ short sequence on CPU. Use a GPU node for practical inference.
 
 ## Reproducing the predictions
 
-After verifying the contents of `scripts/predict.slurm` for your cluster,
-generate predictions with a model and save them to
+After verifying the contents of `sh/predict.sh` for your cluster, generate
+predictions with a model and save them to
 `data/chemical_mapping/predictions/<model>` with:
 
 ```bash
