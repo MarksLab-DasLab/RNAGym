@@ -46,9 +46,6 @@ ETERNAFOLD_PARAMETERS = "$PIXI_PROJECT_ROOT/.pixi/model-sources/EternaFold/param
 RNASTRUCTURE_PATH = "$CONDA_PREFIX/bin"
 VIENNA_2_PATH = "$CONDA_PREFIX/bin"
 
-[feature.arnie.activation]
-scripts = ["sh/activate-rnastructure.sh"]
-
 [feature.arnie.tasks]
 source = "bash sh/fetch-source.sh eternafold"
 

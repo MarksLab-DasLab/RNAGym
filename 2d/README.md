@@ -42,12 +42,18 @@ short sequence on CPU. Use a GPU node for practical inference.
 
 ## Reproducing the predictions
 
-To generate predictions with a model and save them to
-`data/chemical_mapping/predictions/`:
+After verifying the contents of `scripts/predict.slurm` for your cluster,
+generate predictions with a model and save them to
+`data/chemical_mapping/predictions/<model>` with:
 
-<!-- TODO(MCA): Implement -->
 ```bash
 pixi run -e <env> predict
+```
+
+The `arnie` env requires providing an `arnie`-compatible model, like so:
+
+```bash
+pixi run -e arnie predict {eternafold,contrafold,vienna_2,rnastructure}
 ```
 
 <!-- TODO(MCA): Implement -->
