@@ -1,7 +1,7 @@
 import numpy as np
 
-from util.structure import dot_bracket
-from util.ufold import fold
+from models.ufold import fold
+from models.utils import dot_bracket
 
 SEQUENCE = "GGGGAAAACCCC"
 EXPECTED = "((((....))))"

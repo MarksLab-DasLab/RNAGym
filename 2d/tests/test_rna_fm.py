@@ -1,7 +1,7 @@
 import numpy as np
 
-from util.rna_fm import fold
-from util.structure import dot_bracket
+from models.rna_fm import fold
+from models.utils import dot_bracket
 
 SEQUENCE = "GGGGAAAACCCC"
 EXPECTED = "((((....))))"

@@ -19,7 +19,7 @@ fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 collate-2d = "python scripts/collate_2d.py"
 
-# Classical models used through score_arnie.py
+# Classical models used through models/arnie.py
 [feature.arnie.dependencies]
 python = "3.9.*"
 numpy = "1.*"

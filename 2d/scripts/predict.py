@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 
-"""Generate chemical mapping predictions with Arnie."""
+"""Generate model predictions."""
 
 import argparse
+import importlib
 from pathlib import Path
 
-import numpy as np
 import polars as pl
-from arnie.bpps import bpps
 from tqdm.auto import tqdm
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "chemical_mapping"
 INPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
 PSEUDOBASE_FILE = DATA_DIR / "rnagym_pseudobase.parquet"
 OUTPUT_DIR = DATA_DIR / "predictions"
-PACKAGES = ["eternafold"]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", choices=PACKAGES)
+    parser.add_argument("environment")
+    parser.add_argument("model", nargs="?")
     parser.add_argument(
         "--split",
         choices=["train", "test", "pseudobase", "all"],
@@ -57,32 +56,30 @@ def load_profiles(split: str) -> pl.DataFrame:
     return pl.concat(profiles)
 
 
-def predict(sequence: str, model: str) -> list[float]:
-    """Return the probability that each nucleotide is paired."""
-    pair_probabilities = bpps(sequence.replace("T", "U"), package=model)
-    return np.clip(pair_probabilities.sum(axis=1), 0, 1).tolist()
-
-
 def main() -> None:
     args = parse_args()
-    profiles = load_profiles(args.split)
+    model = args.model or args.environment
+    # Python module names use underscores, for example rna-fm -> rna_fm
+    adapter_name = args.environment.replace("-", "_")
+    adapter = importlib.import_module(f"models.{adapter_name}")
 
+    profiles = load_profiles(args.split)
     sequences = (
         profiles.select("sequence")
-        # Fold sequences shared by multiple profiles only once.
+        # Fold sequences shared by multiple profiles only once
         .unique()
         .with_columns(pl.col("sequence").str.len_chars().alias("length"))
         .sort(["length", "sequence"], descending=[True, False])
-        # Assign length-sorted sequences round-robin across shards.
+        # Assign length-sorted sequences round-robin across shards
         .with_row_count("rank")
         .filter(pl.col("rank") % args.num_shards == args.shard)
     )
 
     probabilities = [
-        predict(sequence, args.model)
+        adapter.predict(sequence, model)
         for sequence in tqdm(
             sequences["sequence"],
-            desc=f"{args.model} shard {args.shard + 1}/{args.num_shards}",
+            desc=f"{model} shard {args.shard + 1}/{args.num_shards}",
         )
     ]
     predictions = sequences.select("sequence").with_columns(
@@ -97,7 +94,7 @@ def main() -> None:
         .select("uid", "probabilities")
         .sort("uid")
     )
-    output_dir = OUTPUT_DIR / args.model
+    output_dir = OUTPUT_DIR / model
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"{args.split}-{args.shard}_of_{args.num_shards}.parquet"
     output.write_parquet(output_file)

@@ -11,10 +11,9 @@
 set -euo pipefail
 
 environment="$1"
-script="scripts/score_$environment.py"
 shift 1
 
 cd "$SLURM_SUBMIT_DIR"
-pixi run -e "$environment" python "$script" "$@" \
+pixi run -e "$environment" python -m scripts.predict "$environment" "$@" \
 	--shard "$SLURM_ARRAY_TASK_ID" \
 	--num-shards "$SLURM_ARRAY_TASK_COUNT"

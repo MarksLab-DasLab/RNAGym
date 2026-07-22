@@ -5,6 +5,7 @@ from itertools import product
 import numpy as np
 import torch
 
+# TODO(MCA): Ensure proper and speedy
 MODEL_SOURCE = ".pixi/model-sources/UFold"
 MODEL_WEIGHTS = ".pixi/model-weights/ufold/ufold_train_alldata.pt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

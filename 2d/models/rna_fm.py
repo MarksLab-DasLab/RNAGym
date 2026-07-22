@@ -9,6 +9,7 @@ TORCH_HOME = ".pixi/model-weights/rna-fm"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+# TODO(MCA): Ensure proper and speedy
 @cache
 def _model():
     from fm.downstream.baseline import Baseline
