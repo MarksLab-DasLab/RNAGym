@@ -12,7 +12,7 @@ case $environment in
 arnie)
 	resources=(
 		--array=0-63
-		--time=12:00:00
+		--time=08:00:00
 		--cpus-per-task=1
 		--mem=8G
 		--partition="$CPU_PARTITION"
@@ -23,7 +23,7 @@ ribonanzanet)
 		--array=0-7
 		--time=04:00:00
 		--cpus-per-task=1
-		--mem=12G
+		--mem=8G
 		--gpus=1
 		--partition="$GPU_PARTITION"
 	)
