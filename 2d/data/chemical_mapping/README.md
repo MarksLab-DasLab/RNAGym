@@ -3,7 +3,7 @@
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
 | `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, split into train and test. | `seqID` |
-| `rnagym_pseudobase.parquet` | 360 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
+| `rnagym_pseudobase.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
 
 ### `rnagym_2d.parquet` schema
 

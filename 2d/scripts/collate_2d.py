@@ -103,8 +103,9 @@ def get_pseudobase_structures() -> pl.DataFrame:
         pl.col("bracket_view").str.replace_all(":", ".").alias("secondary_structure")
     )
     filtered = source.filter(
-        # Keep only continuous (non-concatenated) structures with valid pair symbols
+        # Keep continuous structures with canonical RNA and valid pair symbols
         (pl.col("continuous") == "Yes")
+        & pl.col("sequence").str.contains(r"^[ACGU]+$")
         & pl.col("secondary_structure").str.contains(r"^[.()\[\]\{\}]+$")
     )
     structures = filtered.group_by(
