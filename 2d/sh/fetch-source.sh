@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
 case $1 in
 ribonanzanet)
 	url=https://github.com/DasLab/rnet-inference.git
 	revision=25996e720f25fc3c0c7e9679a45d54ff2d5f5500
-	destination=.pixi/model-sources/rnet-inference
+	destination="$PROJECT_ROOT/.pixi/model-sources/rnet-inference"
 	;;
 ufold)
 	url=https://github.com/uci-cbcl/UFold.git
 	revision=75bd9acc83826059682dfca9d3659df66b132cd1
-	destination=.pixi/model-sources/UFold
+	destination="$PROJECT_ROOT/.pixi/model-sources/UFold"
 	;;
 eternafold)
 	url=https://github.com/eternagame/EternaFold.git
 	revision=702d3e485e768a6f2355d5d065e1241b04618e61
-	destination=.pixi/model-sources/EternaFold
+	destination="$PROJECT_ROOT/.pixi/model-sources/EternaFold"
 	;;
 *)
 	echo "unknown source: $1" >&2

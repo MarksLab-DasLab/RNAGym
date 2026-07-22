@@ -91,6 +91,10 @@ source = "bash sh/fetch-source.sh ribonanzanet"
 cmd = "bash tests/test.sh ribonanzanet"
 depends-on = ["source"]
 
+[feature.ribonanzanet.tasks.predict]
+cmd = "bash sh/predict.sh ribonanzanet"
+depends-on = ["source"]
+
 [feature.ufold.dependencies]
 python = "3.11.*"
 git = "2.*"

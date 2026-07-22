@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CPU_PARTITION="short"
-# GPU_PARTITION="gpu"
-# GRES="gpu:l40s:1"
+GPU_PARTITION="gpu"
 
 environment="$1"
 shift
@@ -18,11 +18,22 @@ arnie)
 		--partition="$CPU_PARTITION"
 	)
 	;;
+ribonanzanet)
+	resources=(
+		--array=0-7
+		--time=04:00:00
+		--cpus-per-task=1
+		--mem=12G
+		--gpus=1
+		--partition="$GPU_PARTITION"
+	)
+	;;
 *)
 	echo "unknown environment: $environment" >&2
 	exit 2
 	;;
 esac
 
+cd "$PROJECT_ROOT"
 mkdir -p .rg_predict_out
 sbatch "${resources[@]}" -- scripts/predict.slurm "$environment" "$@"
