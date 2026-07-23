@@ -96,12 +96,17 @@ For information on setting up the tertiary structure benchmark, see [`./3d`][1].
 
 ## Resources
 
-To download and unzip the data, run the following commands for each of the data sources you would like to download, as listed in the table below. 
-For example, you can download & unzip the zero-shot predictions for all baselines for all DMS substitution assays as follows:
+To download and extract the 2D data from the repository root:
+
+<!-- TODO(MCA): Upload complete data files to this link -->
+
+```bash
+wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
+tar -xJf data.tar.xz
 ```
-curl -o rnagym_assays.zip https://marks.hms.harvard.edu/rnagym/fitness_prediction/rnagym_assays.zip
-unzip rnagym_assays.zip && rm rnagym_assays.zip
-```
+
+<!-- TODO(MCA): Update the tables and fitness/3d sections to use the shared root data/ directory -->
+
 ### Fitness Prediction
 
 | Data | Size (unzipped) | Link |

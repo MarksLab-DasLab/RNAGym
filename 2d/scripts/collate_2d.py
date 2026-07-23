@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 from tqdm.auto import tqdm
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "chemical_mapping"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
 INPUT_DIR = DATA_DIR / "raw_data"
 OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
 PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"

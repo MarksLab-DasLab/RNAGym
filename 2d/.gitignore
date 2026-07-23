@@ -6,9 +6,6 @@
 
 # --- Root wildcards ---
 /*.pdf
-/data/**/*
-!/data/**/*.py
-!/data/**/*.md
 
 # --- Anywhere stuff ---
 # Slurm prediction logs

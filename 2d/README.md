@@ -2,12 +2,10 @@
 
 ## Data setup
 
-From this directory, download and extract the data archive:
+The datasets are stored under [`../data/2d/`](../data/2d/). See the
+[repository-level instructions](../README.md#resources) to download and extract
+them.
 
-```bash
-wget https://marks.hms.harvard.edu/rnagym/structure_prediction/rnagym_2d.tar.xz
-tar -xJf rnagym_2d.tar.xz
-```
 ## Environments
 
 This directory has isolated [Pixi](https://pixi.sh) environments for the
@@ -47,7 +45,7 @@ short sequence on CPU. Use a GPU node for practical inference.
 
 After verifying the contents of `sh/predict.sh` for your cluster, generate
 predictions with a model and save them to
-`data/chemical_mapping/predictions/<model>` with:
+`../data/2d/chemical_mapping/predictions/<model>` with:
 
 ```bash
 pixi run -e <env> predict

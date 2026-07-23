@@ -32,9 +32,10 @@
 
 ## Reproducing the datasets
 
-To reconstruct both datasets from `raw_data/`:
+From the repository root, reconstruct both datasets from `raw_data/` with:
 
 ```bash
+cd 2d
 pixi run collate-2d
 ```
 
