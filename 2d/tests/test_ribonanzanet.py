@@ -38,10 +38,7 @@ prediction = predict(SEQUENCE)
 probabilities = prediction["probabilities"]
 assert len(probabilities) == len(SEQUENCE)
 assert prediction["structures"] == [
-    {
-        "method": "hungarian",
-        "dot_bracket": official_structure,
-    }
+    {"method": "hungarian", "dot_bracket": official_structure}
 ]
 
 # Apply the official near diagonal mask before the RNAGym row sum

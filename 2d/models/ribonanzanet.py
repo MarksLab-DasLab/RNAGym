@@ -58,10 +58,5 @@ def predict(sequence: str) -> Prediction:
     structure, _ = _hungarian(pair_probabilities.copy(), theta=0.5, min_len_helix=1)
     return {
         "probabilities": probabilities.tolist(),
-        "structures": [
-            {
-                "method": "hungarian",
-                "dot_bracket": structure,
-            }
-        ],
+        "structures": [{"method": "hungarian", "dot_bracket": structure}],
     }
