@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from models.utils import Prediction, warn_out_of_range
+from models.utils import Prediction
 
 MODEL_SOURCE = (
     Path(__file__).resolve().parents[1]
@@ -49,9 +49,9 @@ def predict(sequence: str) -> Prediction:
     positions = np.arange(len(sequence))
     pair_probabilities[np.abs(positions[:, None] - positions[None, :]) < 4] = 0
 
-    # RNAGym chemical mapping scoring sums valid pair probabilities per nucleotide
-    probabilities = pair_probabilities.sum(axis=1)
-    warn_out_of_range(probabilities)
+    # Official Arnie decoding clips summed pair confidences before calculating unpaired probabilities
+    # https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116
+    probabilities = np.clip(pair_probabilities.sum(axis=0), 0, 1)
 
     # Official decoding uses theta=0.5 and min_len_helix=1
     # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110
