@@ -17,7 +17,10 @@ secondary structure baselines in RNAGym:
 | --- | --- |
 | `(default)` | Default env for scripts and processing
 | `ribonanzanet` | RibonanzaNet
-| `arnie` | EternaFold, CONTRAfold, ViennaRNA, RNAstructure
+| `eternafold` | EternaFold
+| `contrafold` | CONTRAfold
+| `vienna` | ViennaRNA
+| `rnastructure` | RNAstructure
 | `rna-fm` | RNA-FM
 | `ufold` | UFold
 | `mxfold2` | MXfold2
@@ -48,12 +51,6 @@ predictions with a model and save them to
 
 ```bash
 pixi run -e <env> predict
-```
-
-The `arnie` env requires providing an `arnie`-compatible model, like so:
-
-```bash
-pixi run -e arnie predict {eternafold,contrafold,vienna_2,rnastructure}
 ```
 
 <!-- TODO(MCA): Implement -->

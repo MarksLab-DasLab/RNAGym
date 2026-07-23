@@ -19,47 +19,56 @@ fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 collate-2d = "python scripts/collate_2d.py"
 
-# Classical models used through models/arnie.py
-[feature.arnie.dependencies]
+# Classical model prediction dependencies
+[feature.classical.dependencies]
 python = "3.9.*"
 numpy = "1.*"
-pandas = "2.*"
 polars = "==0.20.2"
-scipy = "1.*"
-scikit-learn = "1.*"
 tqdm = "4.*"
+
+[feature.vienna.dependencies]
 viennarna = "==2.6.4"
-rnastructure = "==6.4"
+
+[feature.vienna.tasks]
+test = "bash tests/test.sh vienna"
+predict = "bash sh/predict.sh vienna"
+
+[feature.contrafold.dependencies]
 contrafold = "==2.02"
+
+[feature.contrafold.tasks]
+test = "bash tests/test.sh contrafold"
+predict = "bash sh/predict.sh contrafold"
+
+[feature.eternafold.dependencies]
 cxx-compiler = "1.*"
 git = "2.*"
 make = "4.*"
 
-[feature.arnie.pypi-dependencies]
-arnie = "==0.2.7"
-
-[feature.arnie.activation.env]
-CONTRAFOLD_PATH = "$CONDA_PREFIX/bin"
-DATAPATH = "$CONDA_PREFIX/share/rnastructure/data_tables"
-ETERNAFOLD_PATH = "$PIXI_PROJECT_ROOT/.pixi/model-sources/EternaFold/src"
-ETERNAFOLD_PARAMETERS = "$PIXI_PROJECT_ROOT/.pixi/model-sources/EternaFold/parameters/EternaFoldParams.v1"
-RNASTRUCTURE_PATH = "$CONDA_PREFIX/bin"
-VIENNA_2_PATH = "$CONDA_PREFIX/bin"
-
-[feature.arnie.tasks]
+[feature.eternafold.tasks]
 source = "bash sh/fetch-source.sh eternafold"
 
-[feature.arnie.tasks.build]
+[feature.eternafold.tasks.build]
 cmd = "make -C .pixi/model-sources/EternaFold/src contrafold CXX=\"$CXX\""
 depends-on = ["source"]
 
-[feature.arnie.tasks.test]
-cmd = "bash tests/test.sh arnie"
+[feature.eternafold.tasks.test]
+cmd = "bash tests/test.sh eternafold"
 depends-on = ["build"]
 
-[feature.arnie.tasks.predict]
-cmd = "bash sh/predict.sh arnie"
+[feature.eternafold.tasks.predict]
+cmd = "bash sh/predict.sh eternafold"
 depends-on = ["build"]
+
+[feature.rnastructure.dependencies]
+rnastructure = "==6.4"
+
+[feature.rnastructure.activation.env]
+DATAPATH = "$CONDA_PREFIX/share/rnastructure/data_tables"
+
+[feature.rnastructure.tasks]
+test = "bash tests/test.sh rnastructure"
+predict = "bash sh/predict.sh rnastructure"
 
 [feature.ribonanzanet.dependencies]
 python = "3.9.*"
@@ -145,7 +154,19 @@ mxfold2 = "==0.1.1"
 test = "bash tests/test.sh mxfold2"
 
 [environments]
-arnie = { features = ["arnie"], no-default-feature = true }
+vienna = { features = ["classical", "vienna"], no-default-feature = true }
+contrafold = { features = [
+  "classical",
+  "contrafold",
+], no-default-feature = true }
+eternafold = { features = [
+  "classical",
+  "eternafold",
+], no-default-feature = true }
+rnastructure = { features = [
+  "classical",
+  "rnastructure",
+], no-default-feature = true }
 ribonanzanet = { features = ["ribonanzanet"], no-default-feature = true }
 ufold = { features = ["ufold"], no-default-feature = true }
 rna-fm = { features = ["rna-fm"], no-default-feature = true }

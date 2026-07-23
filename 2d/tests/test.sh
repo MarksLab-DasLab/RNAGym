@@ -10,22 +10,8 @@ fasta=$tmpdir/test.fa
 printf '>test\nGGGGAAAACCCC\n' >"$fasta"
 
 case $1 in
-arnie)
-	# RNAfold
-	RNAfold --noPS <"$fasta" | grep -Eq '[().]{12}'
-
-	# CONTRAfold
-	contrafold predict "$fasta" | grep -Eq '[().]{12}'
-
-	# EternaFold
-	"$ETERNAFOLD_PATH/contrafold" predict "$fasta" \
-		--params "$ETERNAFOLD_PARAMETERS" | grep -Eq '[().]{12}'
-
-	# RNAstructure
-	Fold "$fasta" "$tmpdir/test.ct"
-	partition "$fasta" "$tmpdir/test.pfs"
-	test -s "$tmpdir/test.ct"
-	test -s "$tmpdir/test.pfs"
+vienna | contrafold | eternafold | rnastructure)
+	python -m tests.test_classical "$1"
 	;;
 ribonanzanet | ufold | rna-fm)
 	CUDA_VISIBLE_DEVICES='' python -m "tests.test_${1//-/_}"

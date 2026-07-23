@@ -124,7 +124,7 @@ unzip rnagym_assays.zip && rm rnagym_assays.zip
 | Training data (supervised) | 8.1GB | https://marks.hms.harvard.edu/rnagym/structure_prediction/train_data.zip |
 | Additional annotations (PDB, Rfam, PseudoBase) | 29MB | https://marks.hms.harvard.edu/rnagym/structure_prediction/test_sequences_annotated.zip |
 
-Model files for 2D structure prediction task were prepared for a linux 64-bit system. Refer to the [Arnie repo](https://github.com/DasLab/arnie) for different systems.
+Model files for 2D structure prediction task were prepared for a linux 64-bit system.
 
 ### 3D Structure Prediction
 
@@ -146,14 +146,6 @@ Data is also available on our
 ## Contact us
 
 Please report questions, comments, and concerns on [our issue tracker][0] and we will get back to you as soon as possible.
-
-## Acknowledgements
-
-Our codebase leveraged code from the following repositories to compute baselines:
-
-Model | Repo
---- | ---
-arnie | https://github.com/DasLab/arnie
 
 ## License
 

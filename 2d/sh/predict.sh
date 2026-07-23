@@ -9,7 +9,7 @@ environment="$1"
 shift
 
 case $environment in
-arnie)
+vienna | contrafold | eternafold | rnastructure)
 	resources=(
 		--array=0-63
 		--time=08:00:00

@@ -18,7 +18,6 @@ OUTPUT_DIR = DATA_DIR / "predictions"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("environment")
-    parser.add_argument("model", nargs="?")
     parser.add_argument(
         "--split",
         choices=["train", "test", "pseudobase", "all"],
@@ -58,7 +57,6 @@ def load_profiles(split: str) -> pl.DataFrame:
 
 def main() -> None:
     args = parse_args()
-    model = args.model or args.environment
     # Python module names use underscores, for example rna-fm -> rna_fm
     adapter_name = args.environment.replace("-", "_")
     adapter = importlib.import_module(f"models.{adapter_name}")
@@ -76,10 +74,10 @@ def main() -> None:
     )
 
     probabilities = [
-        adapter.predict(sequence, model)
+        adapter.predict(sequence)
         for sequence in tqdm(
             sequences["sequence"],
-            desc=f"{model} shard {args.shard + 1}/{args.num_shards}",
+            desc=f"{args.environment} shard {args.shard + 1}/{args.num_shards}",
         )
     ]
     predictions = sequences.select("sequence").with_columns(
@@ -94,7 +92,7 @@ def main() -> None:
         .select("uid", "probabilities")
         .sort("uid")
     )
-    output_dir = OUTPUT_DIR / model
+    output_dir = OUTPUT_DIR / args.environment
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"{args.split}-{args.shard}_of_{args.num_shards}.parquet"
     output.write_parquet(output_file)

@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from models.utils import warn_out_of_range
+
 MODEL_SOURCE = (
     Path(__file__).resolve().parents[1]
     / ".pixi"
@@ -33,7 +35,7 @@ def _pair_probabilities(sequence: str) -> np.ndarray:
     return pair_probabilities.cpu().numpy()
 
 
-def predict(sequence: str, _model: str) -> list[float]:
+def predict(sequence: str) -> list[float]:
     """Return the probability that each nucleotide is paired."""
     # Single-sequence inference is ~40 sequences/s on an L40S, so batching is unnecessary
     pair_probabilities = _pair_probabilities(sequence)
@@ -44,4 +46,6 @@ def predict(sequence: str, _model: str) -> list[float]:
     pair_probabilities[np.abs(positions[:, None] - positions[None, :]) < 4] = 0
 
     # RNAGym chemical mapping scoring sums valid pair probabilities per nucleotide
-    return np.clip(pair_probabilities.sum(axis=1), 0, 1).tolist()
+    probabilities = pair_probabilities.sum(axis=1)
+    warn_out_of_range(probabilities)
+    return probabilities.tolist()
