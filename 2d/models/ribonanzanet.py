@@ -1,5 +1,6 @@
 """RibonanzaNet model adapter."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from models.utils import warn_out_of_range
+from models.utils import Prediction, warn_out_of_range
 
 MODEL_SOURCE = (
     Path(__file__).resolve().parents[1]
@@ -18,9 +19,12 @@ MODEL_SOURCE = (
 )
 
 sys.path.insert(0, str(MODEL_SOURCE))
+# Arnie requires a package variable even though its Hungarian decoder uses none
+os.environ.setdefault("NUPACKHOME", "/tmp")
 # Official model definition and checkpoint loading
 # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L12-L31
-from rnet_2d import RNA_Dataset, model as MODEL  # noqa: E402, I001
+from arnie.pk_predictors import _hungarian  # noqa: E402, I001
+from rnet_2d import RNA_Dataset, model as MODEL  # noqa: E402
 
 
 def _pair_probabilities(sequence: str) -> np.ndarray:
@@ -35,8 +39,8 @@ def _pair_probabilities(sequence: str) -> np.ndarray:
     return pair_probabilities.cpu().numpy()
 
 
-def predict(sequence: str) -> list[float]:
-    """Return the probability that each nucleotide is paired."""
+def predict(sequence: str) -> Prediction:
+    """Return paired probabilities and the official Hungarian structure."""
     # Single-sequence inference is ~40 sequences/s on an L40S, so batching is unnecessary
     pair_probabilities = _pair_probabilities(sequence)
 
@@ -48,4 +52,16 @@ def predict(sequence: str) -> list[float]:
     # RNAGym chemical mapping scoring sums valid pair probabilities per nucleotide
     probabilities = pair_probabilities.sum(axis=1)
     warn_out_of_range(probabilities)
-    return probabilities.tolist()
+
+    # Official decoding uses theta=0.5 and min_len_helix=1
+    # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110
+    structure, _ = _hungarian(pair_probabilities.copy(), theta=0.5, min_len_helix=1)
+    return {
+        "probabilities": probabilities.tolist(),
+        "structures": [
+            {
+                "method": "hungarian",
+                "dot_bracket": structure,
+            }
+        ],
+    }

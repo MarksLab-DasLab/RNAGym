@@ -28,9 +28,21 @@ official = np.fromstring(
     ),
     sep=",",
 ).reshape(len(SEQUENCE), len(SEQUENCE))
+official_structure = next(
+    line.removeprefix("structure:")
+    for line in result.stdout.splitlines()
+    if line.startswith("structure:")
+)
 
-probabilities = predict(SEQUENCE)
+prediction = predict(SEQUENCE)
+probabilities = prediction["probabilities"]
 assert len(probabilities) == len(SEQUENCE)
+assert prediction["structures"] == [
+    {
+        "method": "hungarian",
+        "dot_bracket": official_structure,
+    }
+]
 
 # Apply the official near diagonal mask before the RNAGym row sum
 # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L97-L110
