@@ -12,7 +12,7 @@ case $environment in
 vienna | contrafold | eternafold | rnastructure)
 	resources=(
 		--array=0-63
-		--time=08:00:00
+		--time=12:00:00
 		--cpus-per-task=1
 		--mem=8G
 		--partition="$CPU_PARTITION"
