@@ -3,13 +3,14 @@
 from pathlib import Path
 
 from models.contrafold import _predict
+from models.utils import Prediction
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ETERNAFOLD = PROJECT_ROOT / ".pixi" / "model-sources" / "EternaFold"
 
 
-def predict(sequence: str) -> list[float]:
-    """Return the probability that each nucleotide is paired."""
+def predict(sequence: str) -> Prediction:
+    """Return paired probabilities and Viterbi and MEA structures."""
     return _predict(
         sequence,
         ETERNAFOLD / "src" / "contrafold",

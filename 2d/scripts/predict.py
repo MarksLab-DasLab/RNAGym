@@ -73,7 +73,7 @@ def main() -> None:
         .filter(pl.col("rank") % args.num_shards == args.shard)
     )
 
-    probabilities = [
+    results = [
         adapter.predict(sequence)
         for sequence in tqdm(
             sequences["sequence"],
@@ -83,13 +83,25 @@ def main() -> None:
     predictions = sequences.select("sequence").with_columns(
         pl.Series(
             "probabilities",
-            probabilities,
+            [result["probabilities"] for result in results],
             dtype=pl.List(pl.Float32),
-        )
+        ),
+        pl.Series(
+            "structures",
+            [result["structures"] for result in results],
+            dtype=pl.List(
+                pl.Struct(
+                    {
+                        "method": pl.Utf8,
+                        "dot_bracket": pl.Utf8,
+                    }
+                )
+            ),
+        ),
     )
     output = (
         profiles.join(predictions, on="sequence")
-        .select("uid", "probabilities")
+        .select("uid", "probabilities", "structures")
         .sort("uid")
     )
     output_dir = OUTPUT_DIR / args.environment

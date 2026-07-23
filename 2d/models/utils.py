@@ -4,9 +4,21 @@ import subprocess
 import warnings
 from collections.abc import Iterable, Sequence
 from os import PathLike
+from pathlib import Path
 from shlex import split
+from typing import TypedDict
 
 import numpy as np
+
+
+class Structure(TypedDict):
+    method: str
+    dot_bracket: str
+
+
+class Prediction(TypedDict):
+    probabilities: list[float]
+    structures: list[Structure]
 
 
 def run(command: str | Sequence[str | PathLike[str]], **kwargs: object) -> None:
@@ -30,6 +42,10 @@ def warn_out_of_range(probabilities: np.ndarray) -> None:
             RuntimeWarning,
             stacklevel=2,
         )
+
+
+def read_dot_bracket(path: str | PathLike[str]) -> str:
+    return Path(path).read_text().splitlines()[-1]
 
 
 def sum_pair_probabilities(

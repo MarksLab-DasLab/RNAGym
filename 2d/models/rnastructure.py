@@ -3,18 +3,24 @@
 import tempfile
 from pathlib import Path
 
-from models.utils import run, sum_pair_probabilities
+from models.utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
 
 
-def predict(sequence: str) -> list[float]:
-    """Return the probability that each nucleotide is paired."""
+def predict(sequence: str) -> Prediction:
+    """Return paired probabilities and MFE and MEA structures."""
     with tempfile.TemporaryDirectory(prefix="rnagym-rnastructure-") as tmpdir:
         sequence_file = Path(tmpdir) / "sequence.txt"
         partition_file = Path(tmpdir) / "partition.pfs"
         probability_file = Path(tmpdir) / "probabilities.txt"
+        mfe_file = Path(tmpdir) / "mfe.dbn"
+        mea_ct_file = Path(tmpdir) / "mea.ct"
+        mea_file = Path(tmpdir) / "mea.dbn"
         sequence_file.write_text(sequence.replace("T", "U") + "\n")
         run(f"partition {sequence_file} {partition_file} -T 310")
         run(f"ProbabilityPlot {partition_file} {probability_file} -t -min 0.0000000001")
+        run(f"Fold {sequence_file} {mfe_file} --MFE --bracket -T 310")
+        run(f"MaxExpect {partition_file} {mea_ct_file} --structures 1")
+        run(f"ct2dot {mea_ct_file} 1 {mea_file}")
 
         # Example: 1 10 2.9577 means nucleotides 1 and 10 pair with probability 10^-2.9577
         pairs = []
@@ -28,4 +34,16 @@ def predict(sequence: str) -> list[float]:
                 )
             )
 
-        return sum_pair_probabilities(len(sequence), pairs)
+        return {
+            "probabilities": sum_pair_probabilities(len(sequence), pairs),
+            "structures": [
+                {
+                    "method": "mfe",
+                    "dot_bracket": read_dot_bracket(mfe_file),
+                },
+                {
+                    "method": "mea_gamma_1",
+                    "dot_bracket": read_dot_bracket(mea_file),
+                },
+            ],
+        }
