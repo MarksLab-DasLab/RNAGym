@@ -2,7 +2,7 @@
 
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
-| `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, split into train and test. | `seqID` |
+| `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, clustered at 40% ID, split into 80/20 train/test. | `seqID` |
 | `rnagym_pseudobase.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
 
 ### `rnagym_2d.parquet` schema
@@ -20,6 +20,7 @@
 | `note` | Additional notes about the data. |
 | `reactivity` | Sequence reactivity stored as a string, for example `[0.01,0.10,0.90,...]`. |
 | `reactivity_error` | Reactivity error stored in the same string format as `reactivity`. |
+| `cluster_id` | MMseqs2 cluster identifier. |
 | `split` | `train` or `test`. |
 
 ### `rnagym_pseudobase.parquet` schema

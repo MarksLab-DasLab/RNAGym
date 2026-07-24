@@ -215,7 +215,7 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
     assignments = (
         sequence_table.join(cluster_members, on="sequence_id", how="left")
         .join(cluster_splits, on="cluster_id", how="left")
-        .select("sequence", "split")
+        .select("sequence", "cluster_id", "split")
     )
 
     if assignments["split"].null_count() != 0:
