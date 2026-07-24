@@ -16,6 +16,7 @@ OUTPUT_DIR = DATA_DIR / "predictions"
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("environment")
     parser.add_argument(
@@ -32,6 +33,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_profiles(split: str) -> pl.DataFrame:
+    """Load profiles for the requested split."""
     profiles = []
     if split in {"train", "test", "all"}:
         chemical_mapping = pl.read_parquet(
@@ -56,6 +58,7 @@ def load_profiles(split: str) -> pl.DataFrame:
 
 
 def main() -> None:
+    """Generate and write one prediction shard."""
     args = parse_args()
     # Python module names use underscores, for example rna-fm -> rna_fm
     adapter_name = args.environment.replace("-", "_")

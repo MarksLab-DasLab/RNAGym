@@ -1,3 +1,5 @@
+"""Test the classical model adapters."""
+
 import importlib
 import sys
 

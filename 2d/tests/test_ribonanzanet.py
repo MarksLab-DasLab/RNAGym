@@ -1,3 +1,5 @@
+"""Test the RibonanzaNet model adapter."""
+
 import subprocess
 import sys
 from pathlib import Path

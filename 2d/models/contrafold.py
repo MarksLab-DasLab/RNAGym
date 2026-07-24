@@ -13,6 +13,7 @@ def _predict(
     executable: str | Path = "contrafold",
     parameters: Path | None = None,
 ) -> Prediction:
+    """Run a CONTRAfold-compatible executable and return its predictions."""
     with tempfile.TemporaryDirectory(prefix="rnagym-contrafold-") as tmpdir:
         input_file = Path(tmpdir) / "sequence.bpseq"
         probability_file = Path(tmpdir) / "probabilities.txt"

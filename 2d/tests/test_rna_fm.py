@@ -1,3 +1,5 @@
+"""Test the RNA-FM model adapter."""
+
 import numpy as np
 
 from models.rna_fm import fold

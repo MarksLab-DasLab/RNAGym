@@ -48,6 +48,7 @@ COLUMNS = [
 
 
 def load_source(filename: str, context: str) -> pl.LazyFrame:
+    """Load and normalize one chemical mapping source."""
     path = INPUT_DIR / filename
     return pl.scan_parquet(path).select(
         *[pl.col(column).cast(pl.Utf8, strict=False) for column in COLUMNS],
@@ -59,10 +60,7 @@ def load_source(filename: str, context: str) -> pl.LazyFrame:
 
 
 def get_source_profiles() -> pl.DataFrame:
-    """
-    Filter by SNR >= 1.0 and take the unique sequence per modifier with the
-    best SNR (tiebroken if necessary by reads)
-    """
+    """Keep SNR >= 1 and the best profile per sequence/modifier by SNR, then reads."""
     missing = [filename for filename in SOURCES if not (INPUT_DIR / filename).is_file()]
     if missing:
         raise FileNotFoundError(f"Missing source files: {', '.join(missing)}")
@@ -70,6 +68,7 @@ def get_source_profiles() -> pl.DataFrame:
     with tqdm(desc="Merging sources", unit="rows", unit_scale=True) as progress:
 
         def track_progress(batch: pl.DataFrame) -> pl.DataFrame:
+            """Update the source merge progress bar."""
             progress.update(batch.height)
             return batch
 
@@ -127,6 +126,7 @@ def get_pseudobase_structures() -> pl.DataFrame:
 
 
 def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
+    """Write sequence IDs and sequences in FASTA format."""
     with path.open("w") as handle:
         handle.writelines(
             f">{sequence_id}\n{sequence}\n"
@@ -228,6 +228,7 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
 
 
 def print_summary(data: pl.DataFrame) -> None:
+    """Print output row, sequence, and split counts."""
     print(f"Wrote {data.height:,} rows to {OUTPUT_FILE}")
     print(f"Unique sequences: {data['sequence'].n_unique():,}")
 
@@ -239,6 +240,7 @@ def print_summary(data: pl.DataFrame) -> None:
 
 
 def main() -> None:
+    """Collate and write the chemical mapping and PseudoBase datasets."""
     filtered = get_source_profiles()
     assignments = cluster_sequences(filtered["sequence"])
     filtered = filtered.join(assignments, on="sequence", how="left")

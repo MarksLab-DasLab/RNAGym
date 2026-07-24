@@ -1,3 +1,5 @@
+"""RNA-FM model adapter."""
+
 import os
 from functools import cache
 
@@ -12,6 +14,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # TODO(MCA): Ensure proper and speedy
 @cache
 def _model():
+    """Load the pretrained RNA-FM model."""
     from fm.downstream.baseline import Baseline
 
     os.environ["TORCH_HOME"] = TORCH_HOME
@@ -29,6 +32,7 @@ def _model():
 
 
 def fold(sequence: str) -> np.ndarray:
+    """Return RNA-FM pair probabilities."""
     model = _model()
     converter = model.backbone_alphabet.get_batch_converter()
     _, _, tokens = converter([("sequence", sequence)])

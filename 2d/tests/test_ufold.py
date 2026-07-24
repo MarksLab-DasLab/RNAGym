@@ -1,3 +1,5 @@
+"""Test the UFold model adapter."""
+
 from models.ufold import predict
 
 SEQUENCE = "GGGGAAAACCCC"

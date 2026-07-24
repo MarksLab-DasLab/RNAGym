@@ -1,3 +1,5 @@
+"""Shared model adapter types and utilities."""
+
 from __future__ import annotations
 
 import subprocess
@@ -12,16 +14,21 @@ import numpy as np
 
 
 class Structure(TypedDict):
+    """Decoded structure output."""
+
     method: str
     dot_bracket: str
 
 
 class Prediction(TypedDict):
+    """Model prediction output."""
+
     probabilities: list[float]
     structures: list[Structure]
 
 
 def run(command: str | Sequence[str | PathLike[str]], **kwargs: object) -> None:
+    """Run a command and raise its stderr on failure."""
     if isinstance(command, str):
         command = split(command)
 
@@ -36,6 +43,7 @@ def run(command: str | Sequence[str | PathLike[str]], **kwargs: object) -> None:
 
 
 def warn_out_of_range(probabilities: np.ndarray) -> None:
+    """Warn when paired probabilities fall outside [0, 1]."""
     if not np.all((0 <= probabilities) & (probabilities <= 1)):
         warnings.warn(
             "Pair probabilities outside [0, 1]",
@@ -45,13 +53,14 @@ def warn_out_of_range(probabilities: np.ndarray) -> None:
 
 
 def read_dot_bracket(path: str | PathLike[str]) -> str:
+    """Read a dot-bracket structure from the final line of a file."""
     return Path(path).read_text().splitlines()[-1]
 
 
 def sum_pair_probabilities(
     length: int, pairs: Iterable[tuple[int, int, float]]
 ) -> list[float]:
-    """Sum a sparse probability matrix and return pair probabilities"""
+    """Sum a sparse probability matrix and return pair probabilities."""
     probabilities = np.zeros(length)
     for i, j, probability in pairs:
         probabilities[i] += probability
@@ -61,10 +70,7 @@ def sum_pair_probabilities(
 
 
 def dot_bracket(contact: np.ndarray) -> str:
-    """Convert a contact map to extended dot-bracket notation.
-
-    Uppercase/lowercase pairs encode levels beyond ()[]{}<>.
-    """
+    """Convert contacts to dot-bracket, using letter pairs beyond ()[]{}<>."""
     brackets = [("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")]
     brackets.extend(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"))
     structure = ["."] * len(contact)
