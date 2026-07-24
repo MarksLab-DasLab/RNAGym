@@ -60,10 +60,26 @@ pixi run leaderboard
 
 ### How models are scored
 
-For each test profile, pair probabilities are converted to unpaired probabilities
-(`1 − ΣPij`), and only positions with finite reactivities are scored (the vast
-majority of NaNs are fixed, unmeasured construct regions like barcodes).
-Per-profile Spearman, AUC, and F1 are computed and macro-averaged across profiles
-and reagents.
+<!-- TODO(MCA): Consider macro-average across clusters -->
 
-<-- TODO(MCA): Add PseudoBase scoring description -->
+For chemical mapping, residue unpaired probabilities (`1 − Σj Pij`) are
+predicted and compared with experimental reactivities using Spearman. Scores are
+calculated over finite reactivities (the vast majority of NaNs are fixed,
+unmeasured construct regions like barcodes) for each test profile, then
+macro-averaged across profiles and reagents. Spearman avoids directly comparing
+reactivity magnitudes with probabilities or imposing an arbitrary reactivity
+threshold for classification.
+
+> [!NOTE]
+> Neural models generally treat each i,j pair as an independent prediction,
+> with no/limited constraint on column probabilities. When neural models assign
+> residue pair probabilities above one, we follow [Arnie's official
+> RibonanzaNet
+> inference](https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116)
+> and clip the sum to `[0, 1]` before conversion.  This leaves most residues
+> intact, but clips highly confident residues to 1.
+
+For discrete structure prediction like those from PseudoBase or the PDB, each
+model's official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as
+applicable). F1 is computed between each reference structure and the
+model-decoded structure.
