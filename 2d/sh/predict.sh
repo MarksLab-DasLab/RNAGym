@@ -6,12 +6,11 @@ CPU_PARTITION="short"
 GPU_PARTITION="gpu"
 
 environment="$1"
-shift
 
 case $environment in
 vienna | contrafold | eternafold | rnastructure)
+	shards=64
 	resources=(
-		--array=0-63
 		--time=12:00:00
 		--cpus-per-task=1
 		--mem=8G
@@ -19,8 +18,8 @@ vienna | contrafold | eternafold | rnastructure)
 	)
 	;;
 ribonanzanet | ufold)
+	shards=8
 	resources=(
-		--array=0-7
 		--time=04:00:00
 		--cpus-per-task=1
 		--mem=8G
@@ -36,4 +35,19 @@ esac
 
 cd "$PROJECT_ROOT"
 mkdir -p .rg_predict_out
-sbatch "${resources[@]}" -- scripts/predict.slurm "$environment" "$@"
+
+check_complete() {
+	local output_dir="$PROJECT_ROOT/../data/2d/chemical_mapping/predictions/$environment/$1"
+	for ((shard = 0; shard < shards; shard++)); do
+		[[ -s "$output_dir/$shard.parquet" ]] || return 1
+	done
+}
+
+for dataset in chemical_mapping pseudobase; do
+	if check_complete "$dataset"; then
+		echo "Skipping $environment $dataset: all shards complete"
+		continue
+	fi
+	sbatch "${resources[@]}" --array="0-$((shards - 1))" \
+		-- scripts/predict.slurm "$environment" "$dataset"
+done

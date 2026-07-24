@@ -6,9 +6,9 @@
 set -euo pipefail
 
 environment="$1"
-shift 1
+dataset="$2"
 
 cd "$SLURM_SUBMIT_DIR"
-pixi run -e "$environment" python -m scripts.predict "$environment" "$@" \
+pixi run -e "$environment" python -m scripts.predict "$environment" "$dataset" \
 	--shard "$SLURM_ARRAY_TASK_ID" \
 	--num-shards "$SLURM_ARRAY_TASK_COUNT"
