@@ -61,8 +61,31 @@ def sum_pair_probabilities(
 
 
 def dot_bracket(contact: np.ndarray) -> str:
+    """Convert a contact map to extended dot-bracket notation.
+
+    Uppercase/lowercase pairs encode levels beyond ()[]{}<>.
+    """
+    brackets = [("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")]
+    brackets.extend(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"))
     structure = ["."] * len(contact)
+    levels: list[list[tuple[int, int]]] = []
+
     for i, j in zip(*np.where(np.triu(contact, k=1))):
-        structure[i] = "("
-        structure[j] = ")"
+        level = None
+        for candidate, pairs in enumerate(levels):
+            if not any(
+                i < left < j < right or left < i < right < j for left, right in pairs
+            ):
+                level = candidate
+                break
+
+        if level is None:
+            level = len(levels)
+            levels.append([])
+
+        if level >= len(brackets):
+            raise ValueError("Structure requires more dot-bracket levels")
+        levels[level].append((i, j))
+        structure[i], structure[j] = brackets[level]
+
     return "".join(structure)

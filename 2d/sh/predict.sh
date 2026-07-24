@@ -18,7 +18,7 @@ vienna | contrafold | eternafold | rnastructure)
 		--partition="$CPU_PARTITION"
 	)
 	;;
-ribonanzanet)
+ribonanzanet | ufold)
 	resources=(
 		--array=0-7
 		--time=04:00:00

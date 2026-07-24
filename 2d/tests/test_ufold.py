@@ -1,14 +1,13 @@
-import numpy as np
-
-from models.ufold import fold
-from models.utils import dot_bracket
+from models.ufold import predict
 
 SEQUENCE = "GGGGAAAACCCC"
 EXPECTED = "((((....))))"
 
-contacts = fold(SEQUENCE)
-assert contacts.shape == (len(SEQUENCE), len(SEQUENCE))
-assert np.isfinite(contacts).all()
-structure = dot_bracket(contacts > 0.5)
-assert structure == EXPECTED
-print(structure)
+prediction = predict(SEQUENCE)
+probabilities = prediction["probabilities"]
+assert len(probabilities) == len(SEQUENCE)
+assert all(0 <= probability <= 1 for probability in probabilities)
+assert prediction["structures"] == [
+    {"method": "threshold_0.5", "dot_bracket": EXPECTED}
+]
+print(EXPECTED)

@@ -112,10 +112,12 @@ pytorch-cuda = "==11.8"
 mkl = "==2023.1.0"
 numpy = "==1.24.3"
 pandas = "==2.1.1"
+polars = "==0.20.2"
 scipy = "==1.11.3"
 scikit-learn = "==1.3.0"
 matplotlib = "==3.8.0"
 munch = "==4.0.0"
+tqdm = "==4.66.1"
 
 [feature.ufold.tasks]
 source = "bash sh/fetch-source.sh ufold"
@@ -123,6 +125,10 @@ weights = "bash sh/fetch-weight.sh ufold"
 
 [feature.ufold.tasks.test]
 cmd = "bash tests/test.sh ufold"
+depends-on = ["source", "weights"]
+
+[feature.ufold.tasks.predict]
+cmd = "bash sh/predict.sh ufold"
 depends-on = ["source", "weights"]
 
 [feature.rna-fm.dependencies]
