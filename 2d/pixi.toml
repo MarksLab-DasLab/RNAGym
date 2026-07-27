@@ -155,17 +155,19 @@ cmd = "bash sh/predict.sh rna-fm"
 depends-on = ["weights"]
 
 [feature.mxfold2.dependencies]
-python = "3.8.*"
+python = "3.10.*"
 pytorch = "==1.13.1"
 torchvision = "==0.14.1"
 mkl = "==2023.1.0"
 numpy = "==1.22.4"
+polars = "==1.43.0"
 
 [feature.mxfold2.pypi-dependencies]
-mxfold2 = "==0.1.1"
+mxfold2 = { url = "https://github.com/mxfold/mxfold2/releases/download/v0.1.2/mxfold2-0.1.2-cp310-cp310-manylinux_2_17_x86_64.whl" }
 
 [feature.mxfold2.tasks]
 test = "bash tests/test.sh mxfold2"
+predict = "bash sh/predict.sh mxfold2"
 
 [environments]
 vienna = { features = ["classical", "vienna"], no-default-feature = true }

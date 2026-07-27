@@ -8,7 +8,7 @@ GPU_PARTITION="gpu"
 environment="$1"
 
 case $environment in
-vienna | contrafold | eternafold | rnastructure)
+vienna | contrafold | eternafold | rnastructure | mxfold2)
 	shards=64
 	resources=(
 		--time=12:00:00

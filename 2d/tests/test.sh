@@ -17,7 +17,7 @@ ribonanzanet | ufold | rna-fm)
 	CUDA_VISIBLE_DEVICES='' python -m "tests.test_${1//-/_}"
 	;;
 mxfold2)
-	mxfold2 predict "$fasta" | grep -Eq '[().]{12}'
+	python -m tests.test_mxfold2
 	;;
 *)
 	echo "unknown test: $1" >&2
