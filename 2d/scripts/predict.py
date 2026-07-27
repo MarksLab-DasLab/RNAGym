@@ -56,7 +56,7 @@ def get_sequences(profiles: pl.DataFrame, num_shards: int) -> pl.DataFrame:
         .unique()
         .with_columns(pl.col("sequence").str.len_chars().alias("length"))
         .sort(["length", "sequence"], descending=[True, False])
-        .with_row_count("rank")
+        .with_row_index("rank")
         .with_columns((pl.col("rank") % num_shards).alias("shard"))
     )
 

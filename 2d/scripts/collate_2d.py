@@ -88,7 +88,7 @@ def get_source_profiles() -> pl.DataFrame:
                 keep="first",
                 maintain_order=True,
             )
-            .collect(streaming=True)
+            .collect(engine="streaming")
         )
 
 
@@ -111,7 +111,7 @@ def get_pseudobase_structures() -> pl.DataFrame:
         ["sequence", "secondary_structure"], maintain_order=True
     ).agg(
         # Retain every ID when multiple entries have the same sequence and structure
-        pl.col("pseudobase_id").str.concat("|").alias("pseudobase_ids")
+        pl.col("pseudobase_id").str.join("|").alias("pseudobase_ids")
     )
 
     print(
@@ -233,7 +233,7 @@ def print_summary(data: pl.DataFrame) -> None:
     print(f"Unique sequences: {data['sequence'].n_unique():,}")
 
     counts = data.group_by("split").agg(
-        pl.count().alias("rows"),
+        pl.len().alias("rows"),
         pl.col("sequence").n_unique().alias("sequences"),
     )
     print(counts.sort("split"))
