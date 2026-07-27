@@ -20,7 +20,7 @@ vienna | contrafold | eternafold | rnastructure)
 ribonanzanet | ufold)
 	shards=8
 	resources=(
-		--time=04:00:00
+		--time=08:00:00
 		--cpus-per-task=1
 		--mem=8G
 		--gpus=1
