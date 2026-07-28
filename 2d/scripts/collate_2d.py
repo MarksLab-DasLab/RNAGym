@@ -89,6 +89,7 @@ def get_source_profiles() -> pl.DataFrame:
                 maintain_order=True,
             )
             .collect(engine="streaming")
+            .rename({"seqID": "uid"})
         )
 
 
@@ -188,7 +189,7 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
             cluster_prefix.with_name(f"{cluster_prefix.name}_cluster.tsv"),
             separator="\t",
             has_header=False,
-            new_columns=["cluster_id", "sequence_id"],
+            new_columns=["cluster_rep", "sequence_id"],
         )
 
     if (
@@ -197,33 +198,33 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
     ):
         raise RuntimeError("MMseqs2 output does not assign every sequence exactly once")
 
-    cluster_ids = sorted(cluster_members["cluster_id"].unique().to_list())
-    random.Random(RANDOM_SEED).shuffle(cluster_ids)
-    train_cluster_count = round(TRAIN_FRACTION * len(cluster_ids))
-    train_clusters = set(cluster_ids[:train_cluster_count])
+    cluster_reps = sorted(cluster_members["cluster_rep"].unique().to_list())
+    random.Random(RANDOM_SEED).shuffle(cluster_reps)
+    train_cluster_count = round(TRAIN_FRACTION * len(cluster_reps))
+    train_clusters = set(cluster_reps[:train_cluster_count])
 
     cluster_splits = pl.DataFrame(
         {
-            "cluster_id": cluster_ids,
+            "cluster_rep": cluster_reps,
             "split": [
-                "train" if cluster_id in train_clusters else "test"
-                for cluster_id in cluster_ids
+                "train" if cluster_rep in train_clusters else "test"
+                for cluster_rep in cluster_reps
             ],
         }
     )
 
     assignments = (
         sequence_table.join(cluster_members, on="sequence_id", how="left")
-        .join(cluster_splits, on="cluster_id", how="left")
-        .select("sequence", "cluster_id", "split")
+        .join(cluster_splits, on="cluster_rep", how="left")
+        .select("sequence", "sequence_id", "cluster_rep", "split")
     )
 
     if assignments["split"].null_count() != 0:
         raise RuntimeError("Some sequences did not receive a train/test assignment")
 
-    print(f"MMseqs2 clusters: {len(cluster_ids):,}")
+    print(f"MMseqs2 clusters: {len(cluster_reps):,}")
     print(f"Train clusters: {train_cluster_count:,}")
-    print(f"Test clusters: {len(cluster_ids) - train_cluster_count:,}")
+    print(f"Test clusters: {len(cluster_reps) - train_cluster_count:,}")
     return assignments
 
 
@@ -243,7 +244,9 @@ def main() -> None:
     """Collate and write the chemical mapping and PseudoBase datasets."""
     filtered = get_source_profiles()
     assignments = cluster_sequences(filtered["sequence"])
-    filtered = filtered.join(assignments, on="sequence", how="left")
+    filtered = filtered.join(assignments, on="sequence", how="left").select(
+        "uid", "sequence_id", pl.exclude("uid", "sequence_id")
+    )
 
     if filtered["split"].null_count() != 0:
         raise RuntimeError("Some profiles did not receive a train/test assignment")

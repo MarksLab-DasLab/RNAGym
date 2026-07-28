@@ -39,9 +39,7 @@ def parse_args() -> argparse.Namespace:
 def load_profiles(dataset: Dataset) -> pl.DataFrame:
     """Load profiles for one dataset."""
     if dataset is Dataset.CHEMICAL_MAPPING:
-        return pl.read_parquet(INPUT_FILE, columns=["seqID", "sequence"]).rename(
-            {"seqID": "uid"}
-        )
+        return pl.read_parquet(INPUT_FILE, columns=["sequence_id", "sequence"]).unique()
     if dataset is Dataset.PSEUDOBASE:
         return pl.read_parquet(
             PSEUDOBASE_FILE, columns=["pseudobase_ids", "sequence"]
@@ -103,16 +101,23 @@ def predict_dataset(
             ),
         ),
     )
-    output = (
-        profiles.join(predictions, on="sequence")
-        .select("uid", "probabilities", "structures")
-        .sort("uid")
-    )
+    if dataset is Dataset.CHEMICAL_MAPPING:
+        output = (
+            profiles.join(predictions, on="sequence")
+            .select("sequence_id", "probabilities", "structures")
+            .sort("sequence_id")
+        )
+    else:
+        output = (
+            profiles.join(predictions, on="sequence")
+            .select("uid", "probabilities", "structures")
+            .sort("uid")
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     temporary_file = output_dir / f".{shard}.tmp"
     output.write_parquet(temporary_file)
     temporary_file.replace(output_file)
-    print(f"Wrote {output.height:,} profiles to {output_file}")
+    print(f"Wrote {output.height:,} predictions to {output_file}")
 
 
 def main() -> None:
