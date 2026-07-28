@@ -66,7 +66,7 @@ def sum_pair_probabilities(
         probabilities[i] += probability
         probabilities[j] += probability
     warn_out_of_range(probabilities)
-    return probabilities.tolist()
+    return np.clip(probabilities, 0, 1).tolist()
 
 
 def dot_bracket(contact: np.ndarray) -> str:

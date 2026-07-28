@@ -40,6 +40,7 @@ def predict(sequence: str) -> Prediction:
     bpp = np.triu(bpps[0])
     probabilities = (bpp + bpp.T).sum(axis=0)[1:]
     warn_out_of_range(probabilities)
+    probabilities = np.clip(probabilities, 0, 1)
     return {
         "probabilities": probabilities.tolist(),
         "structures": [{"method": "mfe", "dot_bracket": structures[0]}],

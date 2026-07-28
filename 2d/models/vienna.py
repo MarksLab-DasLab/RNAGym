@@ -19,6 +19,7 @@ def predict(sequence: str) -> Prediction:
     probabilities = pair_probabilities.sum(axis=0) + pair_probabilities.sum(axis=1)
     probabilities = probabilities[1:]
     warn_out_of_range(probabilities)
+    probabilities = np.clip(probabilities, 0, 1)
     return {
         "probabilities": probabilities.tolist(),
         "structures": [
