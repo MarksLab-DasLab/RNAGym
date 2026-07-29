@@ -6,6 +6,7 @@ platforms = ["linux-64"]
 
 [dependencies]
 go-shfmt = "==3.13.1"
+infernal = "==1.1.5"
 mmseqs2 = "==15.6f452"
 polars = "==1.43.0"
 python = "3.14.*"
@@ -14,10 +15,15 @@ shellcheck = "==0.11.0"
 taplo = "==0.10.0"
 tqdm = "==4.69.0"
 
+[activation.env]
+# Should contain `Rfam-15.1/`
+RNAGYM_DATABASE_DIR = "/path/to/databases"
+
 [tasks]
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 collate-2d = "python scripts/collate_2d.py"
+annotate-rfam = "python scripts/annotate_rfam.py"
 
 # Classical model prediction dependencies
 [feature.classical.dependencies]

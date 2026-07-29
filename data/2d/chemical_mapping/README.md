@@ -45,3 +45,11 @@ Chemical mapping sequences are clustered with MMseqs2 at 40% sequence identity
 and 80% coverage. Clusters are split 80/20 into train/test with random seed 42.
 
 See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
+
+### Optionally annotate each unique sequence with Rfam:
+
+To process the dataset with Rfam:
+
+```bash
+pixi run annotate-rfam # outputs to `rfam-15.1/`
+```

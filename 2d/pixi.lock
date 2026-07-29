@@ -58,6 +58,7 @@ environments:
     - url: https://conda.anaconda.org/bioconda/
     packages:
       linux-64:
+      - conda: https://conda.anaconda.org/bioconda/linux-64/infernal-1.1.5-pl5321h7b50bb2_4.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/linux-64/mmseqs2-15.6f452-pl5321h6a68c12_3.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/aria2-1.37.0-h4b33fff_4.conda
@@ -1044,6 +1045,21 @@ packages:
   run_exports: {}
   size: 429397
   timestamp: 1734144498992
+- conda: https://conda.anaconda.org/bioconda/linux-64/infernal-1.1.5-pl5321h7b50bb2_4.tar.bz2
+  sha256: 1e62b1fc98a41b7c1c8b13c900e852679e36799dc2ac4f04de1bcfbd1b3a23ef
+  md5: 78364081743c5b113116cf25f9a4473a
+  depends:
+  - _openmp_mutex >=4.5
+  - libgcc >=13
+  - libgomp
+  - perl >=5.32.1,<5.33.0a0 *_perl5
+  license: BSD-3-Clause
+  license_family: BSD
+  run_exports:
+    weak:
+    - infernal >=1.1.5,<2.0a0
+  size: 3904151
+  timestamp: 1734085424371
 - conda: https://conda.anaconda.org/bioconda/linux-64/mmseqs2-15.6f452-pl5321h6a68c12_3.tar.bz2
   sha256: 911a3c8e5ef135df1d44464b234ac009662c265d599da4d27f783246c8ffec73
   md5: 2684e9dbf0933349c4d768ccc9ad0829
