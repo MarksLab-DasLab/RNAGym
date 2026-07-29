@@ -2,10 +2,12 @@
 
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
-| `rnagym_2d.parquet` | 947k chemical mapping profiles for 585k sequences, clustered at 40% ID, split into 80/20 train/test. | `uid` |
-| `rnagym_pseudobase.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
+| `rnagym_map.parquet` | 947k chemical mapping profiles for 585k sequences, clustered at 40% ID, split into 80/20 train/test. | `uid` |
+| `rnagym_pb.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
+| `rnagym_sequences.parquet` | Sequence identifiers shared across the 2D datasets | `sequence_id` |
+| `rnagym_rfams.parquet` | Rfam 15.1 hits for each registered sequence | `sequence_id` |
 
-### `rnagym_2d.parquet` schema
+### `rnagym_map.parquet` schema
 
 | Column | Description |
 | --- | --- |
@@ -24,17 +26,25 @@
 | `cluster_rep` | `sequence_id` of the MMseqs2 cluster representative. |
 | `split` | `train` or `test`. |
 
-### `rnagym_pseudobase.parquet` schema
+### `rnagym_pb.parquet` schema
 
 | Column | Description |
 | --- | --- |
 | `pseudobase_ids` | Source PseudoBase IDs. |
+| `sequence_id` | Identifier shared by records with the same sequence. |
 | `sequence` | RNA sequence. |
 | `secondary_structure` | Structure in dot-bracket notation. |
 
+### `rnagym_rfams.parquet` schema
+
+| Column | Description |
+| --- | --- |
+| `sequence_id` | Identifier from `rnagym_sequences.parquet`. |
+| `rfam_hits` | Rfam accession, name, clan, E-value, score, coordinates, strand, truncation, and overlap for each hit. |
+
 ## Reproducing the datasets
 
-From the repository root, reconstruct both datasets from `raw_data/` with:
+From the repository root, reconstruct the datasets from `raw_data/` with:
 
 ```bash
 cd 2d
@@ -46,10 +56,11 @@ and 80% coverage. Clusters are split 80/20 into train/test with random seed 42.
 
 See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 
-### Optionally annotate each unique sequence with Rfam:
+### Optionally annotate each unique sequence with Rfam
 
-To process the dataset with Rfam:
+To process the dataset with Rfam/Infernal and (re)generate
+`rnagym_rfams.parquet`:
 
 ```bash
-pixi run annotate-rfam # outputs to `rfam-15.1/`
+pixi run annotate-rfam
 ```

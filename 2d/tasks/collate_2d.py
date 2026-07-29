@@ -12,11 +12,14 @@ from pathlib import Path
 import polars as pl
 from tqdm.auto import tqdm
 
+from tasks.utils import add_sequences, load_registry
+
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
 INPUT_DIR = DATA_DIR / "raw_data"
-OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
+OUTPUT_FILE = DATA_DIR / "rnagym_map.parquet"
 PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"
-PSEUDOBASE_OUTPUT_FILE = DATA_DIR / "rnagym_pseudobase.parquet"
+PSEUDOBASE_OUTPUT_FILE = DATA_DIR / "rnagym_pb.parquet"
+SEQUENCE_OUTPUT_FILE = DATA_DIR / "rnagym_sequences.parquet"
 
 MIN_SEQUENCE_IDENTITY = 0.40
 MIN_COVERAGE = 0.80
@@ -135,15 +138,9 @@ def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
         )
 
 
-def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
+def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
     """Cluster sequences with MMseqs2, then split clusters 80/20 into train/test."""
-    sequence_values = sorted(sequences.unique().to_list())
-    sequence_table = pl.DataFrame(
-        {
-            "sequence_id": [f"sequence_{i:07d}" for i in range(len(sequence_values))],
-            "sequence": sequence_values,
-        }
-    )
+    sequence_table = sequence_table.sort("sequence")
 
     with tempfile.TemporaryDirectory(prefix="rnagym-mmseqs-") as temporary_dir:
         work_dir = Path(temporary_dir)
@@ -161,7 +158,7 @@ def cluster_sequences(sequences: pl.Series) -> pl.DataFrame:
             f"--threads {MMSEQS_THREADS} -v 3"
         )
 
-        # Run the MMseqs2 command, capturing only progress bars and descriptors.
+        # Run the MMseqs2 command, capturing only progress bars and descriptors
         # Nonfatal set-cover errors are expected: https://github.com/soedinglab/MMseqs2/issues/765
         with subprocess.Popen(
             shlex.split(command),
@@ -243,7 +240,15 @@ def print_summary(data: pl.DataFrame) -> None:
 def main() -> None:
     """Collate and write the chemical mapping and PseudoBase datasets."""
     filtered = get_source_profiles()
-    assignments = cluster_sequences(filtered["sequence"])
+    registry = load_registry(SEQUENCE_OUTPUT_FILE, required=False)
+    registry = add_sequences(registry, filtered["sequence"])
+    sequence_table = (
+        filtered.select("sequence")
+        .unique()
+        .join(registry, on="sequence")
+        .select("sequence_id", "sequence")
+    )
+    assignments = cluster_sequences(sequence_table)
     filtered = filtered.join(assignments, on="sequence", how="left").select(
         "uid", "sequence_id", pl.exclude("uid", "sequence_id")
     )
@@ -256,10 +261,20 @@ def main() -> None:
     print_summary(filtered)
 
     pseudobase = get_pseudobase_structures()
+    registry = add_sequences(registry, pseudobase["sequence"])
+    pseudobase = pseudobase.join(registry, on="sequence").select(
+        "pseudobase_ids",
+        "sequence_id",
+        "sequence",
+        "secondary_structure",
+    )
     pseudobase.write_parquet(
         PSEUDOBASE_OUTPUT_FILE, compression="zstd", statistics=True
     )
     print(f"Wrote {pseudobase.height:,} rows to {PSEUDOBASE_OUTPUT_FILE}")
+
+    registry.write_parquet(SEQUENCE_OUTPUT_FILE, compression="zstd", statistics=True)
+    print(f"Wrote {registry.height:,} rows to {SEQUENCE_OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

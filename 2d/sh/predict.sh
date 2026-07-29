@@ -49,5 +49,5 @@ for dataset in chemical_mapping pseudobase; do
 		continue
 	fi
 	sbatch "${resources[@]}" --array="0-$((shards - 1))" \
-		-- scripts/predict.slurm "$environment" "$dataset"
+		-- tasks/predict.slurm "$environment" "$dataset"
 done

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Generate model predictions."""
+"""Generate model prediction shards."""
 
 import argparse
 import importlib
@@ -11,8 +11,8 @@ import polars as pl
 from tqdm.auto import tqdm
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
-INPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
-PSEUDOBASE_FILE = DATA_DIR / "rnagym_pseudobase.parquet"
+INPUT_FILE = DATA_DIR / "rnagym_map.parquet"
+PSEUDOBASE_FILE = DATA_DIR / "rnagym_pb.parquet"
 OUTPUT_DIR = DATA_DIR / "predictions"
 
 

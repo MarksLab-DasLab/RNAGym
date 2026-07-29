@@ -22,8 +22,8 @@ RNAGYM_DATABASE_DIR = "/path/to/databases"
 [tasks]
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
-collate-2d = "python scripts/collate_2d.py"
-annotate-rfam = "python scripts/annotate_rfam.py"
+collate-2d = "python -m tasks.collate_2d"
+annotate-rfam = "python -m tasks.annotate_rfam"
 
 # Classical model prediction dependencies
 [feature.classical.dependencies]
