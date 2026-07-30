@@ -66,7 +66,7 @@ pixi run leaderboard
 For chemical mapping, residue unpaired probabilities (`1 − Σj Pij`) are
 predicted and compared with experimental reactivities using Spearman. Scores are
 calculated over finite reactivities (the vast majority of NaNs are fixed,
-unmeasured construct regions like barcodes) for each test profile, then
+unmeasured construct regions like barcodes) for each profile, then
 macro-averaged across profiles and reagents. Spearman avoids directly comparing
 reactivity magnitudes with probabilities or imposing an arbitrary reactivity
 threshold for classification.

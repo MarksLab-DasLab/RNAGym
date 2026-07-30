@@ -4,7 +4,10 @@ from pathlib import Path
 
 import polars as pl
 
-REGISTRY_SCHEMA = pl.Schema({"sequence_id": pl.String, "sequence": pl.String})
+SEQUENCE_SCHEMA = pl.Schema({"sequence_id": pl.String, "sequence": pl.String})
+REGISTRY_SCHEMA = pl.Schema(
+    {**SEQUENCE_SCHEMA, "cluster_rep": pl.String, "fold": pl.UInt8}
+)
 
 
 def load_registry(path: Path, required: bool = True) -> pl.DataFrame:
@@ -49,6 +52,6 @@ def add_sequences(registry: pl.DataFrame, sequences: pl.Series) -> pl.DataFrame:
             ],
             "sequence": new_sequences,
         },
-        schema=REGISTRY_SCHEMA,
+        schema=SEQUENCE_SCHEMA,
     )
     return pl.concat([registry, new_entries])

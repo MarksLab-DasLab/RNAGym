@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 from tqdm.auto import tqdm
 
-from tasks.utils import add_sequences, load_registry
+from tasks.utils import SEQUENCE_SCHEMA, add_sequences, load_registry
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
 INPUT_DIR = DATA_DIR / "raw_data"
@@ -25,7 +25,7 @@ MIN_SEQUENCE_IDENTITY = 0.40
 MIN_COVERAGE = 0.80
 COVERAGE_MODE = 0  # Require coverage of both sequences
 CLUSTER_MODE = 0  # Greedy set-cover clustering
-TRAIN_FRACTION = 0.80
+NUM_FOLDS = 5
 RANDOM_SEED = 42
 MMSEQS_THREADS = 1  # Greedy clustering is non-deterministic across threads
 
@@ -139,7 +139,7 @@ def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
 
 
 def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
-    """Cluster sequences with MMseqs2, then split clusters 80/20 into train/test."""
+    """Cluster sequences with MMseqs2."""
     sequence_table = sequence_table.sort("sequence")
 
     with tempfile.TemporaryDirectory(prefix="rnagym-mmseqs-") as temporary_dir:
@@ -195,74 +195,115 @@ def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
     ):
         raise RuntimeError("MMseqs2 output does not assign every sequence exactly once")
 
-    cluster_reps = sorted(cluster_members["cluster_rep"].unique().to_list())
-    random.Random(RANDOM_SEED).shuffle(cluster_reps)
-    train_cluster_count = round(TRAIN_FRACTION * len(cluster_reps))
-    train_clusters = set(cluster_reps[:train_cluster_count])
-
-    cluster_splits = pl.DataFrame(
-        {
-            "cluster_rep": cluster_reps,
-            "split": [
-                "train" if cluster_rep in train_clusters else "test"
-                for cluster_rep in cluster_reps
-            ],
-        }
-    )
-
-    assignments = (
-        sequence_table.join(cluster_members, on="sequence_id", how="left")
-        .join(cluster_splits, on="cluster_rep", how="left")
-        .select("sequence", "sequence_id", "cluster_rep", "split")
-    )
-
-    if assignments["split"].null_count() != 0:
-        raise RuntimeError("Some sequences did not receive a train/test assignment")
-
-    print(f"MMseqs2 clusters: {len(cluster_reps):,}")
-    print(f"Train clusters: {train_cluster_count:,}")
-    print(f"Test clusters: {len(cluster_reps) - train_cluster_count:,}")
+    assignments = sequence_table.join(
+        cluster_members, on="sequence_id", how="left"
+    ).select("sequence_id", "cluster_rep")
+    if assignments["cluster_rep"].null_count():
+        raise RuntimeError("Some sequences did not receive a cluster assignment")
+    print(f"MMseqs2 clusters: {assignments['cluster_rep'].n_unique():,}")
     return assignments
 
 
+def assign_folds(assignments: pl.DataFrame, modalities: pl.DataFrame) -> pl.DataFrame:
+    """Balance cluster folds across modality signatures."""
+    # Label each cluster by its modalities, for example chemical_mapping+pseudobase
+    signatures = (
+        modalities.join(assignments, on="sequence_id")
+        .group_by("cluster_rep")
+        .agg(pl.col("modality").unique().sort().str.join("+").alias("signature"))
+        .sort(["signature", "cluster_rep"])
+    )
+    rng = random.Random(RANDOM_SEED)
+    rows = []
+    # Shuffle and distribute each signature evenly across folds
+    for group in signatures.partition_by("signature", maintain_order=True):
+        cluster_reps = group["cluster_rep"].to_list()
+        rng.shuffle(cluster_reps)
+        offset = rng.randrange(NUM_FOLDS)
+        rows.extend(
+            (cluster_rep, (i + offset) % NUM_FOLDS)
+            for i, cluster_rep in enumerate(cluster_reps)
+        )
+    return pl.DataFrame(
+        rows,
+        schema={"cluster_rep": pl.String, "fold": pl.UInt8},
+        orient="row",
+    )
+
+
+def get_modality_sequences(
+    data: pl.DataFrame, registry: pl.DataFrame, modality: str
+) -> pl.DataFrame:
+    """Map one modality's unique sequences to registry identifiers."""
+    return (
+        data.select("sequence")
+        .unique()
+        .join(registry, on="sequence")
+        .select("sequence_id", "sequence")
+        .with_columns(pl.lit(modality).alias("modality"))
+    )
+
+
 def print_summary(data: pl.DataFrame) -> None:
-    """Print output row, sequence, and split counts."""
+    """Print output row and sequence counts."""
     print(f"Wrote {data.height:,} rows to {OUTPUT_FILE}")
     print(f"Unique sequences: {data['sequence'].n_unique():,}")
-
-    counts = data.group_by("split").agg(
-        pl.len().alias("rows"),
-        pl.col("sequence").n_unique().alias("sequences"),
-    )
-    print(counts.sort("split"))
 
 
 def main() -> None:
     """Collate and write the chemical mapping and PseudoBase datasets."""
     filtered = get_source_profiles()
-    registry = load_registry(SEQUENCE_OUTPUT_FILE, required=False)
+    pseudobase = get_pseudobase_structures()
+    registry = load_registry(SEQUENCE_OUTPUT_FILE, required=False).select(
+        SEQUENCE_SCHEMA.names()
+    )
     registry = add_sequences(registry, filtered["sequence"])
-    sequence_table = (
-        filtered.select("sequence")
-        .unique()
-        .join(registry, on="sequence")
-        .select("sequence_id", "sequence")
-    )
-    assignments = cluster_sequences(sequence_table)
-    filtered = filtered.join(assignments, on="sequence", how="left").select(
-        "uid", "sequence_id", pl.exclude("uid", "sequence_id")
-    )
+    registry = add_sequences(registry, pseudobase["sequence"])
 
-    if filtered["split"].null_count() != 0:
-        raise RuntimeError("Some profiles did not receive a train/test assignment")
+    mapping_sequences = get_modality_sequences(filtered, registry, "chemical_mapping")
+    pseudobase_sequences = get_modality_sequences(pseudobase, registry, "pseudobase")
+    modalities = pl.concat([mapping_sequences, pseudobase_sequences]).select(
+        "sequence_id", "modality"
+    )
+    if modalities["sequence_id"].n_unique() != registry.height:
+        raise RuntimeError("Every registered sequence must belong to a dataset")
+
+    assignments = cluster_sequences(registry)
+    folds = assign_folds(assignments, modalities)
+    registry = (
+        registry.join(assignments, on="sequence_id")
+        .join(folds, on="cluster_rep")
+        .sort("sequence_id")
+    )
+    if registry["fold"].null_count():
+        raise RuntimeError("Some sequences did not receive a fold assignment")
+
+    # Count each cluster once per modality and fold
+    fold_counts = (
+        modalities.join(
+            registry.select("sequence_id", "cluster_rep", "fold"), on="sequence_id"
+        )
+        .group_by(["modality", "fold"])
+        .agg(pl.col("cluster_rep").n_unique().alias("clusters"))
+        .sort(["modality", "fold"])
+    )
+    print(fold_counts)
+
+    filtered = filtered.join(
+        mapping_sequences.select("sequence_id", "sequence"),
+        on="sequence",
+        how="left",
+    ).select("uid", "sequence_id", pl.exclude("uid", "sequence_id"))
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     filtered.write_parquet(OUTPUT_FILE, compression="zstd", statistics=True)
     print_summary(filtered)
 
-    pseudobase = get_pseudobase_structures()
-    registry = add_sequences(registry, pseudobase["sequence"])
-    pseudobase = pseudobase.join(registry, on="sequence").select(
+    pseudobase = pseudobase.join(
+        pseudobase_sequences.select("sequence_id", "sequence"),
+        on="sequence",
+        how="left",
+    ).select(
         "pseudobase_ids",
         "sequence_id",
         "sequence",

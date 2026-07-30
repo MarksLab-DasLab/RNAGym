@@ -2,9 +2,9 @@
 
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
-| `rnagym_map.parquet` | 947k chemical mapping profiles for 585k sequences, clustered at 40% ID, split into 80/20 train/test. | `uid` |
+| `rnagym_map.parquet` | 947k chemical mapping profiles for 585k sequences | `uid` |
 | `rnagym_pb.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
-| `rnagym_sequences.parquet` | Sequence identifiers shared across the 2D datasets | `sequence_id` |
+| `rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
 | `rnagym_rfams.parquet` | Rfam 15.1 hits for each registered sequence | `sequence_id` |
 
 ### `rnagym_map.parquet` schema
@@ -23,9 +23,6 @@
 | `note` | Additional notes about the data. |
 | `reactivity` | Sequence reactivity stored as a string, for example `[0.01,0.10,0.90,...]`. |
 | `reactivity_error` | Reactivity error stored in the same string format as `reactivity`. |
-| `cluster_rep` | `sequence_id` of the MMseqs2 cluster representative. |
-| `split` | `train` or `test`. |
-
 ### `rnagym_pb.parquet` schema
 
 | Column | Description |
@@ -34,6 +31,15 @@
 | `sequence_id` | Identifier shared by records with the same sequence. |
 | `sequence` | RNA sequence. |
 | `secondary_structure` | Structure in dot-bracket notation. |
+
+### `rnagym_sequences.parquet` schema
+
+| Column | Description |
+| --- | --- |
+| `sequence_id` | Stable identifier for an exact RNA sequence. |
+| `sequence` | RNA sequence. |
+| `cluster_rep` | `sequence_id` of the global MMseqs2 cluster representative. |
+| `fold` | Fold assignment from 0–4. |
 
 ### `rnagym_rfams.parquet` schema
 
@@ -51,8 +57,9 @@ cd 2d
 pixi run collate-2d
 ```
 
-Chemical mapping sequences are clustered with MMseqs2 at 40% sequence identity
-and 80% coverage. Clusters are split 80/20 into train/test with random seed 42.
+All sequences are clustered together with MMseqs2 at 40% sequence identity and
+80% coverage. Clusters are randomly assigned to 5 distinct folds to support
+community train/test splits and cross-validation.
 
 See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 
