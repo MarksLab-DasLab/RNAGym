@@ -37,33 +37,39 @@ SOURCES = {
     "RMDB_dataset_extra_invivo.parquet": "in_vivo",
 }
 
-COLUMNS = [
-    "seqID",
+CONDITION_COLUMNS = [
     "sequence",
     "modifier",
     "temperature",
     "chemical",
     "reverse_transcriptase",
     "note",
-    "reactivity",
-    "reactivity_error",
 ]
+REACTIVITY_COLUMNS = ["reactivity", "reactivity_error"]
+MEASUREMENT_COLUMNS = [*REACTIVITY_COLUMNS, "SNR", "reads"]
+GROUP_COLUMNS = ["experiment_series", *CONDITION_COLUMNS, "context"]
 
 
 def load_source(filename: str, context: str) -> pl.LazyFrame:
     """Load and normalize one chemical mapping source."""
     path = INPUT_DIR / filename
     return pl.scan_parquet(path).select(
-        *[pl.col(column).cast(pl.Utf8, strict=False) for column in COLUMNS],
+        pl.col("seqID", *CONDITION_COLUMNS).cast(pl.String, strict=False),
+        # Raw Parquets store numeric vectors as bracketed comma-separated strings
+        pl.col(REACTIVITY_COLUMNS)
+        .cast(pl.String)
+        .str.strip_chars("[]")
+        .str.split(",")
+        .cast(pl.List(pl.Float64)),
         pl.col("SNR").cast(pl.Float64),
-        pl.col("reads").cast(pl.Float64),
+        pl.col("reads").cast(pl.Int64, strict=False),
         pl.lit(filename).alias("source_file"),
         pl.lit(context).alias("context"),
     )
 
 
 def get_source_profiles() -> pl.DataFrame:
-    """Keep SNR >= 1 and the best profile per sequence/modifier by SNR, then reads."""
+    """Keep one representative and its repeats per experiment and condition."""
     missing = [filename for filename in SOURCES if not (INPUT_DIR / filename).is_file()]
     if missing:
         raise FileNotFoundError(f"Missing source files: {', '.join(missing)}")
@@ -79,21 +85,46 @@ def get_source_profiles() -> pl.DataFrame:
             [load_source(filename, context) for filename, context in SOURCES.items()]
         )
 
-        return (
+        filtered = (
             profiles.filter(pl.col("SNR") >= 1.0)
             .map_batches(track_progress, streamable=True)
-            .sort(
-                ["sequence", "modifier", "SNR", "reads", "seqID", "source_file"],
-                descending=[False, False, True, True, False, False],
+            # Group related RMDB entries such as NAME_DMS_0001.1 and NAME_DMS_0002.1
+            .with_columns(
+                pl.col("seqID")
+                .str.extract(r"^(.*)_\d+\.\d+$", 1)
+                .alias("experiment_series")
             )
+            .sort(
+                ["SNR", "reads", "seqID"],
+                descending=[True, True, False],
+                nulls_last=True,
+            )
+            # Remove source rows that point to the exact same measurement
             .unique(
-                subset=["sequence", "modifier"],
+                subset=[*GROUP_COLUMNS, *MEASUREMENT_COLUMNS],
                 keep="first",
                 maintain_order=True,
             )
+            .group_by(GROUP_COLUMNS, maintain_order=True)
+            # For [best, repeat1, repeat2], keep best at the top level and
+            # store [repeat1, repeat2] in the replicates list
+            .agg(
+                pl.first("seqID").alias("uid"),
+                pl.first(*MEASUREMENT_COLUMNS, "source_file"),
+                pl.struct(pl.col("seqID").alias("uid"), *MEASUREMENT_COLUMNS)
+                .slice(1)
+                .alias("replicates"),
+            )
+            .drop("experiment_series")
+            .sort("uid")
             .collect(engine="streaming")
-            .rename({"seqID": "uid"})
         )
+        repeats = filtered["replicates"].list.len().sum()
+        print(
+            f"Chemical mapping: {filtered.height:,} representatives + "
+            f"{repeats:,} repeats"
+        )
+        return filtered
 
 
 def get_pseudobase_structures() -> pl.DataFrame:
