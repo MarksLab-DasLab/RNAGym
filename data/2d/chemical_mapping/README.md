@@ -22,7 +22,7 @@
 | `reverse_transcriptase` | Reverse transcriptase used to read out the chemical modification. |
 | `note` | Additional notes about the data. |
 | `reactivity` | Per-nucleotide reactivity values. |
-| `reactivity_error` | Per-nucleotide reactivity error values. |
+| `reactivity_error` | RMDB-provided values correlated with measurement error. Their definition varies and is often undocumented across entries, so they are not considered when scoring. |
 | `replicates` | Additional measurements storing `uid`, `reactivity`, `reactivity_error`, `SNR`, and `reads`. |
 
 Replicates match the RMDB series, sequence, modifier, temperature, chemicals,

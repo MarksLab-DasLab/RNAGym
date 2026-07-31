@@ -52,24 +52,30 @@ predictions with a model and save them to
 pixi run -e <env> predict
 ```
 
-<!-- TODO(MCA): Implement -->
 To generate the leaderboard from the saved predictions:
 
 ```bash
 pixi run leaderboard
 ```
 
+This writes `../leaderboard/2d/leaderboard.csv`. EternaFold and RibonanzaNet
+are marked with `*` for chemical mapping because their training data overlap
+the benchmark.
+
 ### How models are scored
 
-<!-- TODO(MCA): Consider macro-average across clusters -->
+Scores use all five folds.
 
 For chemical mapping, residue unpaired probabilities (`1 − Σj Pij`) are
-predicted and compared with experimental reactivities using Spearman. Scores are
+predicted and compared with experimental reactivities using Spearman. DMS is
+scored over A/C, CMCT over G/U, and other modalities over all bases. Scores are
 calculated over finite reactivities (the vast majority of NaNs are fixed,
-unmeasured construct regions like barcodes) for each profile, then
-macro-averaged across profiles and reagents. Spearman avoids directly comparing
-reactivity magnitudes with probabilities or imposing an arbitrary reactivity
-threshold for classification.
+unmeasured construct regions like barcodes) for each profile, then averaged
+within each sequence cluster and across clusters. Each modifier, including each
+degradation condition, is reported separately. Spearman avoids directly
+comparing reactivity magnitudes with probabilities or imposing an arbitrary
+reactivity threshold for classification. Constant predictions receive a score
+of zero.
 
 > [!NOTE]
 > Neural models generally treat each i,j pair as an independent prediction,
@@ -83,4 +89,5 @@ threshold for classification.
 For discrete structure prediction like those from PseudoBase or the PDB, each
 model's official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as
 applicable). F1 is computed between each reference structure and the
-model-decoded structure.
+model-decoded structure, then averaged within each sequence cluster and across
+clusters.

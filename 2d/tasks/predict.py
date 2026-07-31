@@ -41,9 +41,7 @@ def load_profiles(dataset: Dataset) -> pl.DataFrame:
     if dataset is Dataset.CHEMICAL_MAPPING:
         return pl.read_parquet(INPUT_FILE, columns=["sequence_id", "sequence"]).unique()
     if dataset is Dataset.PSEUDOBASE:
-        return pl.read_parquet(
-            PSEUDOBASE_FILE, columns=["pseudobase_ids", "sequence"]
-        ).rename({"pseudobase_ids": "uid"})
+        return pl.read_parquet(PSEUDOBASE_FILE, columns=["sequence_id", "sequence"])
     raise ValueError(f"Unknown dataset: {dataset}")
 
 
@@ -101,18 +99,11 @@ def predict_dataset(
             ),
         ),
     )
-    if dataset is Dataset.CHEMICAL_MAPPING:
-        output = (
-            profiles.join(predictions, on="sequence")
-            .select("sequence_id", "probabilities", "structures")
-            .sort("sequence_id")
-        )
-    else:
-        output = (
-            profiles.join(predictions, on="sequence")
-            .select("uid", "probabilities", "structures")
-            .sort("uid")
-        )
+    output = (
+        profiles.join(predictions, on="sequence")
+        .select("sequence_id", "probabilities", "structures")
+        .sort("sequence_id")
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     temporary_file = output_dir / f".{shard}.tmp"
     output.write_parquet(temporary_file)

@@ -8,9 +8,11 @@ platforms = ["linux-64"]
 go-shfmt = "==3.13.1"
 infernal = "==1.1.5"
 mmseqs2 = "==15.6f452"
+numpy = "2.*"
 polars = "==1.43.0"
 python = "3.14.*"
 ruff = "==0.15.21"
+scipy = "1.*"
 shellcheck = "==0.11.0"
 taplo = "==0.10.0"
 tqdm = "==4.69.0"
@@ -24,6 +26,7 @@ fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 collate-2d = "python -m tasks.collate_2d"
 annotate-rfam = "python -m tasks.annotate_rfam"
+leaderboard = "python -m tasks.score"
 
 # Classical model prediction dependencies
 [feature.classical.dependencies]
