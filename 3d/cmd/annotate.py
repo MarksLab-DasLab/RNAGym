@@ -2,7 +2,7 @@
 
 ###############################################################################
 # `annotate.py`: Annotates the merged PDBs with additional criteria that can be
-# used for filtering.  Output is written to `annotated_chain_ids.csv`.
+# used for filtering.  Output is written to `annotated_chains.csv`.
 ###############################################################################
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def process_row(row) -> List[str]:
 
 def main():
     # Write the headers
-    out_fname = "annotated_chain_ids.csv"
+    out_fname = "annotated_chains.csv"
     headers = StructureInfo.HEADERS
     with open(out_fname, "w") as file:
         file.write(f"{','.join(headers)}\n")

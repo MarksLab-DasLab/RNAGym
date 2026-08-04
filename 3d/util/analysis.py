@@ -1382,7 +1382,7 @@ def prep_usalign(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        "./annotated_chains.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
@@ -1431,7 +1431,7 @@ def add_tm_id(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        "./annotated_chains.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
@@ -1501,7 +1501,7 @@ def add_seq_id(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        "./annotated_chains.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,

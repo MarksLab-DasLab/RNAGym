@@ -13,7 +13,7 @@ filters, and is suitable for both secondary and tertiary structure prediction
 tasks.  See `train.csv` and the eponymous test sets `monomer.csv` and
 `complex.csv`.
 
-`annotated_chain_ids.csv` contains all RNA chains >16nt with useful annotations
+`annotated_chains.csv` contains all RNA chains >16nt with useful annotations
 like Rfams hits, heteroatoms bound, % bound by polymer, resolution, and much
 more.  This can be used to easily filter the RNAs in the PDB by different
 selection criteria, for example identifying self-structured RNA monomers in the
@@ -49,7 +49,7 @@ The default workflow of `./gym.py` is as follows:
 
 1. `merge`: Merges the initial datasets into `merged_pdb_ids.csv`, a
    list of unique PDB IDs containing RNA chains.
-2. `annotate`: Individual RNA chains are annotated into `annotated_pdb_ids.csv`.
+2. `annotate`: Individual RNA chains are annotated into `annotated_chains.csv`.
 3. `split`: Splits the annotated chains into the `monomer.csv` and
    `complex.csv` datasets published by RNAGym.
    - To determine the best split, RNAGym calculates the maximal TM score

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# `split.py`: Splits `annotated_chain_ids.csv` into the test split.
+# `split.py`: Splits `annotated_chains.csv` into the test split.
 ###############################################################################
 
 import pandas as pd
@@ -44,7 +44,7 @@ def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     `util/config.py`.  Note that TM_train and %ID_train are not yet processed.
     """
     df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        "./annotated_chains.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
@@ -173,7 +173,7 @@ def main():
 
     # Reload and apply quality filters (but not date filter)
     all_chains_df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        "./annotated_chains.csv",
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
