@@ -2,12 +2,12 @@
 
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
-| `rnagym_map.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
-| `rnagym_pb.parquet` | 358 sequence/structure pairs with pseudoknots | `pseudobase_ids` |
+| `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
+| `rnagym_2d.parquet` | 358 discrete structures from PseudoBase | `uid` |
 | `rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
 | `rnagym_rfams.parquet` | Rfam 15.1 hits for each registered sequence | `sequence_id` |
 
-### `rnagym_map.parquet` schema
+### `rnagym_mapping.parquet` schema
 
 | Column | Description |
 | --- | --- |
@@ -30,11 +30,11 @@ reverse transcriptase, note, and context. Some source rows incorrectly assign
 different UIDs to identical measurements. These duplicates are collapsed, and
 the highest-SNR measurement is the representative.
 
-### `rnagym_pb.parquet` schema
+### `rnagym_2d.parquet` schema
 
 | Column | Description |
 | --- | --- |
-| `pseudobase_ids` | Source PseudoBase IDs. |
+| `uid` | Unique structure identifier formatted as `<source>:<source_id>`. |
 | `sequence_id` | Identifier shared by records with the same sequence. |
 | `sequence` | RNA sequence. |
 | `secondary_structure` | Structure in dot-bracket notation. |

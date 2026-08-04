@@ -13,8 +13,8 @@ from tasks.utils import load_registry
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data" / "2d" / "chemical_mapping"
-MAPPING_FILE = DATA_DIR / "rnagym_map.parquet"
-PSEUDOBASE_FILE = DATA_DIR / "rnagym_pb.parquet"
+MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
+STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
 SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
 PREDICTION_DIR = DATA_DIR / "predictions"
 LEADERBOARD_FILE = REPO_DIR / "leaderboard" / "2d" / "leaderboard.csv"
@@ -128,7 +128,7 @@ def score_mapping(
     """Score one model against all chemical mapping profiles."""
     expected_profiles = profiles.height
     predictions = pl.read_parquet(
-        prediction_files(model, "chemical_mapping"),
+        prediction_files(model, "mapping"),
         columns=["sequence_id", "probabilities"],
     )
     if predictions["sequence_id"].n_unique() != predictions.height:
@@ -168,7 +168,7 @@ def score_mapping(
         pl.concat(scores)
         .with_columns(
             pl.lit(model).alias("model"),
-            pl.lit("chemical_mapping").alias("dataset"),
+            pl.lit("mapping").alias("dataset"),
             pl.lit("unpaired_probability").alias("method"),
             pl.lit("spearman").alias("metric"),
             pl.col("modifier").alias("modality"),
@@ -189,28 +189,23 @@ def score_mapping(
     )
 
 
-def score_pseudobase(model: str, registry: pl.DataFrame) -> pl.DataFrame:
-    """Score one model against all PseudoBase structures."""
-    references = (
-        pl.read_parquet(PSEUDOBASE_FILE)
-        .rename({"pseudobase_ids": "uid"})
-        .join(registry, on="sequence_id")
-    )
+def score_structures(model: str, registry: pl.DataFrame) -> pl.DataFrame:
+    """Score one model against all discrete structures."""
+    references = pl.read_parquet(STRUCTURE_FILE).join(registry, on="sequence_id")
     predictions = pl.read_parquet(
-        prediction_files(model, "pseudobase"),
+        prediction_files(model, "2d"),
         columns=["sequence_id", "structures"],
     )
+    expected_sequences = references["sequence_id"].n_unique()
     if (
-        predictions.height != references.height
-        or predictions["sequence_id"].n_unique() != references.height
+        predictions.height != expected_sequences
+        or predictions["sequence_id"].n_unique() != expected_sequences
     ):
-        raise RuntimeError(
-            f"Incomplete or duplicate PseudoBase predictions for {model}"
-        )
+        raise RuntimeError(f"Incomplete or duplicate 2D predictions for {model}")
 
     scores = references.join(predictions, on="sequence_id")
     if scores.height != references.height:
-        raise RuntimeError(f"Incomplete PseudoBase predictions for {model}")
+        raise RuntimeError(f"Incomplete 2D predictions for {model}")
 
     return (
         scores.explode("structures", empty_as_null=True)
@@ -225,8 +220,8 @@ def score_pseudobase(model: str, registry: pl.DataFrame) -> pl.DataFrame:
             )
             .alias("score"),
             pl.lit(model).alias("model"),
-            pl.lit("pseudobase").alias("dataset"),
-            pl.lit("pseudobase").alias("modality"),
+            pl.lit("2d").alias("dataset"),
+            pl.col("uid").str.split(":").list.first().alias("modality"),
             pl.lit("f1").alias("metric"),
         )
         .select(
@@ -268,7 +263,7 @@ def score_model(
     return pl.concat(
         [
             score_mapping(model, profiles, registry),
-            score_pseudobase(model, registry),
+            score_structures(model, registry),
         ]
     )
 
@@ -290,7 +285,7 @@ def main() -> None:
         pl.concat(summaries)
         .with_columns(
             (
-                (pl.col("dataset") == "chemical_mapping")
+                (pl.col("dataset") == "mapping")
                 & pl.col("model").is_in(TRAINING_OVERLAP)
             ).alias("training_overlap"),
             pl.col("score")

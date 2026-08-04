@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Collate the RNAGym chemical mapping and PseudoBase data."""
+"""Collate RNAGym chemical mapping and discrete structure data."""
 
 import os
 import random
@@ -16,9 +16,9 @@ from tasks.utils import SEQUENCE_SCHEMA, add_sequences, load_registry
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
 INPUT_DIR = DATA_DIR / "raw_data"
-OUTPUT_FILE = DATA_DIR / "rnagym_map.parquet"
+MAPPING_OUTPUT_FILE = DATA_DIR / "rnagym_mapping.parquet"
 PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"
-PSEUDOBASE_OUTPUT_FILE = DATA_DIR / "rnagym_pb.parquet"
+STRUCTURE_OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
 SEQUENCE_OUTPUT_FILE = DATA_DIR / "rnagym_sequences.parquet"
 
 MIN_SEQUENCE_IDENTITY = 0.40
@@ -142,11 +142,15 @@ def get_pseudobase_structures() -> pl.DataFrame:
         & pl.col("sequence").str.contains(r"^[ACGU]+$")
         & pl.col("secondary_structure").str.contains(r"^[.()\[\]\{\}]+$")
     )
-    structures = filtered.group_by(
-        ["sequence", "secondary_structure"], maintain_order=True
-    ).agg(
-        # Retain every ID when multiple entries have the same sequence and structure
-        pl.col("pseudobase_id").str.join("|").alias("pseudobase_ids")
+    structures = (
+        filtered.group_by(["sequence", "secondary_structure"], maintain_order=True)
+        .agg(
+            # Retain every ID when multiple entries have the same sequence and structure
+            pl.col("pseudobase_id").str.join("|").alias("source_id")
+        )
+        .with_columns(
+            pl.concat_str(pl.lit("pseudobase:"), "source_id").alias("uid"),
+        )
     )
 
     print(
@@ -154,7 +158,7 @@ def get_pseudobase_structures() -> pl.DataFrame:
         f"{structures.height} unique"
     )
     return structures.select(
-        "pseudobase_ids",
+        "uid",
         "sequence",
         "secondary_structure",
     )
@@ -237,7 +241,7 @@ def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
 
 def assign_folds(assignments: pl.DataFrame, modalities: pl.DataFrame) -> pl.DataFrame:
     """Balance cluster folds across modality signatures."""
-    # Label each cluster by its modalities, for example chemical_mapping+pseudobase
+    # Label each cluster by its modalities, for example mapping+pseudobase
     signatures = (
         modalities.join(assignments, on="sequence_id")
         .group_by("cluster_rep")
@@ -275,14 +279,14 @@ def get_modality_sequences(
     )
 
 
-def print_summary(data: pl.DataFrame) -> None:
+def print_summary(data: pl.DataFrame, path: Path) -> None:
     """Print output row and sequence counts."""
-    print(f"Wrote {data.height:,} rows to {OUTPUT_FILE}")
+    print(f"Wrote {data.height:,} rows to {path}")
     print(f"Unique sequences: {data['sequence'].n_unique():,}")
 
 
 def main() -> None:
-    """Collate and write the chemical mapping and PseudoBase datasets."""
+    """Collate and write chemical mapping and discrete structure datasets."""
     filtered = get_source_profiles()
     pseudobase = get_pseudobase_structures()
     registry = load_registry(SEQUENCE_OUTPUT_FILE, required=False).select(
@@ -291,7 +295,7 @@ def main() -> None:
     registry = add_sequences(registry, filtered["sequence"])
     registry = add_sequences(registry, pseudobase["sequence"])
 
-    mapping_sequences = get_modality_sequences(filtered, registry, "chemical_mapping")
+    mapping_sequences = get_modality_sequences(filtered, registry, "mapping")
     pseudobase_sequences = get_modality_sequences(pseudobase, registry, "pseudobase")
     modalities = pl.concat([mapping_sequences, pseudobase_sequences]).select(
         "sequence_id", "modality"
@@ -326,24 +330,22 @@ def main() -> None:
         how="left",
     ).select("uid", "sequence_id", pl.exclude("uid", "sequence_id"))
 
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    filtered.write_parquet(OUTPUT_FILE, compression="zstd", statistics=True)
-    print_summary(filtered)
+    MAPPING_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    filtered.write_parquet(MAPPING_OUTPUT_FILE, compression="zstd", statistics=True)
+    print_summary(filtered, MAPPING_OUTPUT_FILE)
 
     pseudobase = pseudobase.join(
         pseudobase_sequences.select("sequence_id", "sequence"),
         on="sequence",
         how="left",
     ).select(
-        "pseudobase_ids",
+        "uid",
         "sequence_id",
         "sequence",
         "secondary_structure",
     )
-    pseudobase.write_parquet(
-        PSEUDOBASE_OUTPUT_FILE, compression="zstd", statistics=True
-    )
-    print(f"Wrote {pseudobase.height:,} rows to {PSEUDOBASE_OUTPUT_FILE}")
+    pseudobase.write_parquet(STRUCTURE_OUTPUT_FILE, compression="zstd", statistics=True)
+    print(f"Wrote {pseudobase.height:,} rows to {STRUCTURE_OUTPUT_FILE}")
 
     registry.write_parquet(SEQUENCE_OUTPUT_FILE, compression="zstd", statistics=True)
     print(f"Wrote {registry.height:,} rows to {SEQUENCE_OUTPUT_FILE}")

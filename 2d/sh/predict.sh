@@ -43,7 +43,7 @@ check_complete() {
 	done
 }
 
-for dataset in chemical_mapping pseudobase; do
+for dataset in mapping 2d; do
 	if check_complete "$dataset"; then
 		echo "Skipping $environment $dataset: all shards complete"
 		continue

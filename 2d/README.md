@@ -86,8 +86,7 @@ of zero.
 > and clip the sum to `[0, 1]` before conversion.  This leaves most residues
 > intact, but clips highly confident residues to 1.
 
-For discrete structure prediction like those from PseudoBase or the PDB, each
-model's official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as
-applicable). F1 is computed between each reference structure and the
-model-decoded structure, then averaged within each sequence cluster and across
-clusters.
+For discrete structures from PseudoBase, the PDB, or bpRNA-1m, each model's
+official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as applicable). F1
+is computed between each reference structure and the model-decoded structure,
+then averaged within each sequence cluster and across clusters.

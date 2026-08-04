@@ -11,16 +11,16 @@ import polars as pl
 from tqdm.auto import tqdm
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
-INPUT_FILE = DATA_DIR / "rnagym_map.parquet"
-PSEUDOBASE_FILE = DATA_DIR / "rnagym_pb.parquet"
+MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
+STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
 OUTPUT_DIR = DATA_DIR / "predictions"
 
 
 class Dataset(Enum):
     """Prediction datasets."""
 
-    CHEMICAL_MAPPING = "chemical_mapping"
-    PSEUDOBASE = "pseudobase"
+    MAPPING = "mapping"
+    STRUCTURES = "2d"
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,10 +38,14 @@ def parse_args() -> argparse.Namespace:
 
 def load_profiles(dataset: Dataset) -> pl.DataFrame:
     """Load profiles for one dataset."""
-    if dataset is Dataset.CHEMICAL_MAPPING:
-        return pl.read_parquet(INPUT_FILE, columns=["sequence_id", "sequence"]).unique()
-    if dataset is Dataset.PSEUDOBASE:
-        return pl.read_parquet(PSEUDOBASE_FILE, columns=["sequence_id", "sequence"])
+    if dataset is Dataset.MAPPING:
+        return pl.read_parquet(
+            MAPPING_FILE, columns=["sequence_id", "sequence"]
+        ).unique()
+    if dataset is Dataset.STRUCTURES:
+        return pl.read_parquet(
+            STRUCTURE_FILE, columns=["sequence_id", "sequence"]
+        ).unique()
     raise ValueError(f"Unknown dataset: {dataset}")
 
 
