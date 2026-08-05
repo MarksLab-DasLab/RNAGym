@@ -225,14 +225,13 @@ def annotate_pdb(candidate: tuple[str, Path, str]) -> dict[str, object]:
             pairs.append(tuple(sorted((int(match[1]) - 1, int(match[2]) - 1))))
 
     partner_counts = Counter(position for pair in pairs for position in pair)
-    # Dot bracket cannot represent residues with multiple cWW partners
-    pairs = [
-        pair
-        for pair in pairs
-        if all(partner_counts[position] == 1 for position in pair)
-    ]
     if any(position + 1 not in positions for pair in pairs for position in pair):
         raise RuntimeError(f"MC-Annotate paired an unresolved residue in {pdb_file}")
+    ambiguous = {position for position, count in partner_counts.items() if count > 1}
+    conflicts = {
+        position for pair in pairs if ambiguous.intersection(pair) for position in pair
+    }
+    pairs = [pair for pair in pairs if not conflicts.intersection(pair)]
 
     contacts = np.zeros((len(sequence), len(sequence)), dtype=bool)
     for left, right in pairs:
@@ -242,7 +241,10 @@ def annotate_pdb(candidate: tuple[str, Path, str]) -> dict[str, object]:
         "uid": uid,
         "sequence": sequence,
         "secondary_structure": dot_bracket(contacts),
-        "resolved": [position in positions for position in range(1, len(sequence) + 1)],
+        "resolved": [
+            position in positions and position - 1 not in conflicts
+            for position in range(1, len(sequence) + 1)
+        ],
     }
 
 

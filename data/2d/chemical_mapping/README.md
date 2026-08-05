@@ -44,7 +44,8 @@ PDB entries are canonical RNA monomers selected from `3d/annotated_chains.csv`
 using [`Config3D`](../../../config.py). Structures contain cis
 Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
 Contacts involving residues with multiple such partners are excluded because
-dot-bracket cannot represent them.
+dot-bracket cannot represent them. All residues in these conflicting contact
+components are marked unresolved and excluded from scoring.
 
 ### `rnagym_sequences.parquet` schema
 
