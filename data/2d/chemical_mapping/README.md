@@ -3,9 +3,9 @@
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
 | `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
-| `rnagym_2d.parquet` | 358 discrete structures from PseudoBase | `uid` |
+| `rnagym_2d.parquet` | 358 PseudoBase and 2,062 PDB structures | `uid` |
 | `rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
-| `rnagym_rfams.parquet` | Rfam 15.1 hits for each registered sequence | `sequence_id` |
+| `rnagym_rfams.parquet` | Rfam hits for each registered sequence | `sequence_id` |
 
 ### `rnagym_mapping.parquet` schema
 
@@ -38,6 +38,13 @@ the highest-SNR measurement is the representative.
 | `sequence_id` | Identifier shared by records with the same sequence. |
 | `sequence` | RNA sequence. |
 | `secondary_structure` | Structure in dot-bracket notation. |
+| `resolved` | Positions resolved in the source structure and included in scoring. |
+
+PDB entries are canonical RNA monomers selected from `3d/annotated_chains.csv`
+using [`Config3D`](../../../config.py). Structures contain cis
+Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
+Contacts involving residues with multiple such partners are excluded because
+dot-bracket cannot represent them.
 
 ### `rnagym_sequences.parquet` schema
 
@@ -46,7 +53,7 @@ the highest-SNR measurement is the representative.
 | `sequence_id` | Stable identifier for an exact RNA sequence. |
 | `sequence` | RNA sequence. |
 | `cluster_rep` | `sequence_id` of the global MMseqs2 cluster representative. |
-| `fold` | Fold assignment from 0–4. |
+| `fold` | Fold assignment. |
 
 ### `rnagym_rfams.parquet` schema
 
@@ -64,9 +71,7 @@ cd 2d
 pixi run collate-2d
 ```
 
-All sequences are clustered together with MMseqs2 at 40% sequence identity and
-80% coverage. Clusters are randomly assigned to 5 distinct folds to support
-community train/test splits and cross-validation.
+Clustering and fold assignment use [`Config2D`](../../../config.py).
 
 See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 

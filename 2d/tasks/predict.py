@@ -5,15 +5,10 @@
 import argparse
 import importlib
 from enum import Enum
-from pathlib import Path
 
 import polars as pl
+from config import Config2D
 from tqdm.auto import tqdm
-
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
-MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
-STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
-OUTPUT_DIR = DATA_DIR / "predictions"
 
 
 class Dataset(Enum):
@@ -40,11 +35,11 @@ def load_profiles(dataset: Dataset) -> pl.DataFrame:
     """Load profiles for one dataset."""
     if dataset is Dataset.MAPPING:
         return pl.read_parquet(
-            MAPPING_FILE, columns=["sequence_id", "sequence"]
+            Config2D.MAPPING_FILE, columns=["sequence_id", "sequence"]
         ).unique()
     if dataset is Dataset.STRUCTURES:
         return pl.read_parquet(
-            STRUCTURE_FILE, columns=["sequence_id", "sequence"]
+            Config2D.STRUCTURE_FILE, columns=["sequence_id", "sequence"]
         ).unique()
     raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -69,7 +64,7 @@ def predict_dataset(
     num_shards: int,
 ) -> None:
     """Generate and write one dataset shard."""
-    output_dir = OUTPUT_DIR / environment / dataset.value
+    output_dir = Config2D.PREDICTION_DIR / environment / dataset.value
     output_file = output_dir / f"{shard}.parquet"
     if output_file.is_file() and output_file.stat().st_size:
         print(f"Skipping {output_file}: already exists")

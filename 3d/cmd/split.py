@@ -6,9 +6,9 @@
 
 import pandas as pd
 
-from util import Config
+from util import Config as Pipeline
 from util.analysis import add_seq_id, add_tm_id, prep_usalign
-
+from util.config import Config3D
 
 NMR_SENTINEL = 1.23456789
 
@@ -51,9 +51,8 @@ def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     )
     print(f"All RNAs: {len(df)}")
     og_cols = df.columns.tolist()
-
-    # Drop rows that failed to download
-    df = df[df["Asym. Chain ID"] != "ERROR: Failed to download"]
+    quality = df.apply(Config3D.passes_quality, axis=1)
+    monomers = df.apply(Config3D.is_monomer, axis=1)
 
     # Clean up resolution column
     df["Resolution"] = (
@@ -73,13 +72,10 @@ def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     df.columns = df.columns.str.replace("#", "no.")
 
     # Quality + Date cutoff
-    df = df.query(
-        f"Resolution <= {Config.MAX_RESOLUTION} "
-        f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING}"
-    )
+    df = df[quality]
     print(f"Quality RNAs: {len(df)}")
 
-    df = df.query(f'Published >= "{Config.TRAINING_CUTOFF}"')
+    df = df.query(f'Published >= "{Pipeline.TRAINING_CUTOFF}"')
     print(f"After cutoff RNAs: {len(df)}")
 
     # Rfam
@@ -89,21 +85,14 @@ def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     # )
 
     # Structured
-    df = df.query(f"{Config.MIN_L} <= L")
-    is_monomer = (
-        f"`% covered (any polymer)` <= {Config.MAX_PCT_COVER_MONOMER} "
-        f"and `Self Structured` == True "
-        # NOTE(MCA): We use L here to avoid including the lengths of other
-        #   polymers that will not be part of the prediction.
-        f"and L <= {Config.MAX_N}"
-    )
-    mon_df = df.query(is_monomer)
+    df = df.query(f"{Config3D.MIN_LENGTH} <= L")
+    mon_df = df[monomers.loc[df.index]]
     print(f"Monomers: {len(mon_df)}")
     is_multimer = (
-        f"`% covered (any polymer)` > {Config.MAX_PCT_COVER_MONOMER} "
+        f"`% covered (any polymer)` > {Config3D.MAX_POLYMER_COVERAGE} "
         # NOTE(MCA): Here, we use N because the other polymer chains will be
         #   included as part of the prediction.
-        f"and N <= {Config.MAX_N}"
+        f"and N <= {Config3D.MAX_LENGTH}"
     )
     mul_df = df.query(is_multimer)
     print(f"Multimers: {len(mul_df)}")
@@ -152,7 +141,7 @@ def main():
         for rfam, fam_group in df.groupby("Rfam"):
             # Keep top N sequence clusters per Rfam, or all sequence clusters
             # with no Rfam
-            n = len(fam_group) if rfam == "" else Config.TOP_N
+            n = len(fam_group) if rfam == "" else Pipeline.TOP_N
             top_n = fam_group.groupby("Sequence Cluster").first().reset_index().head(n)
             filtered_rows.append(top_n)
 
@@ -178,9 +167,7 @@ def main():
         na_values=[""],
         low_memory=False,
     )
-    all_chains_df = all_chains_df[
-        all_chains_df["Asym. Chain ID"] != "ERROR: Failed to download"
-    ]
+    quality = all_chains_df.apply(Config3D.passes_quality, axis=1)
     all_chains_df["Resolution"] = (
         all_chains_df["Resolution"]
         .str.split(",")
@@ -194,12 +181,11 @@ def main():
     )
 
     # Apply quality filters and date filter for TRAINING (before cutoff)
-    train_df = all_chains_df.query(
-        f"Resolution <= {Config.MAX_RESOLUTION} "
-        f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING} "
-        f"and L >= {Config.MIN_L} "
-        f'and Published < "{Config.TRAINING_CUTOFF}"'
-    )
+    train_df = all_chains_df[
+        quality
+        & (all_chains_df["L"] >= Config3D.MIN_LENGTH)
+        & (all_chains_df["Published"] < Pipeline.TRAINING_CUTOFF)
+    ]
 
     # Remove test set chains and deduplicate by sequence
     id_tuples = zip(train_df["PDB ID"], train_df["Asym. Chain ID"])
@@ -216,10 +202,10 @@ def main():
 
     # Count monomers and multimers
     train_mon = train_df[
-        train_df["% covered (any polymer)"] <= Config.MAX_PCT_COVER_MONOMER
+        train_df["% covered (any polymer)"] <= Config3D.MAX_POLYMER_COVERAGE
     ]
     train_mul = train_df[
-        train_df["% covered (any polymer)"] > Config.MAX_PCT_COVER_MONOMER
+        train_df["% covered (any polymer)"] > Config3D.MAX_POLYMER_COVERAGE
     ]
     print(f"Training set: {len(train_mon)} monomers, {len(train_mul)} multimers")
 
@@ -261,14 +247,14 @@ def main():
         debug_df(df)
         df.columns = df.columns.str.replace("no.", "#")
         target_cols = og_cols
-        for bl_name in Config.BASELINES.keys():
+        for bl_name in Pipeline.BASELINES.keys():
             new_col = f"{bl_name.upper()} Sequence Homolog"
             target_cols += [
                 new_col,
                 f"{new_col} Date",
                 f"{new_col} %id",
             ]
-        for bl_name in Config.BASELINES.keys():
+        for bl_name in Pipeline.BASELINES.keys():
             new_col = f"{bl_name.upper()} TM Homolog"
             target_cols += [
                 new_col,
@@ -281,8 +267,8 @@ def main():
         df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(fname, index=False)
         print("")
 
-    write_to_csv(mon_df, Config.MONOMER_CSV)
-    write_to_csv(mul_df, Config.MULTIMER_CSV)
+    write_to_csv(mon_df, Pipeline.MONOMER_CSV)
+    write_to_csv(mul_df, Pipeline.MULTIMER_CSV)
 
 
 if __name__ == "__main__":

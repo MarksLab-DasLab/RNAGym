@@ -4,30 +4,25 @@
 
 import os
 import random
+import re
 import shlex
 import subprocess
 import tempfile
+from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import polars as pl
+from config import Config2D, Config3D
 from tqdm.auto import tqdm
 
+from models.utils import dot_bracket
 from tasks.utils import SEQUENCE_SCHEMA, add_sequences, load_registry
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "2d" / "chemical_mapping"
-INPUT_DIR = DATA_DIR / "raw_data"
-MAPPING_OUTPUT_FILE = DATA_DIR / "rnagym_mapping.parquet"
-PSEUDOBASE_FILE = INPUT_DIR / "pseudobase.csv"
-STRUCTURE_OUTPUT_FILE = DATA_DIR / "rnagym_2d.parquet"
-SEQUENCE_OUTPUT_FILE = DATA_DIR / "rnagym_sequences.parquet"
-
-MIN_SEQUENCE_IDENTITY = 0.40
-MIN_COVERAGE = 0.80
-COVERAGE_MODE = 0  # Require coverage of both sequences
-CLUSTER_MODE = 0  # Greedy set-cover clustering
-NUM_FOLDS = 5
-RANDOM_SEED = 42
-MMSEQS_THREADS = 1  # Greedy clustering is non-deterministic across threads
+CWW_PATTERN = re.compile(
+    r"^A(\d+)-A(\d+) : \w+-\w+ Ww/Ww.*pairing "
+    r"(?:parallel|antiparallel) cis"
+)
 
 SOURCES = {
     **{f"RMDB_dataset_{i}.parquet": "in_vitro" for i in range(1, 10)},
@@ -52,7 +47,7 @@ GROUP_COLUMNS = ["experiment_series", *CONDITION_COLUMNS, "context"]
 
 def load_source(filename: str, context: str) -> pl.LazyFrame:
     """Load and normalize one chemical mapping source."""
-    path = INPUT_DIR / filename
+    path = Config2D.RAW_DIR / filename
     return pl.scan_parquet(path).select(
         pl.col("seqID", *CONDITION_COLUMNS).cast(pl.String, strict=False),
         # Raw Parquets store numeric vectors as bracketed comma-separated strings
@@ -70,7 +65,9 @@ def load_source(filename: str, context: str) -> pl.LazyFrame:
 
 def get_source_profiles() -> pl.DataFrame:
     """Keep one representative and its repeats per experiment and condition."""
-    missing = [filename for filename in SOURCES if not (INPUT_DIR / filename).is_file()]
+    missing = [
+        filename for filename in SOURCES if not (Config2D.RAW_DIR / filename).is_file()
+    ]
     if missing:
         raise FileNotFoundError(f"Missing source files: {', '.join(missing)}")
 
@@ -129,10 +126,10 @@ def get_source_profiles() -> pl.DataFrame:
 
 def get_pseudobase_structures() -> pl.DataFrame:
     """Filter and deduplicate the PseudoBase source entries."""
-    if not PSEUDOBASE_FILE.is_file():
-        raise FileNotFoundError(f"Missing source file: {PSEUDOBASE_FILE.name}")
+    if not Config2D.PSEUDOBASE_FILE.is_file():
+        raise FileNotFoundError(f"Missing source file: {Config2D.PSEUDOBASE_FILE.name}")
 
-    source = pl.read_csv(PSEUDOBASE_FILE).with_columns(
+    source = pl.read_csv(Config2D.PSEUDOBASE_FILE).with_columns(
         # PseudoBase uses ":" instead of "." for unpaired bases
         pl.col("bracket_view").str.replace_all(":", ".").alias("secondary_structure")
     )
@@ -161,6 +158,101 @@ def get_pseudobase_structures() -> pl.DataFrame:
         "uid",
         "sequence",
         "secondary_structure",
+        pl.col("sequence")
+        .map_elements(lambda sequence: [True] * len(sequence), pl.List(pl.Boolean))
+        .alias("resolved"),
+    )
+
+
+def is_pdb_candidate(row: dict[str, str]) -> bool:
+    """Apply the 3D monomer and quality filters to one PDB chain."""
+    return Config3D.is_monomer(row) and all(
+        base in "ACGU" for base in row["Sequence (unmod.)"]
+    )
+
+
+def get_pdb_candidates() -> list[tuple[str, Path, str]]:
+    """Select self-structured RNA monomers from the annotated PDB chains."""
+    source = pl.read_csv(
+        Config3D.ANNOTATED_CHAINS_FILE, infer_schema_length=None
+    ).to_dicts()
+    candidates = []
+    for row in source:
+        if not is_pdb_candidate(row):
+            continue
+        pdb_id = row["PDB ID"].lower()
+        asym_id = row["Asym. Chain ID"]
+        candidates.append(
+            (
+                f"pdb:{pdb_id}_{asym_id}",
+                Config3D.OUT_DIR / pdb_id / asym_id / f"{asym_id}.pdb",
+                row["Sequence (unmod.)"],
+            )
+        )
+    candidates.sort()
+    if len({uid for uid, _, _ in candidates}) != len(candidates):
+        raise RuntimeError("PDB chain identifiers must be unique")
+    print(f"PDB: {len(source):,} source chains -> {len(candidates):,} monomers")
+    return candidates
+
+
+def annotate_pdb(candidate: tuple[str, Path, str]) -> dict[str, object]:
+    """Convert one cached PDB chain to resolved positions and cWW pairs."""
+    uid, pdb_file, sequence = candidate
+    if not pdb_file.is_file():
+        raise FileNotFoundError(f"Missing cached PDB chain: {pdb_file}")
+
+    annotation_file = pdb_file.with_suffix(".pdb.mcout")
+    if not annotation_file.is_file():
+        # Cache only complete MC-Annotate output
+        temporary = annotation_file.with_name(f"{annotation_file.name}.tmp")
+        with temporary.open("w") as output:
+            subprocess.run([Config2D.MC_ANNOTATE, pdb_file], stdout=output, check=True)
+        temporary.replace(annotation_file)
+
+    positions = {
+        int(line[22:26])
+        for line in pdb_file.read_text().splitlines()
+        if line.startswith(("ATOM  ", "HETATM"))
+    }
+    if not positions or min(positions) < 1 or max(positions) > len(sequence):
+        raise RuntimeError(f"Invalid residue numbering in {pdb_file}")
+
+    pairs = []
+    for line in annotation_file.read_text().splitlines():
+        match = CWW_PATTERN.match(line)
+        if match:
+            pairs.append(tuple(sorted((int(match[1]) - 1, int(match[2]) - 1))))
+
+    partner_counts = Counter(position for pair in pairs for position in pair)
+    # Dot bracket cannot represent residues with multiple cWW partners
+    pairs = [
+        pair
+        for pair in pairs
+        if all(partner_counts[position] == 1 for position in pair)
+    ]
+    if any(position + 1 not in positions for pair in pairs for position in pair):
+        raise RuntimeError(f"MC-Annotate paired an unresolved residue in {pdb_file}")
+
+    contacts = np.zeros((len(sequence), len(sequence)), dtype=bool)
+    for left, right in pairs:
+        contacts[left, right] = True
+
+    return {
+        "uid": uid,
+        "sequence": sequence,
+        "secondary_structure": dot_bracket(contacts),
+        "resolved": [position in positions for position in range(1, len(sequence) + 1)],
+    }
+
+
+def get_pdb_structures() -> pl.DataFrame:
+    """Extract PDB secondary structures with RNA-Puzzles MC-Annotate."""
+    if not Config2D.MC_ANNOTATE.is_file():
+        raise FileNotFoundError(f"Missing MC-Annotate: {Config2D.MC_ANNOTATE}")
+    return pl.DataFrame(
+        annotate_pdb(candidate)
+        for candidate in tqdm(get_pdb_candidates(), desc="Annotating PDB chains")
     )
 
 
@@ -188,9 +280,9 @@ def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
 
         command = (
             f"mmseqs easy-cluster {fasta_path} {cluster_prefix} {mmseqs_tmp} "
-            f"--min-seq-id {MIN_SEQUENCE_IDENTITY} -c {MIN_COVERAGE} "
-            f"--cov-mode {COVERAGE_MODE} --cluster-mode {CLUSTER_MODE} "
-            f"--threads {MMSEQS_THREADS} -v 3"
+            f"--min-seq-id {Config2D.MIN_SEQUENCE_IDENTITY} -c {Config2D.MIN_COVERAGE} "
+            f"--cov-mode {Config2D.COVERAGE_MODE} --cluster-mode {Config2D.CLUSTER_MODE} "
+            f"--threads {Config2D.MMSEQS_THREADS} -v 3"
         )
 
         # Run the MMseqs2 command, capturing only progress bars and descriptors
@@ -248,15 +340,15 @@ def assign_folds(assignments: pl.DataFrame, modalities: pl.DataFrame) -> pl.Data
         .agg(pl.col("modality").unique().sort().str.join("+").alias("signature"))
         .sort(["signature", "cluster_rep"])
     )
-    rng = random.Random(RANDOM_SEED)
+    rng = random.Random(Config2D.RANDOM_SEED)
     rows = []
     # Shuffle and distribute each signature evenly across folds
     for group in signatures.partition_by("signature", maintain_order=True):
         cluster_reps = group["cluster_rep"].to_list()
         rng.shuffle(cluster_reps)
-        offset = rng.randrange(NUM_FOLDS)
+        offset = rng.randrange(Config2D.NUM_FOLDS)
         rows.extend(
-            (cluster_rep, (i + offset) % NUM_FOLDS)
+            (cluster_rep, (i + offset) % Config2D.NUM_FOLDS)
             for i, cluster_rep in enumerate(cluster_reps)
         )
     return pl.DataFrame(
@@ -289,17 +381,20 @@ def main() -> None:
     """Collate and write chemical mapping and discrete structure datasets."""
     filtered = get_source_profiles()
     pseudobase = get_pseudobase_structures()
-    registry = load_registry(SEQUENCE_OUTPUT_FILE, required=False).select(
+    pdb = get_pdb_structures()
+    structures = pl.concat([pseudobase, pdb])
+    registry = load_registry(Config2D.SEQUENCE_FILE, required=False).select(
         SEQUENCE_SCHEMA.names()
     )
     registry = add_sequences(registry, filtered["sequence"])
-    registry = add_sequences(registry, pseudobase["sequence"])
+    registry = add_sequences(registry, structures["sequence"])
 
-    mapping_sequences = get_modality_sequences(filtered, registry, "mapping")
-    pseudobase_sequences = get_modality_sequences(pseudobase, registry, "pseudobase")
-    modalities = pl.concat([mapping_sequences, pseudobase_sequences]).select(
-        "sequence_id", "modality"
-    )
+    datasets = {"mapping": filtered, "pseudobase": pseudobase, "pdb": pdb}
+    sequence_tables = {
+        name: get_modality_sequences(data, registry, name)
+        for name, data in datasets.items()
+    }
+    modalities = pl.concat(sequence_tables.values()).select("sequence_id", "modality")
     if modalities["sequence_id"].n_unique() != registry.height:
         raise RuntimeError("Every registered sequence must belong to a dataset")
 
@@ -325,17 +420,17 @@ def main() -> None:
     print(fold_counts)
 
     filtered = filtered.join(
-        mapping_sequences.select("sequence_id", "sequence"),
+        sequence_tables["mapping"].select("sequence_id", "sequence"),
         on="sequence",
         how="left",
     ).select("uid", "sequence_id", pl.exclude("uid", "sequence_id"))
 
-    MAPPING_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    filtered.write_parquet(MAPPING_OUTPUT_FILE, compression="zstd", statistics=True)
-    print_summary(filtered, MAPPING_OUTPUT_FILE)
+    Config2D.MAPPING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    filtered.write_parquet(Config2D.MAPPING_FILE, compression="zstd", statistics=True)
+    print_summary(filtered, Config2D.MAPPING_FILE)
 
-    pseudobase = pseudobase.join(
-        pseudobase_sequences.select("sequence_id", "sequence"),
+    structures = structures.join(
+        registry.select("sequence_id", "sequence"),
         on="sequence",
         how="left",
     ).select(
@@ -343,12 +438,15 @@ def main() -> None:
         "sequence_id",
         "sequence",
         "secondary_structure",
+        "resolved",
     )
-    pseudobase.write_parquet(STRUCTURE_OUTPUT_FILE, compression="zstd", statistics=True)
-    print(f"Wrote {pseudobase.height:,} rows to {STRUCTURE_OUTPUT_FILE}")
+    structures.write_parquet(
+        Config2D.STRUCTURE_FILE, compression="zstd", statistics=True
+    )
+    print(f"Wrote {structures.height:,} rows to {Config2D.STRUCTURE_FILE}")
 
-    registry.write_parquet(SEQUENCE_OUTPUT_FILE, compression="zstd", statistics=True)
-    print(f"Wrote {registry.height:,} rows to {SEQUENCE_OUTPUT_FILE}")
+    registry.write_parquet(Config2D.SEQUENCE_FILE, compression="zstd", statistics=True)
+    print(f"Wrote {registry.height:,} rows to {Config2D.SEQUENCE_FILE}")
 
 
 if __name__ == "__main__":

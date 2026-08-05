@@ -19,6 +19,11 @@ eternafold)
 	revision=702d3e485e768a6f2355d5d065e1241b04618e61
 	destination="$PROJECT_ROOT/.pixi/model-sources/EternaFold"
 	;;
+rna-assessment)
+	url=https://github.com/RNA-Puzzles/RNA_assessment.git
+	revision=d46f0472e7d52629283bb046a9c8f5d36b35f685
+	destination="$PROJECT_ROOT/.pixi/model-sources/RNA_assessment"
+	;;
 *)
 	echo "unknown source: $1" >&2
 	exit 2
@@ -35,6 +40,10 @@ git -C "$destination" remote set-url origin "$url"
 git -C "$destination" fetch origin "$revision"
 git -C "$destination" checkout --detach "$revision"
 test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
+
+if [[ $1 == rna-assessment ]]; then
+	chmod +x "$destination/MC-Annotate"
+fi
 
 if [[ -f "$destination/.gitmodules" ]]; then
 	git -C "$destination" submodule update --init --recursive

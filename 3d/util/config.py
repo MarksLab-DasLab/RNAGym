@@ -2,11 +2,15 @@
 
 import itertools
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import pandas as pd
+from config import Config3D
 from rna3db.tabular import TabularOutput, read_tbls_from_dir
 
 ###############################################################################
@@ -80,19 +84,12 @@ RCSB_FULL_URL = "https://files.rcsb.org/download/{pdb_id}.cif.gz"
 RCSB_FULL_FILE = PDB_OUT_PREFIX + "/{pdb_id}-full.cif"
 
 # --- Splitting ---
-MAX_RESOLUTION = 5.0
 RFAM_GOOD_CUTOFF = 1.00  # max E-value to be considered "good" Rfam hit
 RFAM_BAD_CUTOFF = 1.00  # min. E-value to be considered "bad" Rfam hit
-MAX_FRAC_MISSING = 0.25  # Max fraction of missing residues to consider
 MIN_RFAM_OBSERVED = 0.00  # Min. fraction of the Rfam hit observed in the chain
 # ALLOWABLE_COFACTORS = {"BA", "CA", "CL", "F", "FE", "K", "MG", "NI", "PO4", "SO4", "ZN"}
 MAX_CLUSTER_E_VALUE = 1.0
-MAX_PCT_COVER_MONOMER = 0.33
 TOP_N = 3  # The top # of sequence clusters to select from each Rfam
-# Minimum length should be double the annotation limit to ensure proper
-# TM_train calculations.
-MIN_L = RNA_MIN_NT * 2
-MAX_N = 2000  # Multimers up to this many AA/NA residues will be considered
 MONOMER_CSV = Path("monomer.csv").resolve()
 MULTIMER_CSV = Path("complex.csv").resolve()
 MONOMER_ANALYZED_CSV = Path("out/monomer.analyzed.csv").resolve()

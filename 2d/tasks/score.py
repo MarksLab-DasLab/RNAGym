@@ -6,20 +6,11 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from config import Config2D
 from scipy.stats import rankdata
 from tqdm.auto import tqdm
 
 from tasks.utils import load_registry
-
-REPO_DIR = Path(__file__).resolve().parents[2]
-DATA_DIR = REPO_DIR / "data" / "2d" / "chemical_mapping"
-MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
-STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
-SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
-PREDICTION_DIR = DATA_DIR / "predictions"
-LEADERBOARD_FILE = REPO_DIR / "leaderboard" / "2d" / "leaderboard.csv"
-BATCH_SIZE = 8192
-TRAINING_OVERLAP = {"eternafold", "ribonanzanet"}
 
 OPENERS = "([{<ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 CLOSERS = ")]}>abcdefghijklmnopqrstuvwxyz"
@@ -29,7 +20,7 @@ PAIRS = dict(zip(OPENERS, CLOSERS))
 def prediction_files(model: str, dataset: str) -> list[Path]:
     """Return the prediction shards for one model and dataset."""
     files = sorted(
-        (PREDICTION_DIR / model / dataset).glob("*.parquet"),
+        (Config2D.PREDICTION_DIR / model / dataset).glob("*.parquet"),
         key=lambda path: int(path.stem),
     )
     if not files:
@@ -59,12 +50,23 @@ def parse_pairs(structure: str) -> set[tuple[int, int]]:
     return pairs
 
 
-def structure_f1(reference: str, prediction: str) -> float:
+def structure_f1(
+    reference: str, prediction: str, resolved: list[bool] | None = None
+) -> float:
     """Calculate base-pair F1 between two dot-bracket structures."""
     if len(reference) != len(prediction):
         raise ValueError("Reference and predicted structures have different lengths")
     reference_pairs = parse_pairs(reference)
     predicted_pairs = parse_pairs(prediction)
+    if resolved is not None:
+        if len(resolved) != len(reference):
+            raise ValueError("Resolved-position mask has the wrong length")
+        reference_pairs = {
+            pair for pair in reference_pairs if resolved[pair[0]] and resolved[pair[1]]
+        }
+        predicted_pairs = {
+            pair for pair in predicted_pairs if resolved[pair[0]] and resolved[pair[1]]
+        }
     total_pairs = len(reference_pairs) + len(predicted_pairs)
     if not total_pairs:
         return 1.0
@@ -74,14 +76,16 @@ def structure_f1(reference: str, prediction: str) -> float:
 def load_mapping() -> pl.DataFrame:
     """Load chemical mapping profiles."""
     return pl.read_parquet(
-        MAPPING_FILE,
+        Config2D.MAPPING_FILE,
         columns=["uid", "sequence_id", "sequence", "modifier", "reactivity"],
     )
 
 
 def load_assignments() -> pl.DataFrame:
     """Load sequence cluster and fold assignments."""
-    return load_registry(SEQUENCE_FILE).select("sequence_id", "cluster_rep", "fold")
+    return load_registry(Config2D.SEQUENCE_FILE).select(
+        "sequence_id", "cluster_rep", "fold"
+    )
 
 
 def spearman_rows(reference: np.ndarray, prediction: np.ndarray) -> np.ndarray:
@@ -155,7 +159,7 @@ def score_mapping(
         unit="profiles",
     ) as progress:
         for (modifier, length), group in profiles.group_by("modifier", "length"):
-            for batch in group.iter_slices(BATCH_SIZE):
+            for batch in group.iter_slices(Config2D.SCORE_BATCH_SIZE):
                 scores.append(
                     batch.select(
                         "uid", "modifier", "sequence_id", "cluster_rep", "fold"
@@ -191,7 +195,9 @@ def score_mapping(
 
 def score_structures(model: str, registry: pl.DataFrame) -> pl.DataFrame:
     """Score one model against all discrete structures."""
-    references = pl.read_parquet(STRUCTURE_FILE).join(registry, on="sequence_id")
+    references = pl.read_parquet(Config2D.STRUCTURE_FILE).join(
+        registry, on="sequence_id"
+    )
     predictions = pl.read_parquet(
         prediction_files(model, "2d"),
         columns=["sequence_id", "structures"],
@@ -211,10 +217,10 @@ def score_structures(model: str, registry: pl.DataFrame) -> pl.DataFrame:
         scores.explode("structures", empty_as_null=True)
         .unnest("structures")
         .with_columns(
-            pl.struct("secondary_structure", "dot_bracket")
+            pl.struct("secondary_structure", "dot_bracket", "resolved")
             .map_elements(
                 lambda row: structure_f1(
-                    row["secondary_structure"], row["dot_bracket"]
+                    row["secondary_structure"], row["dot_bracket"], row["resolved"]
                 ),
                 return_dtype=pl.Float64,
             )
@@ -270,9 +276,13 @@ def score_model(
 
 def main() -> None:
     """Score every model and write the leaderboard."""
-    models = sorted(path.name for path in PREDICTION_DIR.iterdir() if path.is_dir())
+    models = sorted(
+        path.name for path in Config2D.PREDICTION_DIR.iterdir() if path.is_dir()
+    )
     if not models:
-        raise FileNotFoundError(f"No model predictions found in {PREDICTION_DIR}")
+        raise FileNotFoundError(
+            f"No model predictions found in {Config2D.PREDICTION_DIR}"
+        )
 
     profiles = load_mapping()
     registry = load_assignments()
@@ -286,7 +296,7 @@ def main() -> None:
         .with_columns(
             (
                 (pl.col("dataset") == "mapping")
-                & pl.col("model").is_in(TRAINING_OVERLAP)
+                & pl.col("model").is_in(Config2D.TRAINING_OVERLAP)
             ).alias("training_overlap"),
             pl.col("score")
             .rank("dense", descending=True)
@@ -314,12 +324,12 @@ def main() -> None:
         .otherwise(pl.col("model"))
         .alias("model")
     )
-    LEADERBOARD_FILE.parent.mkdir(parents=True, exist_ok=True)
-    leaderboard.write_csv(LEADERBOARD_FILE)
+    Config2D.LEADERBOARD_FILE.parent.mkdir(parents=True, exist_ok=True)
+    leaderboard.write_csv(Config2D.LEADERBOARD_FILE)
 
     with pl.Config(tbl_rows=-1, tbl_cols=-1):
         print(leaderboard.drop("training_overlap"))
-    print(f"Wrote leaderboard to {LEADERBOARD_FILE}")
+    print(f"Wrote leaderboard to {Config2D.LEADERBOARD_FILE}")
     print("* Model training data overlap the chemical mapping benchmark")
 
 
