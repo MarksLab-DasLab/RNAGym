@@ -77,7 +77,7 @@ rank,model,dataset,modality,method,metric,score,clusters,samples,training_overla
 4,vienna,mapping,deg_50C,unpaired_probability,spearman,0.39337759401324296,1409,2600,false
 5,rna-fm,mapping,deg_50C,unpaired_probability,spearman,0.37764657895066905,1409,2600,false
 6,ufold,mapping,deg_50C,unpaired_probability,spearman,0.342071063224964,1409,2600,false
-7,ribonanzanet*,mapping,deg_50C,unpaired_probability,spearman,0.32296926227516004,1409,2600,true
+7,ribonanzanet*,mapping,deg_50C,unpaired_probability,spearman,0.3229692622751601,1409,2600,true
 8,mxfold2,mapping,deg_50C,unpaired_probability,spearman,0.2976853710450366,1409,2600,false
 1,eternafold*,mapping,deg_Mg_50C,unpaired_probability,spearman,0.5037161801976693,2323,5328,true
 2,contrafold,mapping,deg_Mg_50C,unpaired_probability,spearman,0.4922886723734735,2323,5328,false
@@ -85,7 +85,7 @@ rank,model,dataset,modality,method,metric,score,clusters,samples,training_overla
 4,vienna,mapping,deg_Mg_50C,unpaired_probability,spearman,0.44893911172936524,2323,5328,false
 5,rna-fm,mapping,deg_Mg_50C,unpaired_probability,spearman,0.401768358970523,2323,5328,false
 6,ribonanzanet*,mapping,deg_Mg_50C,unpaired_probability,spearman,0.37025224540189605,2323,5328,true
-7,ufold,mapping,deg_Mg_50C,unpaired_probability,spearman,0.3681563329537501,2323,5328,false
+7,ufold,mapping,deg_Mg_50C,unpaired_probability,spearman,0.36815633295375005,2323,5328,false
 8,mxfold2,mapping,deg_Mg_50C,unpaired_probability,spearman,0.3655323470679333,2323,5328,false
 1,eternafold*,mapping,deg_Mg_pH10,unpaired_probability,spearman,0.42717827689878596,2329,5416,true
 2,contrafold,mapping,deg_Mg_pH10,unpaired_probability,spearman,0.4119072975871896,2329,5416,false
