@@ -56,6 +56,7 @@ def predict(sequence: str) -> Prediction:
     # Official decoding uses theta=0.5 and min_len_helix=1
     # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110
     structure, _ = _hungarian(pair_probabilities.copy(), theta=0.5, min_len_helix=1)
+    structure = structure.upper()
     return {
         "probabilities": probabilities.tolist(),
         "structures": [{"method": "hungarian", "dot_bracket": structure}],

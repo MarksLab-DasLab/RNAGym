@@ -51,9 +51,11 @@ def parse_pairs(structure: str) -> set[tuple[int, int]]:
 
 
 def structure_f1(
-    reference: str, prediction: str, resolved: list[bool] | None = None
+    reference: str, prediction: str | None, resolved: list[bool] | None = None
 ) -> float:
     """Calculate base-pair F1 between two dot-bracket structures."""
+    if prediction is None:
+        return 0.0
     if len(reference) != len(prediction):
         raise ValueError("Reference and predicted structures have different lengths")
     reference_pairs = parse_pairs(reference)

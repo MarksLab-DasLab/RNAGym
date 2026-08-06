@@ -18,9 +18,11 @@ taplo = "==0.10.0"
 tqdm = "==4.69.0"
 
 [activation.env]
-PYTHONPATH = "$PIXI_PROJECT_ROOT/.."
 # Should contain `Rfam-15.1/`
 RNAGYM_DATABASE_DIR = "/path/to/databases"
+
+[feature.shared.activation.env]
+PYTHONPATH = "$PIXI_PROJECT_ROOT/.."
 
 [tasks]
 fmt = "bash sh/format.sh"
@@ -183,20 +185,31 @@ test = "bash tests/test.sh mxfold2"
 predict = "bash sh/predict.sh mxfold2"
 
 [environments]
-vienna = { features = ["classical", "vienna"], no-default-feature = true }
+default = { features = ["shared"] }
+vienna = { features = [
+  "shared",
+  "classical",
+  "vienna",
+], no-default-feature = true }
 contrafold = { features = [
+  "shared",
   "classical",
   "contrafold",
 ], no-default-feature = true }
 eternafold = { features = [
+  "shared",
   "classical",
   "eternafold",
 ], no-default-feature = true }
 rnastructure = { features = [
+  "shared",
   "classical",
   "rnastructure",
 ], no-default-feature = true }
-ribonanzanet = { features = ["ribonanzanet"], no-default-feature = true }
-ufold = { features = ["ufold"], no-default-feature = true }
-rna-fm = { features = ["rna-fm"], no-default-feature = true }
-mxfold2 = { features = ["mxfold2"], no-default-feature = true }
+ribonanzanet = { features = [
+  "shared",
+  "ribonanzanet",
+], no-default-feature = true }
+ufold = { features = ["shared", "ufold"], no-default-feature = true }
+rna-fm = { features = ["shared", "rna-fm"], no-default-feature = true }
+mxfold2 = { features = ["shared", "mxfold2"], no-default-feature = true }

@@ -20,7 +20,12 @@ def predict(sequence: str) -> Prediction:
         run(f"ProbabilityPlot {partition_file} {probability_file} -t -min 0.0000000001")
         run(f"Fold {sequence_file} {mfe_file} --MFE --bracket -T 310")
         run(f"MaxExpect {partition_file} {mea_ct_file} --structures 1")
-        run(f"ct2dot {mea_ct_file} 1 {mea_file}")
+        # MaxExpect writes no CT file when it predicts no pairs
+        if mea_ct_file.is_file():
+            run(f"ct2dot {mea_ct_file} 1 {mea_file}")
+            mea = read_dot_bracket(mea_file)
+        else:
+            mea = "." * len(sequence)
 
         # Example: 1 10 2.9577 means nucleotides 1 and 10 pair with probability 10^-2.9577
         pairs = []
@@ -43,7 +48,7 @@ def predict(sequence: str) -> Prediction:
                 },
                 {
                     "method": "mea_gamma_1",
-                    "dot_bracket": read_dot_bracket(mea_file),
+                    "dot_bracket": mea,
                 },
             ],
         }

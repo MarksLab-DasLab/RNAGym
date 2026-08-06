@@ -17,7 +17,7 @@ class Structure(TypedDict):
     """Decoded structure output."""
 
     method: str
-    dot_bracket: str
+    dot_bracket: str | None
 
 
 class Prediction(TypedDict):
@@ -71,6 +71,10 @@ def sum_pair_probabilities(
 
 def dot_bracket(contact: np.ndarray) -> str:
     """Convert contacts to dot-bracket, using letter pairs beyond ()[]{}<>."""
+    contact = contact.astype(bool)
+    contact = contact | contact.T
+    if np.any(np.diag(contact)) or np.any(contact.sum(axis=0) > 1):
+        raise ValueError("Contacts are not a valid secondary structure")
     brackets = [("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")]
     brackets.extend(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"))
     structure = ["."] * len(contact)

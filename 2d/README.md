@@ -90,4 +90,4 @@ For discrete structures from PseudoBase, the PDB, or bpRNA-1m, each model's
 official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as applicable). F1
 is computed between each reference structure and the model-decoded structure,
 then averaged within each sequence cluster and across clusters. PDB pairs
-touching unresolved residues are excluded.
+touching unresolved residues are excluded. Unsupported sequences receive F1 0.

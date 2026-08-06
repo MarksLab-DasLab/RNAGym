@@ -91,7 +91,16 @@ def predict(sequence: str) -> Prediction:
 
     # Official inference decodes the postprocessed contacts at 0.5
     # https://github.com/uci-cbcl/UFold/blob/75bd9acc83826059682dfca9d3659df66b132cd1/ufold_predict.py#L182-L185
-    structure = dot_bracket(pair_probabilities > 0.5)
+    # This differs VERY SLIGHTLY from UFold by resolving competing pairs by confidence
+    candidates = np.argwhere(np.triu(pair_probabilities, k=1) > 0.5)
+    candidates = candidates[np.argsort(pair_probabilities[tuple(candidates.T)])[::-1]]
+    contacts = np.zeros_like(pair_probabilities, dtype=bool)
+    used = set()
+    for i, j in candidates:
+        if i not in used and j not in used:
+            contacts[i, j] = True
+            used.update((i, j))
+    structure = dot_bracket(contacts)
     return {
         "probabilities": probabilities.tolist(),
         "structures": [{"method": "threshold_0.5", "dot_bracket": structure}],

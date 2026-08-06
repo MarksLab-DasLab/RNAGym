@@ -70,6 +70,12 @@ def _decode(pair_probabilities: np.ndarray) -> np.ndarray:
 
 def predict(sequence: str) -> Prediction:
     """Return paired probabilities and the official postprocessed structure."""
+    # RNA-FM reserves two of its 1,024 positions for BOS/EOS
+    if len(sequence) + 2 > _model().backbone.args.max_positions:
+        return {
+            "probabilities": [float("nan")] * len(sequence),
+            "structures": [{"method": "postprocess_0.5", "dot_bracket": None}],
+        }
     pair_probabilities = _pair_probabilities(sequence)
     structure = dot_bracket(_decode(pair_probabilities))
     positions = np.arange(len(sequence))
