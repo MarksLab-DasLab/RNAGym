@@ -9,6 +9,6 @@ environment="$1"
 dataset="$2"
 
 cd "$SLURM_SUBMIT_DIR"
-pixi run -e "$environment" python -m tasks.predict "$environment" "$dataset" \
+pixi run -e "$environment" python -m rnagym.s2d.tasks.predict "$environment" "$dataset" \
 	--shard "$SLURM_ARRAY_TASK_ID" \
 	--num-shards "$SLURM_ARRAY_TASK_COUNT"

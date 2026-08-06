@@ -40,7 +40,7 @@ Orthrus | RNA Language Model | Fradkin et al. "Orthrus: Towards Evolutionary and
 
 ### Secondary structure prediction
 
-We have currently implemented the following baselines (see `./2d`).
+We have currently implemented the following baselines (see `./rnagym/s2d`).
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -81,16 +81,8 @@ fitness/
 └── model_checkpoints/
 ```
 
-For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
-```
-2d/
-├── test_data/
-├── raw_data/
-├── model_predictions/
-└── models/
-```
-The content for `models`, `model_predictions`, `raw_data` and `test_data` may all be downloaded via the links in the next section.
-The `data_folder` argument in the data and scoring scripts should be set to the location of the `2d` folder.
+For information on setting up the secondary structure benchmark, see
+[`./rnagym/s2d`](rnagym/s2d).
 
 For information on setting up the tertiary structure benchmark, see [`./3d`][1].
 

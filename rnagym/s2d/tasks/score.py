@@ -6,11 +6,12 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-from config import Config2D
 from scipy.stats import rankdata
 from tqdm.auto import tqdm
 
-from tasks.utils import load_registry
+from rnagym.config import Config2D
+
+from .utils import load_registry
 
 OPENERS = "([{<ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 CLOSERS = ")]}>abcdefghijklmnopqrstuvwxyz"

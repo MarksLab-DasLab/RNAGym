@@ -7,8 +7,9 @@ import importlib
 from enum import Enum
 
 import polars as pl
-from config import Config2D
 from tqdm.auto import tqdm
+
+from rnagym.config import Config2D
 
 
 class Dataset(Enum):
@@ -114,7 +115,8 @@ def main() -> None:
     """Generate model prediction shards."""
     args = parse_args()
     # Python module names use underscores, for example rna-fm -> rna_fm
-    adapter = importlib.import_module(f"models.{args.environment.replace('-', '_')}")
+    model = args.environment.replace("-", "_")
+    adapter = importlib.import_module(f"rnagym.s2d.models.{model}")
     predict_dataset(
         adapter,
         args.environment,

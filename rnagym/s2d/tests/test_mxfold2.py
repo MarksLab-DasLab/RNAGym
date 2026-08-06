@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from models.mxfold2 import predict
+from ..models.mxfold2 import predict
 
 SEQUENCE = "GGGGAAAACCCC"
 

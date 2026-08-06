@@ -13,11 +13,12 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-from config import Config2D, Config3D
 from tqdm.auto import tqdm
 
-from models.utils import dot_bracket
-from tasks.utils import SEQUENCE_SCHEMA, add_sequences, load_registry
+from rnagym.config import Config2D, Config3D
+
+from ..models.utils import dot_bracket
+from .utils import SEQUENCE_SCHEMA, add_sequences, load_registry
 
 CWW_PATTERN = re.compile(
     r"^A(\d+)-A(\d+) : \w+-\w+ Ww/Ww.*pairing "

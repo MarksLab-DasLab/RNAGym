@@ -1,6 +1,8 @@
-"""Test the UFold model adapter."""
+"""Test the RNA-FM model adapter."""
 
-from models.ufold import predict
+import numpy as np
+
+from ..models.rna_fm import predict
 
 SEQUENCE = "GGGGAAAACCCC"
 EXPECTED = "((((....))))"
@@ -8,8 +10,9 @@ EXPECTED = "((((....))))"
 prediction = predict(SEQUENCE)
 probabilities = prediction["probabilities"]
 assert len(probabilities) == len(SEQUENCE)
+assert np.isfinite(probabilities).all()
 assert all(0 <= probability <= 1 for probability in probabilities)
 assert prediction["structures"] == [
-    {"method": "threshold_0.5", "dot_bracket": EXPECTED}
+    {"method": "postprocess_0.5", "dot_bracket": EXPECTED}
 ]
 print(EXPECTED)

@@ -2,8 +2,8 @@
 
 ## Getting started
 
-1. The datasets are stored under [`../data/2d/`](../data/2d/). See the
-[repository-level instructions](../README.md#resources) to download and extract
+1. The datasets are stored under [`../../data/2d/`](../../data/2d/). See the
+[repository-level instructions](../../README.md#resources) to download and extract
 them.
 2. Set machine-specific paths under `[activation.env]` in `pixi.toml`.
 
@@ -46,7 +46,7 @@ short sequence on CPU. Use a GPU node for practical inference.
 
 After verifying the contents of `sh/predict.sh` for your cluster, generate
 predictions with a model and save them to
-`../data/2d/chemical_mapping/predictions/<model>` with:
+`../../data/2d/chemical_mapping/predictions/<model>` with:
 
 ```bash
 pixi run -e <env> predict
@@ -58,7 +58,7 @@ To generate the leaderboard from the saved predictions:
 pixi run leaderboard
 ```
 
-This writes `../leaderboard/2d/leaderboard.csv`. EternaFold and RibonanzaNet
+This writes `../../leaderboard/2d/leaderboard.csv`. EternaFold and RibonanzaNet
 are marked with `*` for chemical mapping because their training data overlap
 the benchmark.
 

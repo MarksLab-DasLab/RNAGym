@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from models.utils import Prediction
+from .utils import Prediction
 
 MODEL_SOURCE = (
     Path(__file__).resolve().parents[1]

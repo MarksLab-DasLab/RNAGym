@@ -3,7 +3,7 @@
 import numpy as np
 import RNA
 
-from models.utils import Prediction, warn_out_of_range
+from .utils import Prediction, warn_out_of_range
 
 
 def predict(sequence: str) -> Prediction:

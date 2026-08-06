@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from models.contrafold import _predict
-from models.utils import Prediction
+from .contrafold import _predict
+from .utils import Prediction
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ETERNAFOLD = PROJECT_ROOT / ".pixi" / "model-sources" / "EternaFold"

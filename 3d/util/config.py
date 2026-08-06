@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
-from config import Config3D
+from rnagym.config import Config3D
 from rna3db.tabular import TabularOutput, read_tbls_from_dir
 
 ###############################################################################

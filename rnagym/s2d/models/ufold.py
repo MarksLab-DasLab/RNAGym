@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from models.utils import Prediction, dot_bracket
+from .utils import Prediction, dot_bracket
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_SOURCE = PROJECT_ROOT / ".pixi" / "model-sources" / "UFold"

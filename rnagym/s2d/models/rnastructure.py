@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from models.utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
+from .utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
 
 
 def predict(sequence: str) -> Prediction:

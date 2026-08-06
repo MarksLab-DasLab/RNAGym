@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from models.ribonanzanet import predict
+from ..models.ribonanzanet import predict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RIBONANZANET_SCRIPT = (

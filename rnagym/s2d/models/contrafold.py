@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from models.utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
+from .utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
 
 
 def _predict(

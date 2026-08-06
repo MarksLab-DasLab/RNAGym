@@ -21,18 +21,18 @@ tqdm = "==4.69.0"
 # Should contain `Rfam-15.1/`
 RNAGYM_DATABASE_DIR = "/path/to/databases"
 
-[feature.shared.activation.env]
-PYTHONPATH = "$PIXI_PROJECT_ROOT/.."
+[feature.shared.pypi-dependencies]
+rnagym = { path = "../..", editable = true }
 
 [tasks]
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
-collate-2d = { cmd = "python -m tasks.collate_2d", depends-on = [
+collate-2d = { cmd = "python -m rnagym.s2d.tasks.collate_2d", depends-on = [
   "rna-assessment-source",
 ] }
-annotate-rfam = "python -m tasks.annotate_rfam"
-leaderboard = "python -m tasks.score"
+annotate-rfam = "python -m rnagym.s2d.tasks.annotate_rfam"
+leaderboard = "python -m rnagym.s2d.tasks.score"
 
 # Classical model prediction dependencies
 [feature.classical.dependencies]

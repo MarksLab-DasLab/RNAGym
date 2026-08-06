@@ -1,7 +1,11 @@
-**/__pycache__/
+# Anywhere dirs
+__pycache__/
+*.egg-info/
+.vibe/
+
+# Anywhere files
 slurm
 archives
-.vibe/
 
 # Fitness data (downloadable or generated)
 fitness/assays/

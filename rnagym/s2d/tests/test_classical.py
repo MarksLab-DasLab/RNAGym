@@ -11,7 +11,7 @@ SEQUENCES = [
 ]
 
 model = sys.argv[1]
-predict = importlib.import_module(f"models.{model}").predict
+predict = importlib.import_module(f"rnagym.s2d.models.{model}").predict
 if model in {"contrafold", "eternafold"}:
     expected_methods = ["viterbi", "mea_gamma_1"]
 elif model in {"vienna", "rnastructure"}:

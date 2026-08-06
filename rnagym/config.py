@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-_REPO_DIR = Path(__file__).resolve().parent
+_REPO_DIR = Path(__file__).resolve().parents[1]
 _DATA_DIR = _REPO_DIR / "data"
 _DATABASE_DIR = Path(os.environ.get("RNAGYM_DATABASE_DIR", "/path/to/databases"))
 
@@ -18,7 +18,7 @@ class _Config:
 class Config2D(_Config):
     """2D benchmark configuration."""
 
-    DIR = _REPO_DIR / "2d"
+    DIR = _REPO_DIR / "rnagym" / "s2d"
     DATA_DIR = _DATA_DIR / "2d" / "chemical_mapping"
     RAW_DIR = DATA_DIR / "raw_data"
     MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"

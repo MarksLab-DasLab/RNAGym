@@ -11,13 +11,13 @@ printf '>test\nGGGGAAAACCCC\n' >"$fasta"
 
 case $1 in
 vienna | contrafold | eternafold | rnastructure)
-	python -m tests.test_classical "$1"
+	python -m rnagym.s2d.tests.test_classical "$1"
 	;;
 ribonanzanet | ufold | rna-fm)
-	CUDA_VISIBLE_DEVICES='' python -m "tests.test_${1//-/_}"
+	CUDA_VISIBLE_DEVICES='' python -m "rnagym.s2d.tests.test_${1//-/_}"
 	;;
 mxfold2)
-	python -m tests.test_mxfold2
+	python -m rnagym.s2d.tests.test_mxfold2
 	;;
 *)
 	echo "unknown test: $1" >&2

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rnagym"
+version = "0.2.0"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = [
+  "rnagym",
+  "rnagym.s2d",
+  "rnagym.s2d.models",
+  "rnagym.s2d.tasks",
+  "rnagym.s2d.tests",
+]

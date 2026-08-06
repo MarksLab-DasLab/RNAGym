@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from mxfold2.predict import Predict
 
-from models.utils import Prediction, warn_out_of_range
+from .utils import Prediction, warn_out_of_range
 
 MODEL_DIR = Path(mxfold2.__file__).parent / "models"
 CONFIG = MODEL_DIR / "TrainSetAB.conf"
