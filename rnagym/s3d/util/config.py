@@ -2,12 +2,9 @@
 
 import itertools
 import json
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 from rnagym.config import Config3D
@@ -51,7 +48,7 @@ SELF_CONTACT_MIN_NEIGHBOR_DIST = 6  # Min. residue separation for self-contacts
 COVERAGE_RADIUS = 4.5  # Radius used to determine polymer coverage
 
 # Protein/RNA family HMM/CM databases
-RFAM_DIR = "/path/to/Rfam-15.0"
+RFAM_DIR = Config3D.RFAM_DIR.as_posix()
 RFAM_CM = f"{RFAM_DIR}/Rfam.cm"
 RFAM_SEED = f"{RFAM_DIR}/Rfam.utf8.seed"
 RFAM_FULL_ALIGNMENT = f"{RFAM_DIR}/alignments/{{accession}}.sto"

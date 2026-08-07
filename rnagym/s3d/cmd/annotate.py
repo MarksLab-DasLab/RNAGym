@@ -12,8 +12,8 @@ from typing import List
 
 import pandas as pd
 
-from util.analysis import assign_cluster_0
-from util.structure import StructureInfo
+from rnagym.s3d.util.analysis import assign_cluster_0
+from rnagym.s3d.util.structure import StructureInfo
 
 
 def process_row(row) -> List[str]:

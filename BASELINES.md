@@ -2,8 +2,6 @@
 
 ## Fitness prediction
 
-We have currently implemented the following baselines (see [`fitness`](fitness)):
-
 Model name | Model type | Reference
 --- | --- | --- |
 Evo 1 | Genomic Language Model | Nguyen et al. "Sequence modeling and design from molecular to genome scale with Evo". Science, 2024.
@@ -18,9 +16,6 @@ Orthrus | RNA Language Model | Fradkin et al. "Orthrus: Towards Evolutionary and
 
 ## Secondary structure prediction
 
-We have currently implemented the following baselines (see
-[`rnagym/s2d`](rnagym/s2d)):
-
 Model name | Model type | Reference
 --- | --- | --- |
 Ribonanzanet | Structure prediction | He et al. "Ribonanza: deep learning of rna structure through dual crowdsourcing". bioRxiv, 2024.
@@ -33,9 +28,6 @@ UFold | Structure prediction | Fu et al. "UFold: fast and accurate RNA secondary
 Mxfold2 | Structure prediction | Sato et al. "RNA secondary structure prediction using deep learning with thermodynamic integration" Nature Methods, 2021.
 
 ## Tertiary structure prediction
-
-We have also developed a data curation pipeline, structure datasets, and
-implemented several baselines for RNA tertiary structure (see [`3d`](3d)).
 
 Model name | Model type | Reference
 --- | --- | --- |

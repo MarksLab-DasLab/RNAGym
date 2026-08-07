@@ -10,8 +10,8 @@ from typing import Dict, Optional, Tuple, TypeVar
 import pandas as pd
 from evcouplings.utils import BailoutException
 
-from util import ChainID, Config, PdbID
-from util.analysis import Analysis
+from rnagym.s3d.util import ChainID, Config, PdbID
+from rnagym.s3d.util.analysis import Analysis
 
 T = TypeVar("T")
 JobOutput = Optional[Tuple[PdbID, ChainID, T]]

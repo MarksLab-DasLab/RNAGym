@@ -1,0 +1,41 @@
+[workspace]
+name = "rnagym-3d"
+description = "RNAGym 3D structure benchmark environment"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+biopython = "1.*"
+gemmi = "0.*"
+hhsuite = "3.*"
+hmmer = "3.*"
+infernal = "1.*"
+matplotlib = "3.*"
+numpy = "1.*"
+pandas = "2.*"
+python = "3.11.*"
+requests = "2.*"
+scikit-learn = "1.*"
+scipy = "1.*"
+setuptools = "<81"
+tqdm = "4.*"
+usalign = "==2024.07.30"
+
+[pypi-dependencies]
+evcouplings = "==0.2.1"
+rna-normalizer = { git = "https://github.com/RNA-Puzzles/RNA_assessment.git", rev = "d46f0472e7d52629283bb046a9c8f5d36b35f685" }
+rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "8744e853c4b6a86060423164ae39b96745b291c5" }
+rnagym = { path = "../..", editable = true }
+
+[tasks]
+pipeline = "python -m rnagym.s3d.gym"
+merge = "python -m rnagym.s3d.gym merge"
+annotate = "python -m rnagym.s3d.gym annotate"
+split = "python -m rnagym.s3d.gym split"
+evcouplings = "python -m rnagym.s3d.gym evcouplings"
+analyze = "python -m rnagym.s3d.gym analyze"
+export = "python -m rnagym.s3d.gym export"
+tm-train = "python -m rnagym.s3d.jobs.tm_train"
+rmsa = "python -m rnagym.s3d.jobs.rmsa"
+predict = "python -m rnagym.s3d.jobs.predict"
+afa-to-a3m = "bash scripts/afa_to_a3m.sh"

@@ -5,7 +5,7 @@ from pathlib import Path
 
 _REPO_DIR = Path(__file__).resolve().parents[1]
 _DATA_DIR = _REPO_DIR / "data"
-_DATABASE_DIR = Path(os.environ.get("RNAGYM_DATABASE_DIR", "/path/to/databases"))
+_DATABASE_DIR = Path(os.environ.get("RNAGYM_DATABASE_DIR", "/n/groups/marks/databases"))
 
 
 class _Config:
@@ -54,9 +54,11 @@ class Config2D(_Config):
 class Config3D(_Config):
     """3D benchmark configuration."""
 
-    DIR = _REPO_DIR / "3d"
+    DIR = _REPO_DIR / "rnagym" / "s3d"
     ANNOTATED_CHAINS_FILE = DIR / "annotated_chains.csv"
     OUT_DIR = DIR / "out"
+    RFAM_VERSION = "15.0"
+    RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
 
     MAX_RESOLUTION = 5.0
     MAX_MISSING = 0.25

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from util import Config
+from rnagym.s3d.util import Config
 
 if __name__ == "__main__":
     root_path = Path(__file__).resolve().parent.parent

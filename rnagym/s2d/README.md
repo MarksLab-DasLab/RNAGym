@@ -2,10 +2,9 @@
 
 ## Getting started
 
-1. The datasets are stored under [`../../data/2d/`](../../data/2d/). See the
+The datasets are stored under [`../../data/2d/`](../../data/2d/). See the
 [repository-level instructions](../../README.md#resources) to download and extract
 them.
-2. Set machine-specific paths under `[activation.env]` in `pixi.toml`.
 
 ## Environments
 

@@ -45,8 +45,9 @@ the highest-SNR measurement is the representative.
 | `secondary_structure` | Structure in dot-bracket notation. |
 | `resolved` | Positions resolved in the source structure and included in scoring. |
 
-PDB entries are canonical RNA monomers selected from `3d/annotated_chains.csv`
-using [`Config3D`](../../rnagym/config.py). Structures contain cis
+PDB entries are canonical RNA monomers selected from
+`rnagym/s3d/annotated_chains.csv` using
+[`Config3D`](../../rnagym/config.py). Structures contain cis
 Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
 Contacts involving residues with multiple such partners are excluded because
 dot-bracket cannot represent them. All residues in these conflicting contact
@@ -84,8 +85,9 @@ See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 ### Optionally annotate each unique sequence with Rfam
 
 To process the dataset with Rfam/Infernal and (re)generate
-`rnagym_rfams.parquet`:
+`rnagym_rfams.parquet`, set `RNAGYM_DATABASE_DIR` to the directory containing
+`Rfam-15.1/` and run:
 
 ```bash
-pixi run annotate-rfam
+RNAGYM_DATABASE_DIR=/path/to/databases pixi run annotate-rfam
 ```

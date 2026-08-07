@@ -17,10 +17,6 @@ shellcheck = "==0.11.0"
 taplo = "==0.10.0"
 tqdm = "==4.69.0"
 
-[activation.env]
-# Should contain `Rfam-15.1/`
-RNAGYM_DATABASE_DIR = "/path/to/databases"
-
 [feature.shared.pypi-dependencies]
 arnie = "==0.2.7"
 pytest = "==8.4.2"

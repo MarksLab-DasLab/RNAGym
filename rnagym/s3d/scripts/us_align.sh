@@ -10,9 +10,8 @@
 
 set -euo pipefail
 
-# Set conda environment
-source "/path/to/conda/etc/profile.d/conda.sh"
-conda activate r3d  # RNAGym conda environment
+project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$project_dir"
 
 pdb_id="$1"
 asym_id="$2"
@@ -20,8 +19,8 @@ readonly QUERY="\"\`PDB ID\` == \'${pdb_id}\' and \`Asym. Chain ID\` == \'${asym
 readonly SCRIPT="
 import pandas as pd
 
-from cmd.split import get_split_candidates
-from util.analysis import add_tm_id
+from rnagym.s3d.cmd.split import get_split_candidates
+from rnagym.s3d.util.analysis import add_tm_id
 
 mon_df, mul_df, _ = get_split_candidates()
 df = pd.concat([mon_df, mul_df], axis=0).reset_index(drop=True)
@@ -35,5 +34,4 @@ add_tm_id(df)
 print('Done!')
 "
 
-python3 -c "${SCRIPT}"
-
+pixi run --as-is python -c "${SCRIPT}"

@@ -48,7 +48,7 @@ tar -xJf data.tar.xz
 
 For setup and reproduction details, see the respective benchmark READMEs:
 [fitness](fitness/README.md), [2D structure](rnagym/s2d/README.md), and [3D
-structure](3d/README.md).
+structure](rnagym/s3d/README.md).
 
 ## Contributing
 

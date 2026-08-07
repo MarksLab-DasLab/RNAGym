@@ -6,9 +6,9 @@
 
 import pandas as pd
 
-from util import Config as Pipeline
-from util.analysis import add_seq_id, add_tm_id, prep_usalign
-from util.config import Config3D
+from rnagym.s3d.util import Config as Pipeline
+from rnagym.s3d.util.analysis import add_seq_id, add_tm_id, prep_usalign
+from rnagym.s3d.util.config import Config3D
 
 NMR_SENTINEL = 1.23456789
 

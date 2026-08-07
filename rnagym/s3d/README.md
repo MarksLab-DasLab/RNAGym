@@ -39,13 +39,17 @@ datasets were noted:
 To run the RNAGym dataset curation pipeline:
 
 1. Modify `util/config.py` to suit your system & needs
-2. In the `rnagym` environment, install the additional dependencies:
-    - `rmsa` (from [source][21])
-    - `rna3db` (from [source][19])
-    - RNA Puzzles assessment toolkit(from [source][23])
-3. Run `./gym.py` to generate `train.csv`, `monomer.csv`, and `complex.csv`
+2. Run `pixi install`
+3. Install `rmsa` from [source][21]
+4. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
+   `pixi run pipeline` to generate `train.csv`, `monomer.csv`, and
+   `complex.csv`
 
-The default workflow of `./gym.py` is as follows:
+```bash
+RNAGYM_DATABASE_DIR=/path/to/databases pixi run pipeline
+```
+
+The default workflow is as follows:
 
 1. `merge`: Merges the initial datasets into `merged_pdb_ids.csv`, a
    list of unique PDB IDs containing RNA chains.
@@ -56,10 +60,10 @@ The default workflow of `./gym.py` is as follows:
      between each candidate chain and any chain from the baseline
      training sets. This requires about 5-60 minutes per CPU per
      candidate chain.  To speed things up, you can launch Slurm jobs for
-     all these tasks using `python -m jobs.tm_train`.  The results will
+     all these tasks using `pixi run tm-train`.  The results will
      be cached for the next `split`.
 
-You can run any of these steps individually with `./gym.py <command>`.
+You can run any step individually with `pixi run <command>`.
 
 > [!TIP]
 > Creating the RNAGym split requires an all-to-all 3D structure alignment
@@ -93,10 +97,10 @@ RNAGym currently evaluates the following baselines:
 
 To launch the predictions, you can:
 
-1. Generate MSAs with `python -m jobs.rmsa`
+1. Generate MSAs with `pixi run rmsa`
     - For some baselines, `.a3m` formatted MSAs are required.  You can
       use `./scripts/afa_to_a3m.sh` to generate these automatically.
-2. Launch your predictions using `python -m jobs.predict <baseline>`.
+2. Launch your predictions using `pixi run predict <baseline>`.
     - Valid baselines are currently `af3`, `nufold`, `rhofold`, `rf2na`,
       and `trRNA`.
     - Before running, configure `./scripts/<baseline>.sh` for your Slurm
@@ -105,8 +109,8 @@ To launch the predictions, you can:
 
 ## Analysis
 
-Analysis can be conducted using `./gym.py evcouplings` followed by
-`./gym.py analyze`.  See `gym.py`, `cmd/analyze.py`, and
+Analysis can be conducted using `pixi run evcouplings` followed by
+`pixi run analyze`. See `gym.py`, `cmd/analyze.py`, and
 `cmd/evcouplings.py` for more details.
 
 <!--Hyperlinks-->
@@ -132,4 +136,3 @@ Analysis can be conducted using `./gym.py evcouplings` followed by
 [21]: https://github.com/pylelab/rMSA
 [22]: https://github.com/marcellszi/rna3db
 [23]: https://github.com/RNA-Puzzles/RNA_assessment
-

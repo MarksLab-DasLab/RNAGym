@@ -3,7 +3,7 @@
 ###############################################################################
 # `analyze.py`: Analyze RNAGym baseline outputs.
 ###############################################################################
-from util.analysis import get_baseline_scores
+from rnagym.s3d.util.analysis import get_baseline_scores
 
 
 def main(ignore_cache=False):
