@@ -1,4 +1,6 @@
-# RNAGym 2D datasets
+# RNAGym 2D data
+
+## Datasets
 
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
@@ -7,7 +9,10 @@
 | `rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
 | `rnagym_rfams.parquet` | Rfam hits for each registered sequence | `sequence_id` |
 
-### `rnagym_mapping.parquet` schema
+
+## Schemas
+
+### `rnagym_mapping.parquet`
 
 | Column | Description |
 | --- | --- |
@@ -30,7 +35,7 @@ reverse transcriptase, note, and context. Some source rows incorrectly assign
 different UIDs to identical measurements. These duplicates are collapsed, and
 the highest-SNR measurement is the representative.
 
-### `rnagym_2d.parquet` schema
+### `rnagym_2d.parquet`
 
 | Column | Description |
 | --- | --- |
@@ -47,7 +52,7 @@ Contacts involving residues with multiple such partners are excluded because
 dot-bracket cannot represent them. All residues in these conflicting contact
 components are marked unresolved and excluded from scoring.
 
-### `rnagym_sequences.parquet` schema
+### `rnagym_sequences.parquet`
 
 | Column | Description |
 | --- | --- |
@@ -56,7 +61,7 @@ components are marked unresolved and excluded from scoring.
 | `cluster_rep` | `sequence_id` of the global MMseqs2 cluster representative. |
 | `fold` | Fold assignment. |
 
-### `rnagym_rfams.parquet` schema
+### `rnagym_rfams.parquet`
 
 | Column | Description |
 | --- | --- |
