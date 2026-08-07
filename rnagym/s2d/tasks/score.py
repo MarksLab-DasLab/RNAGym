@@ -3,6 +3,7 @@
 """Score secondary structure model predictions."""
 
 from pathlib import Path
+from string import ascii_letters
 
 import numpy as np
 import polars as pl
@@ -13,9 +14,7 @@ from rnagym.config import Config2D
 
 from .utils import load_registry
 
-OPENERS = "([{<ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-CLOSERS = ")]}>abcdefghijklmnopqrstuvwxyz"
-PAIRS = dict(zip(OPENERS, CLOSERS))
+PAIRS = dict(zip("([{<", ")]}>"))
 
 
 def prediction_files(model: str, dataset: str) -> list[Path]:
@@ -31,7 +30,7 @@ def prediction_files(model: str, dataset: str) -> list[Path]:
 
 def parse_pairs(structure: str) -> set[tuple[int, int]]:
     """Parse base pairs from extended dot-bracket notation."""
-    stacks = {opener: [] for opener in OPENERS}
+    stacks = {opener: [] for opener in PAIRS}
     openers_by_closer = {closer: opener for opener, closer in PAIRS.items()}
     pairs = set()
     for position, symbol in enumerate(structure):
@@ -44,6 +43,10 @@ def parse_pairs(structure: str) -> set[tuple[int, int]]:
             if not stacks[opener]:
                 raise ValueError(f"Unmatched {symbol} in {structure}")
             pairs.add((stacks[opener].pop(), position))
+        elif symbol in ascii_letters:
+            # Arnie uses the first case encountered as the opener
+            stacks[symbol] = [position]
+            openers_by_closer[symbol.swapcase()] = symbol
         else:
             raise ValueError(f"Unknown structure symbol {symbol}")
     if any(stacks.values()):

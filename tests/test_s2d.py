@@ -33,6 +33,13 @@ def test_shared_decoders() -> None:
         assert parse_pairs(structure["dot_bracket"]) == expected
 
 
+def test_extended_dot_bracket() -> None:
+    """Parse either letter-case convention for deep pseudoknots."""
+    expected = {(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)}
+    assert parse_pairs("([{<A)]}>a") == expected
+    assert parse_pairs("([{<a)]}>A") == expected
+
+
 def test_adapter() -> None:
     """Check one model adapter's output contract."""
     if MODEL not in MODEL_METHODS:

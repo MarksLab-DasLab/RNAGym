@@ -9,6 +9,7 @@ environment="$1"
 dataset="$2"
 
 cd "$SLURM_SUBMIT_DIR"
-pixi run -e "$environment" python -m rnagym.s2d.tasks.predict "$environment" "$dataset" \
+# The submitting task installs once; array workers must not reinstall the shared environment
+pixi run --as-is -e "$environment" python -m rnagym.s2d.tasks.predict "$environment" "$dataset" \
 	--shard "$SLURM_ARRAY_TASK_ID" \
 	--num-shards "$SLURM_ARRAY_TASK_COUNT"

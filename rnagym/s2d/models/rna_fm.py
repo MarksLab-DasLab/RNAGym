@@ -73,7 +73,10 @@ def predict(sequence: str) -> Prediction:
     if len(sequence) + 2 > _model().backbone.args.max_positions:
         return {
             "probabilities": [float("nan")] * len(sequence),
-            "structures": [{"method": "postprocess_0.5", "dot_bracket": None}],
+            "structures": [
+                {"method": method, "dot_bracket": None}
+                for method in ("postprocess_0.5", "hungarian", "threshknot")
+            ],
         }
     pair_probabilities = _pair_probabilities(sequence)
     structure = dot_bracket(_decode(pair_probabilities))
