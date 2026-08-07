@@ -29,7 +29,7 @@ RNAGym is under active development.  Please refer to our
 [releases](https://github.com/MarksLab-DasLab/RNAGym/releases) page to track
 the latest updates and stable releases. The current leaderboards can be
 accessed [here](leaderboard/), while the complete list of baselines can be
-viewed [here](BASELINES.md).
+viewed [here](rnagym/BASELINES.md).
 
 > **Update (v0.1.1):** We updated the [leaderboard](leaderboard/fitness/).  Our
 > [website][rnagym] will be updated shortly.
@@ -39,7 +39,7 @@ viewed [here](BASELINES.md).
 <!-- TODO(MCA): Upload complete data files to this link -->
 
 First, download and extract the complete RNAGym data (as described in
-[DATA.md](DATA.md)), by running these commands from the repository root:
+[DATA.md](rnagym/DATA.md)), by running these commands from the repository root:
 
 ```bash
 wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
