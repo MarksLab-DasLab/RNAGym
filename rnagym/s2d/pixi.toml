@@ -22,7 +22,12 @@ tqdm = "==4.69.0"
 RNAGYM_DATABASE_DIR = "/path/to/databases"
 
 [feature.shared.pypi-dependencies]
+arnie = "==0.2.7"
+pytest = "==8.4.2"
 rnagym = { path = "../..", editable = true }
+
+[feature.shared.tasks]
+test-model = "CUDA_VISIBLE_DEVICES='' pytest -q ../../tests/test_s2d.py"
 
 [tasks]
 fmt = "bash sh/format.sh"
@@ -45,14 +50,14 @@ tqdm = "==4.69.0"
 viennarna = "==2.6.4"
 
 [feature.vienna.tasks]
-test = "bash tests/test.sh vienna"
+test = { depends-on = ["test-model"] }
 predict = "bash sh/predict.sh vienna"
 
 [feature.contrafold.dependencies]
 contrafold = "==2.02"
 
 [feature.contrafold.tasks]
-test = "bash tests/test.sh contrafold"
+test = { depends-on = ["test-model"] }
 predict = "bash sh/predict.sh contrafold"
 
 [feature.eternafold.dependencies]
@@ -68,8 +73,7 @@ cmd = "make -C .pixi/model-sources/EternaFold/src contrafold CXX=\"$CXX\""
 depends-on = ["source"]
 
 [feature.eternafold.tasks.test]
-cmd = "bash tests/test.sh eternafold"
-depends-on = ["build"]
+depends-on = ["build", "test-model"]
 
 [feature.eternafold.tasks.predict]
 cmd = "bash sh/predict.sh eternafold"
@@ -82,7 +86,7 @@ rnastructure = "==6.4"
 DATAPATH = "$CONDA_PREFIX/share/rnastructure/data_tables"
 
 [feature.rnastructure.tasks]
-test = "bash tests/test.sh rnastructure"
+test = { depends-on = ["test-model"] }
 predict = "bash sh/predict.sh rnastructure"
 
 [feature.ribonanzanet.dependencies]
@@ -102,9 +106,6 @@ scikit-learn = "==1.3.2"
 scipy = "==1.13.1"
 tqdm = "==4.69.0"
 
-[feature.ribonanzanet.pypi-dependencies]
-arnie = "==0.2.7"
-
 [feature.ribonanzanet.pypi-dependencies.ranger]
 git = "https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer.git"
 rev = "c82a30460684c7301086d84185a1927b1c256afa"
@@ -113,8 +114,7 @@ rev = "c82a30460684c7301086d84185a1927b1c256afa"
 source = "bash sh/fetch-source.sh ribonanzanet"
 
 [feature.ribonanzanet.tasks.test]
-cmd = "bash tests/test.sh ribonanzanet"
-depends-on = ["source"]
+depends-on = ["source", "test-model"]
 
 [feature.ribonanzanet.tasks.predict]
 cmd = "bash sh/predict.sh ribonanzanet"
@@ -140,8 +140,7 @@ source = "bash sh/fetch-source.sh ufold"
 weights = "bash sh/fetch-weight.sh ufold"
 
 [feature.ufold.tasks.test]
-cmd = "bash tests/test.sh ufold"
-depends-on = ["source", "weights"]
+depends-on = ["source", "weights", "test-model"]
 
 [feature.ufold.tasks.predict]
 cmd = "bash sh/predict.sh ufold"
@@ -157,13 +156,13 @@ tqdm = "==4.69.0"
 
 [feature.rna-fm.pypi-dependencies]
 rna-fm = "==0.2.2"
+scipy = "==1.13.1"
 
 [feature.rna-fm.tasks]
 weights = "bash sh/fetch-weight.sh rna-fm"
 
 [feature.rna-fm.tasks.test]
-cmd = "bash tests/test.sh rna-fm"
-depends-on = ["weights"]
+depends-on = ["weights", "test-model"]
 
 [feature.rna-fm.tasks.predict]
 cmd = "bash sh/predict.sh rna-fm"
@@ -181,7 +180,7 @@ polars = "==1.43.0"
 mxfold2 = { url = "https://github.com/mxfold/mxfold2/releases/download/v0.1.2/mxfold2-0.1.2-cp310-cp310-manylinux_2_17_x86_64.whl" }
 
 [feature.mxfold2.tasks]
-test = "bash tests/test.sh mxfold2"
+test = { depends-on = ["test-model"] }
 predict = "bash sh/predict.sh mxfold2"
 
 [environments]

@@ -1,6 +1,5 @@
 """RibonanzaNet model adapter."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -8,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .utils import Prediction
+from .utils import Prediction, decode_pair_probabilities
 
 MODEL_SOURCE = (
     Path(__file__).resolve().parents[1]
@@ -19,12 +18,10 @@ MODEL_SOURCE = (
 )
 
 sys.path.insert(0, str(MODEL_SOURCE))
-# Arnie requires a package variable even though its Hungarian decoder uses none
-os.environ.setdefault("NUPACKHOME", "/tmp")
 # Official model definition and checkpoint loading
 # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L12-L31
-from arnie.pk_predictors import _hungarian  # noqa: E402, I001
-from rnet_2d import RNA_Dataset, model as MODEL  # noqa: E402
+from rnet_2d import RNA_Dataset  # noqa: E402
+from rnet_2d import model as MODEL  # noqa: E402
 
 
 def _pair_probabilities(sequence: str) -> np.ndarray:
@@ -40,7 +37,7 @@ def _pair_probabilities(sequence: str) -> np.ndarray:
 
 
 def predict(sequence: str) -> Prediction:
-    """Return paired probabilities and the official Hungarian structure."""
+    """Return paired probabilities and decoded structures."""
     # Single-sequence inference is ~40 sequences/s on an L40S, so batching is unnecessary
     pair_probabilities = _pair_probabilities(sequence)
 
@@ -53,11 +50,7 @@ def predict(sequence: str) -> Prediction:
     # https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116
     probabilities = np.clip(pair_probabilities.sum(axis=0), 0, 1)
 
-    # Official decoding uses theta=0.5 and min_len_helix=1
-    # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110
-    structure, _ = _hungarian(pair_probabilities.copy(), theta=0.5, min_len_helix=1)
-    structure = structure.upper()
     return {
         "probabilities": probabilities.tolist(),
-        "structures": [{"method": "hungarian", "dot_bracket": structure}],
+        "structures": decode_pair_probabilities(pair_probabilities),
     }

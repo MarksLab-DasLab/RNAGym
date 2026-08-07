@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .utils import Prediction, dot_bracket
+from .utils import Prediction, decode_pair_probabilities, dot_bracket
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_SOURCE = PROJECT_ROOT / ".pixi" / "model-sources" / "UFold"
@@ -85,7 +85,7 @@ def _pair_probabilities(sequence: str) -> np.ndarray:
 
 
 def predict(sequence: str) -> Prediction:
-    """Return paired probabilities and the official thresholded structure."""
+    """Return paired probabilities and decoded structures."""
     pair_probabilities = _pair_probabilities(sequence)
     probabilities = np.clip(pair_probabilities.sum(axis=0), 0, 1)
 
@@ -101,7 +101,9 @@ def predict(sequence: str) -> Prediction:
             contacts[i, j] = True
             used.update((i, j))
     structure = dot_bracket(contacts)
+    structures = [{"method": "threshold_0.5", "dot_bracket": structure}]
+    structures += decode_pair_probabilities(pair_probabilities)
     return {
         "probabilities": probabilities.tolist(),
-        "structures": [{"method": "threshold_0.5", "dot_bracket": structure}],
+        "structures": structures,
     }

@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from mxfold2.predict import Predict
 
-from .utils import Prediction, warn_out_of_range
+from .utils import Prediction, decode_pair_probabilities, warn_out_of_range
 
 MODEL_DIR = Path(mxfold2.__file__).parent / "models"
 CONFIG = MODEL_DIR / "TrainSetAB.conf"
@@ -31,7 +31,7 @@ def _model():
 
 
 def predict(sequence: str) -> Prediction:
-    """Return paired probabilities and MXFold2's official MFE structure."""
+    """Return paired probabilities and decoded structures."""
     # MXFold2 0.1.2 computes BPPs with its partition function
     # https://github.com/keio-bioinformatics/mxfold2/blob/51b213676708bebd664f0c40873a46e09353e1ee/mxfold2/fold/mix.py#L15-L60
     with torch.no_grad():
@@ -41,7 +41,10 @@ def predict(sequence: str) -> Prediction:
     probabilities = (bpp + bpp.T).sum(axis=0)[1:]
     warn_out_of_range(probabilities)
     probabilities = np.clip(probabilities, 0, 1)
+    pair_probabilities = bpp[1:, 1:] + bpp[1:, 1:].T
+    structures = [{"method": "mfe", "dot_bracket": structures[0]}]
+    structures += decode_pair_probabilities(pair_probabilities)
     return {
         "probabilities": probabilities.tolist(),
-        "structures": [{"method": "mfe", "dot_bracket": structures[0]}],
+        "structures": structures,
     }

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .utils import Prediction, dot_bracket
+from .utils import Prediction, decode_pair_probabilities, dot_bracket
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_WEIGHTS = (
@@ -57,19 +57,18 @@ def _decode(pair_probabilities: np.ndarray) -> np.ndarray:
     candidates = np.argwhere(pair_probabilities > 0.5)
     order = np.argsort(-pair_probabilities[tuple(candidates.T)])
     contacts = np.zeros_like(pair_probabilities, dtype=bool)
-    used_rows = set()
-    used_columns = set()
+    # Resolve directed assignments into valid undirected pairs by confidence
+    used = set()
     for i, j in candidates[order]:
-        if abs(i - j) <= 1 or i in used_rows or j in used_columns:
+        if abs(i - j) <= 1 or i in used or j in used:
             continue
         contacts[i, j] = True
-        used_rows.add(i)
-        used_columns.add(j)
+        used.update((i, j))
     return contacts
 
 
 def predict(sequence: str) -> Prediction:
-    """Return paired probabilities and the official postprocessed structure."""
+    """Return paired probabilities and decoded structures."""
     # RNA-FM reserves two of its 1,024 positions for BOS/EOS
     if len(sequence) + 2 > _model().backbone.args.max_positions:
         return {
@@ -81,7 +80,9 @@ def predict(sequence: str) -> Prediction:
     positions = np.arange(len(sequence))
     pair_probabilities[np.abs(positions[:, None] - positions[None, :]) <= 1] = 0
     probabilities = np.clip(pair_probabilities.sum(axis=0), 0, 1)
+    structures = [{"method": "postprocess_0.5", "dot_bracket": structure}]
+    structures += decode_pair_probabilities(pair_probabilities)
     return {
         "probabilities": probabilities.tolist(),
-        "structures": [{"method": "postprocess_0.5", "dot_bracket": structure}],
+        "structures": structures,
     }

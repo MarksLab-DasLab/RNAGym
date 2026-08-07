@@ -13,5 +13,4 @@ packages = [
   "rnagym.s2d",
   "rnagym.s2d.models",
   "rnagym.s2d.tasks",
-  "rnagym.s2d.tests",
 ]

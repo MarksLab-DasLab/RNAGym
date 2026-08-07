@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import warnings
 from collections.abc import Iterable, Sequence
+from contextlib import redirect_stdout
+from io import StringIO
 from os import PathLike
 from pathlib import Path
 from shlex import split
 from typing import TypedDict
 
 import numpy as np
+
+# Arnie requires a package variable even though its BPP decoders use none
+os.environ.setdefault("NUPACKHOME", "/tmp")
+from arnie.pk_predictors import _hungarian, _threshknot  # noqa: E402
 
 
 class Structure(TypedDict):
@@ -27,19 +34,23 @@ class Prediction(TypedDict):
     structures: list[Structure]
 
 
-def run(command: str | Sequence[str | PathLike[str]], **kwargs: object) -> None:
+def run(
+    command: str | Sequence[str | PathLike[str]], **kwargs: object
+) -> subprocess.CompletedProcess:
     """Run a command and raise its stderr on failure."""
     if isinstance(command, str):
         command = split(command)
 
+    stdout = kwargs.pop("stdout", subprocess.DEVNULL)
     result = subprocess.run(
         command,
-        stdout=subprocess.DEVNULL,
+        stdout=stdout,
         stderr=subprocess.PIPE,
         **kwargs,
     )
     if result.returncode:
         raise RuntimeError(result.stderr)
+    return result
 
 
 def warn_out_of_range(probabilities: np.ndarray) -> None:
@@ -67,6 +78,30 @@ def sum_pair_probabilities(
         probabilities[j] += probability
     warn_out_of_range(probabilities)
     return np.clip(probabilities, 0, 1).tolist()
+
+
+def pair_probability_matrix(
+    length: int, pairs: Iterable[tuple[int, int, float]]
+) -> np.ndarray:
+    """Expand sparse pairs into a symmetric probability matrix."""
+    probabilities = np.zeros((length, length))
+    for i, j, probability in pairs:
+        probabilities[i, j] = probabilities[j, i] = probability
+    return probabilities
+
+
+def decode_pair_probabilities(probabilities: np.ndarray) -> list[Structure]:
+    """Decode pair probabilities with Hungarian and ThreshKnot."""
+    # https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L72-L104
+    # Match RibonanzaNet's official Hungarian parameters
+    # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110
+    hungarian, _ = _hungarian(probabilities.copy(), theta=0.5, min_len_helix=1)
+    with redirect_stdout(StringIO()):
+        threshknot, _ = _threshknot(probabilities.copy())
+    return [
+        {"method": "hungarian", "dot_bracket": hungarian},
+        {"method": "threshknot", "dot_bracket": threshknot},
+    ]
 
 
 def dot_bracket(contact: np.ndarray) -> str:

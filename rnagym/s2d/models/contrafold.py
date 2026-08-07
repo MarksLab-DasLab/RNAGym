@@ -5,7 +5,14 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from .utils import Prediction, read_dot_bracket, run, sum_pair_probabilities
+from .utils import (
+    Prediction,
+    decode_pair_probabilities,
+    pair_probability_matrix,
+    read_dot_bracket,
+    run,
+    sum_pair_probabilities,
+)
 
 
 def _predict(
@@ -47,21 +54,19 @@ def _predict(
                 partner, probability = pair.split(":")
                 pairs.append((position, int(partner) - 1, float(probability)))
 
+        structures = [
+            {"method": "viterbi", "dot_bracket": read_dot_bracket(viterbi_file)},
+            {"method": "mea_gamma_1", "dot_bracket": read_dot_bracket(mea_file)},
+        ]
+        structures += decode_pair_probabilities(
+            pair_probability_matrix(len(sequence), pairs)
+        )
         return {
             "probabilities": sum_pair_probabilities(len(sequence), pairs),
-            "structures": [
-                {
-                    "method": "viterbi",
-                    "dot_bracket": read_dot_bracket(viterbi_file),
-                },
-                {
-                    "method": "mea_gamma_1",
-                    "dot_bracket": read_dot_bracket(mea_file),
-                },
-            ],
+            "structures": structures,
         }
 
 
 def predict(sequence: str) -> Prediction:
-    """Return paired probabilities and Viterbi and MEA structures."""
+    """Return paired probabilities and decoded structures."""
     return _predict(sequence)
