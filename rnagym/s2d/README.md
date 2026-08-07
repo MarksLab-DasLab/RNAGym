@@ -59,23 +59,3 @@ pixi run leaderboard
 
 This writes the [2D leaderboard](../../leaderboard/2d/README.md) and its
 [detailed scores](../../leaderboard/2d/leaderboard.csv).
-
-## Scoring
-
-Chemical mapping is scored as cluster-macro Spearman between finite reactivities
-(most NaNs are unmeasured construct regions such as barcodes) and predicted
-residue unpaired probabilities (`1 − Σj Pij`). DMS is scored over A/C, CMCT
-over G/U, and other modalities over all bases. Spearman avoids directly
-comparing reactivity magnitudes with probabilities or choosing an arbitrary
-classification threshold. Constant predictions receive zero.
-
-> [!NOTE]
-> For neural models, summed pair probabilities may exceed one at a residue.
-> Following
-> [Arnie's official RibonanzaNet
-> inference](https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116)
-> highly confident residues are clipped to 1 before conversion.
-
-Discrete structures are scored as cluster-macro F1 using each model's official
-decoders. PDB pairs touching unresolved residues are excluded. Unsupported
-sequences receive zero.
