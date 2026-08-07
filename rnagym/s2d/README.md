@@ -58,34 +58,25 @@ To generate the leaderboard from the saved predictions:
 pixi run leaderboard
 ```
 
-This writes `../../leaderboard/2d/README.md` and `leaderboard.csv`.
+This writes the [2D leaderboard](../../leaderboard/2d/README.md) and its
+[detailed scores](../../leaderboard/2d/leaderboard.csv).
 
-### How models are scored
+## Scoring
 
-Scores use all five folds.
-
-For chemical mapping, residue unpaired probabilities (`1 − Σj Pij`) are
-predicted and compared with experimental reactivities using Spearman. DMS is
-scored over A/C, CMCT over G/U, and other modalities over all bases. Scores are
-calculated over finite reactivities (the vast majority of NaNs are fixed,
-unmeasured construct regions like barcodes) for each profile, then averaged
-within each sequence cluster and across clusters. Each modifier, including each
-degradation condition, is reported separately. Spearman avoids directly
-comparing reactivity magnitudes with probabilities or imposing an arbitrary
-reactivity threshold for classification. Constant predictions receive a score
-of zero.
+Chemical mapping is scored as cluster-macro Spearman between finite reactivities
+(most NaNs are unmeasured construct regions such as barcodes) and predicted
+residue unpaired probabilities (`1 − Σj Pij`). DMS is scored over A/C, CMCT
+over G/U, and other modalities over all bases. Spearman avoids directly
+comparing reactivity magnitudes with probabilities or choosing an arbitrary
+classification threshold. Constant predictions receive zero.
 
 > [!NOTE]
-> Neural models generally treat each i,j pair as an independent prediction,
-> with no/limited constraint on column probabilities. When neural models assign
-> residue pair probabilities above one, we follow [Arnie's official
-> RibonanzaNet
+> For neural models, summed pair probabilities may exceed one at a residue.
+> Following
+> [Arnie's official RibonanzaNet
 > inference](https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116)
-> and clip the sum to `[0, 1]` before conversion.  This leaves most residues
-> intact, but clips highly confident residues to 1.
+> highly confident residues are clipped to 1 before conversion.
 
-For discrete structures from PseudoBase, the PDB, or bpRNA-1m, each model's
-official decoder is used (Hungarian, MFE, MEA, Viterbi, etc. as applicable). F1
-is computed between each reference structure and the model-decoded structure,
-then averaged within each sequence cluster and across clusters. PDB pairs
-touching unresolved residues are excluded. Unsupported sequences receive F1 0.
+Discrete structures are scored as cluster-macro F1 using each model's official
+decoders. PDB pairs touching unresolved residues are excluded. Unsupported
+sequences receive zero.
