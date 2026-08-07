@@ -41,7 +41,7 @@ the highest-SNR measurement is the representative.
 | `resolved` | Positions resolved in the source structure and included in scoring. |
 
 PDB entries are canonical RNA monomers selected from `3d/annotated_chains.csv`
-using [`Config3D`](../../../config.py). Structures contain cis
+using [`Config3D`](../../rnagym/config.py). Structures contain cis
 Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
 Contacts involving residues with multiple such partners are excluded because
 dot-bracket cannot represent them. All residues in these conflicting contact
@@ -65,14 +65,14 @@ components are marked unresolved and excluded from scoring.
 
 ## Reproducing the datasets
 
-From the repository root, reconstruct the datasets from `raw_data/` with:
+From the repository root, reconstruct the datasets from `data/2d/raw_data/` with:
 
 ```bash
-cd 2d
+cd rnagym/s2d
 pixi run collate-2d
 ```
 
-Clustering and fold assignment use [`Config2D`](../../../config.py).
+Clustering and fold assignment use [`Config2D`](../../rnagym/config.py).
 
 See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 

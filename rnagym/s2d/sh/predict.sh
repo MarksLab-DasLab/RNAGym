@@ -37,7 +37,7 @@ cd "$PROJECT_ROOT"
 mkdir -p .rg_predict_out
 
 check_complete() {
-	local output_dir="$PROJECT_ROOT/../../data/2d/chemical_mapping/predictions/$environment/$1"
+	local output_dir="$PROJECT_ROOT/../../data/2d/predictions/$environment/$1"
 	for ((shard = 0; shard < shards; shard++)); do
 		[[ -s "$output_dir/$shard.parquet" ]] || return 1
 	done

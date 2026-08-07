@@ -46,7 +46,7 @@ short sequence on CPU. Use a GPU node for practical inference.
 
 After verifying the contents of `sh/predict.sh` for your cluster, generate
 predictions with a model and save them to
-`../../data/2d/chemical_mapping/predictions/<model>` with:
+`../../data/2d/predictions/<model>` with:
 
 ```bash
 pixi run -e <env> predict

@@ -1,4 +1,5 @@
 # Ignore everything except documentation and this file
 *
+!*/
 !.gitignore
 !*.md

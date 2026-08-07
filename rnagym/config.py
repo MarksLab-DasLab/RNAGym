@@ -19,7 +19,7 @@ class Config2D(_Config):
     """2D benchmark configuration."""
 
     DIR = _REPO_DIR / "rnagym" / "s2d"
-    DATA_DIR = _DATA_DIR / "2d" / "chemical_mapping"
+    DATA_DIR = _DATA_DIR / "2d"
     RAW_DIR = DATA_DIR / "raw_data"
     MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
     STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
