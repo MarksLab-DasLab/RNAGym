@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/MarksLab-DasLab/RNAGym/refs/heads/main/img/RNAGym.png" alt="RNAGym Logo">
+  <img src="https://raw.githubusercontent.com/MarksLab-DasLab/RNAGym/refs/heads/main/.img/RNAGym.png" alt="RNAGym Logo">
 
   RNAGym
 </h1>
