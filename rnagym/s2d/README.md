@@ -58,9 +58,7 @@ To generate the leaderboard from the saved predictions:
 pixi run leaderboard
 ```
 
-This writes `../../leaderboard/2d/leaderboard.csv`. EternaFold and RibonanzaNet
-are marked with `*` for chemical mapping because their training data overlap
-the benchmark.
+This writes `../../leaderboard/2d/README.md` and `leaderboard.csv`.
 
 ### How models are scored
 

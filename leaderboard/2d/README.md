@@ -1,5 +1,6 @@
 # RNAGym 2D Leaderboard
 
+<!-- BEGIN GENERATED TABLE -->
 | Rank | Model | Chemical mapping (n=584k) | PseudoBase (n=358) | PDB (n=946) | Macro |
 | ---: | :--- | ---: | ---: | ---: | ---: |
 | 1 | RibonanzaNet*‡ | 0.4028 | 0.7683 | 0.8361 | 0.6690 |
@@ -10,6 +11,7 @@
 | 6 | UFold‡ | 0.3211 | 0.6526 | 0.7991 | 0.5910 |
 | 7 | MXFold2 | 0.3809 | 0.5957 | 0.7907 | 0.5891 |
 | 8 | RNA-FM‡ | 0.3053 | 0.6635 | 0.7948 | 0.5879 |
+<!-- END GENERATED TABLE -->
 
 Chemical mapping is the macro mean Spearman across 1M7, 2A3, DMS, and NMIA.
 BzCN has low replicate agreement, while CMCT has only 11 replicate-bearing

@@ -26,7 +26,9 @@ class Config2D(_Config):
     SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
     RFAM_FILE = DATA_DIR / "rnagym_rfams.parquet"
     PREDICTION_DIR = DATA_DIR / "predictions"
-    LEADERBOARD_FILE = _REPO_DIR / "leaderboard" / "2d" / "leaderboard.csv"
+    LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "2d"
+    LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
+    LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
     PSEUDOBASE_FILE = RAW_DIR / "pseudobase.csv"
     MC_ANNOTATE = DIR / ".pixi/model-sources/RNA_assessment/MC-Annotate"
 
@@ -38,7 +40,12 @@ class Config2D(_Config):
     RANDOM_SEED = 42
     MMSEQS_THREADS = 1
     SCORE_BATCH_SIZE = 8192
-    TRAINING_OVERLAP = {"eternafold", "ribonanzanet"}
+    HEADLINE_MODIFIERS = ("1M7", "2A3", "DMS", "NMIA")
+    TRAINING_OVERLAP = {
+        "mapping": {"eternafold", "ribonanzanet"},
+        "pseudobase": set(),
+        "pdb": {"ribonanzanet", "rna-fm", "ufold"},
+    }
     RFAM_VERSION = "15.1"
     RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
     RFAM_SHARDS = 16

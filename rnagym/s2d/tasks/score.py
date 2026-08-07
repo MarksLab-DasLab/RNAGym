@@ -280,6 +280,87 @@ def score_model(
     )
 
 
+def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
+    """Update the compact table in the leaderboard README."""
+    mapping = (
+        leaderboard.filter(
+            (pl.col("dataset") == "mapping")
+            & pl.col("modality").is_in(Config2D.HEADLINE_MODIFIERS)
+        )
+        .group_by("model")
+        .agg(pl.col("score").mean().alias("mapping"))
+    )
+    structures = (
+        leaderboard.filter(pl.col("dataset") == "2d")
+        .sort("score", descending=True)
+        .group_by("model", "modality", maintain_order=True)
+        .first()
+        .pivot(on="modality", index="model", values="score")
+    )
+    summary = (
+        mapping.join(structures, on="model")
+        .with_columns(pl.mean_horizontal("mapping", "pseudobase", "pdb").alias("macro"))
+        .sort("macro", descending=True)
+    )
+
+    references = pl.read_parquet(
+        Config2D.STRUCTURE_FILE, columns=["uid", "sequence_id"]
+    )
+    counts = {
+        "mapping": profiles.filter(
+            pl.col("modifier").is_in(Config2D.HEADLINE_MODIFIERS)
+        )["sequence_id"].n_unique(),
+        "pseudobase": references.filter(pl.col("uid").str.starts_with("pseudobase:"))[
+            "sequence_id"
+        ].n_unique(),
+        "pdb": references.filter(pl.col("uid").str.starts_with("pdb:"))[
+            "sequence_id"
+        ].n_unique(),
+    }
+
+    def count(value: int) -> str:
+        return f"{round(value / 1000):,}k" if value >= 1000 else f"{value:,}"
+
+    names = {
+        "contrafold": "CONTRAfold",
+        "eternafold": "EternaFold",
+        "mxfold2": "MXFold2",
+        "ribonanzanet": "RibonanzaNet",
+        "rna-fm": "RNA-FM",
+        "rnastructure": "RNAstructure",
+        "ufold": "UFold",
+        "vienna": "Vienna",
+    }
+    lines = [
+        (
+            "| Rank | Model | "
+            f"Chemical mapping (n={count(counts['mapping'])}) | "
+            f"PseudoBase (n={count(counts['pseudobase'])}) | "
+            f"PDB (n={count(counts['pdb'])}) | Macro |"
+        ),
+        "| ---: | :--- | ---: | ---: | ---: | ---: |",
+    ]
+    for rank, row in enumerate(summary.iter_rows(named=True), start=1):
+        model = row["model"]
+        suffix = "".join(
+            marker
+            for modality, marker in zip(("mapping", "pseudobase", "pdb"), "*†‡")
+            if model in Config2D.TRAINING_OVERLAP[modality]
+        )
+        lines.append(
+            f"| {rank} | {names.get(model, model)}{suffix} | "
+            f"{row['mapping']:.4f} | {row['pseudobase']:.4f} | "
+            f"{row['pdb']:.4f} | {row['macro']:.4f} |"
+        )
+
+    start, end = "<!-- BEGIN GENERATED TABLE -->", "<!-- END GENERATED TABLE -->"
+    readme = Config2D.LEADERBOARD_README.read_text()
+    before, generated = readme.split(start)
+    _, after = generated.split(end)
+    table = "\n".join(lines)
+    Config2D.LEADERBOARD_README.write_text(f"{before}{start}\n{table}\n{end}{after}")
+
+
 def main() -> None:
     """Score every model and write the leaderboard."""
     models = sorted(
@@ -301,8 +382,14 @@ def main() -> None:
         pl.concat(summaries)
         .with_columns(
             (
-                (pl.col("dataset") == "mapping")
-                & pl.col("model").is_in(Config2D.TRAINING_OVERLAP)
+                (
+                    (pl.col("dataset") == "mapping")
+                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["mapping"])
+                )
+                | (
+                    (pl.col("modality") == "pdb")
+                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["pdb"])
+                )
             ).alias("training_overlap"),
             pl.col("score")
             .rank("dense", descending=True)
@@ -324,19 +411,13 @@ def main() -> None:
         )
         .sort("dataset", "modality", "rank", "model", "method")
     )
-    leaderboard = leaderboard.with_columns(
-        pl.when("training_overlap")
-        .then(pl.col("model") + "*")
-        .otherwise(pl.col("model"))
-        .alias("model")
-    )
     Config2D.LEADERBOARD_FILE.parent.mkdir(parents=True, exist_ok=True)
     leaderboard.write_csv(Config2D.LEADERBOARD_FILE)
+    write_table(leaderboard, profiles)
 
     with pl.Config(tbl_rows=-1, tbl_cols=-1):
         print(leaderboard.drop("training_overlap"))
-    print(f"Wrote leaderboard to {Config2D.LEADERBOARD_FILE}")
-    print("* Model training data overlap the chemical mapping benchmark")
+    print(f"Wrote leaderboard to {Config2D.LEADERBOARD_DIR}")
 
 
 if __name__ == "__main__":
