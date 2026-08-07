@@ -18,3 +18,6 @@ packages = [
   "rnagym.s3d.jobs",
   "rnagym.s3d.util",
 ]
+
+[tool.distutils.egg_info]
+egg-base = "rnagym/.egg"
