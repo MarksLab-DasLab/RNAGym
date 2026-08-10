@@ -83,6 +83,31 @@ def _store_metrics(wt_seqs, dataset, results, score_columns, suffix=""):
 # --- Data loading ---
 
 
+def filter_available_models(
+    model_list: List[str], wt_seqs: pd.DataFrame, combined_dir: str
+) -> List[str]:
+    """Drop models that have no score column in any of the merged assay files.
+
+    Predictions are added to RNAGym one model at a time, and a model can also
+    cover only part of the benchmark. Scoring a model that was never merged in
+    would add an all-NaN row to every output table, so it is dropped instead.
+    """
+    present = set()
+    for dataset in wt_seqs["DMS_ID"]:
+        df_path = f"{combined_dir}/{dataset}.csv"
+        if not os.path.exists(df_path):
+            continue
+        columns = set(pd.read_csv(df_path, nrows=0).columns)
+        present.update(m for m in model_list if f"{m}_score" in columns)
+        if len(present) == len(model_list):
+            break
+
+    dropped = [m for m in model_list if m not in present]
+    if dropped:
+        logger.warning(f"No merged scores found for: {', '.join(dropped)}. Skipping.")
+    return [m for m in model_list if m in present]
+
+
 def load_assay_metrics(
     wt_seqs: pd.DataFrame,
     combined_dir: str,
@@ -445,13 +470,22 @@ def main(args):
     is_non_coding = wt_seqs["RNA_TYPE"].str.contains(
         "ribozyme|tRNA|aptamer|splicing", case=False, regex=True
     )
-    if args.type == "non-coding":
+    # ncRNA is the stricter set used by the fitness leaderboard: it drops the
+    # mRNA-splicing assays, whose readout is splicing efficiency rather than the
+    # fitness of a non-coding RNA.
+    is_ncrna = wt_seqs["RNA_TYPE"].str.contains(
+        "ribozyme|tRNA|aptamer", case=False, regex=True
+    )
+    if args.type == "ncRNA":
+        wt_seqs = wt_seqs[is_ncrna]
+    elif args.type == "non-coding":
         wt_seqs = wt_seqs[is_non_coding]
     elif args.type == "coding":
         wt_seqs = wt_seqs[~is_non_coding]
     elif args.type != "all":
         raise ValueError(
-            f"Expected 'all', 'non-coding', or 'coding' for --type (got {args.type})"
+            f"Expected 'all', 'ncRNA', 'non-coding', or 'coding' for --type "
+            f"(got {args.type})"
         )
 
     # Filter by EVmutation availability
@@ -490,8 +524,14 @@ def main(args):
     ]
     if args.msa_only:
         model_list.append("EVmutation")
+    # Keep only models that were actually merged in. A model whose predictions are
+    # absent would otherwise contribute an all-NaN row to every output table.
+    model_list = filter_available_models(model_list, wt_seqs, args.combined_dir)
     score_columns = [f"{m}_score" for m in model_list]
-    types = ["mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme"]
+    # Only aggregate over RNA types that survive the --type filter, otherwise the
+    # absent types contribute NaN to every model's All_Mean.
+    all_types = ["mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme"]
+    types = [t for t in all_types if (wt_seqs["RNA_TYPE"] == t).any()]
 
     # Load data and compute all per-assay metrics in one pass
     wt_seqs = load_assay_metrics(
@@ -574,8 +614,8 @@ if __name__ == "__main__":
         "--type",
         type=str,
         default="all",
-        choices=["all", "non-coding", "coding"],
-        help="Filter assays by type",
+        choices=["all", "ncRNA", "non-coding", "coding"],
+        help="Filter assays by type ('ncRNA' is ribozyme, tRNA and aptamer only)",
     )
     args = parser.parse_args()
     if args.performance_dir is None:
