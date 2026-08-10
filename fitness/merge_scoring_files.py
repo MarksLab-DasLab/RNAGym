@@ -89,6 +89,7 @@ SCORE_COLS = {
     "RNAErnie": "Mutation_Scores",
     "orthrus": "orthrus_score",
     "aido_rna": "aido_rna_score",
+    "rnagenesis": "rnagenesis_score",
     # AIDO.RNA size series, for the scaling comparison. Every checkpoint writes the
     # same aido_rna_score column, so they differ only by prediction folder.
     "aido_rna_1m": "aido_rna_score",
@@ -110,6 +111,7 @@ ALL_MODELS = [
     "RNA-FM",
     "orthrus",
     "aido_rna",
+    "rnagenesis",
     "aido_rna_1m",
     "aido_rna_25m",
     "aido_rna_300m",
