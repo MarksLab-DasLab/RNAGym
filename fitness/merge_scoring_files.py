@@ -88,6 +88,13 @@ SCORE_COLS = {
     "rinalmo": "logit_scores",
     "RNAErnie": "Mutation_Scores",
     "orthrus": "orthrus_score",
+    "aido_rna": "aido_rna_score",
+    # AIDO.RNA size series, for the scaling comparison. Every checkpoint writes the
+    # same aido_rna_score column, so they differ only by prediction folder.
+    "aido_rna_1m": "aido_rna_score",
+    "aido_rna_25m": "aido_rna_score",
+    "aido_rna_300m": "aido_rna_score",
+    "aido_rna_650m": "aido_rna_score",
     "EVmutation": "prediction_epistatic",
 }
 
@@ -102,6 +109,11 @@ ALL_MODELS = [
     "RNAErnie",
     "RNA-FM",
     "orthrus",
+    "aido_rna",
+    "aido_rna_1m",
+    "aido_rna_25m",
+    "aido_rna_300m",
+    "aido_rna_650m",
     "EVmutation",
 ]
 

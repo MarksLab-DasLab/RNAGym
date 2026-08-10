@@ -521,6 +521,12 @@ def main(args):
         "RNAErnie",
         "RNA-FM",
         "orthrus",
+        "aido_rna",
+        # AIDO.RNA size series, dropped automatically when not merged in.
+        "aido_rna_1m",
+        "aido_rna_25m",
+        "aido_rna_300m",
+        "aido_rna_650m",
     ]
     if args.msa_only:
         model_list.append("EVmutation")
