@@ -522,6 +522,7 @@ def main(args):
         "RNA-FM",
         "orthrus",
         "aido_rna",
+        "rnagenesis",
         # AIDO.RNA size series, dropped automatically when not merged in.
         "aido_rna_1m",
         "aido_rna_25m",
