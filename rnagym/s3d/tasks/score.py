@@ -31,10 +31,12 @@ def score_dataset(dataset: str) -> pd.DataFrame:
         model_scores = data.query("model == @key")
         if model_scores.empty:
             continue
+        if (model_scores[["inf_wc", "inf_nwc"]] == -1).any().any():
+            raise ValueError(f"Unresolved {dataset} INF score")
         tm_train_column = f"{key} TM Homolog Score"
         tm_scores = model_scores["tm_score"].fillna(0)
-        inf_wc = model_scores.loc[model_scores["inf_wc"] != -1, "inf_wc"].fillna(0)
-        inf_nwc = model_scores.loc[model_scores["inf_nwc"] != -1, "inf_nwc"].fillna(0)
+        inf_wc = model_scores["inf_wc"].fillna(0)
+        inf_nwc = model_scores["inf_nwc"].fillna(0)
         complete = pd.concat([tm_scores, model_scores[tm_train_column]], axis=1)
         rows.append(
             {

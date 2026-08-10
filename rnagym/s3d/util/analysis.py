@@ -330,12 +330,21 @@ def InteractionNetworkFidelity(reference_pdb, prediction_pdb):
     # 3) Compute metrics
     # NOTE(MCA): Stacking interactions are currently separate from INF_NWC
     c = RNA_normalizer.PDBComparer()
+
+    def inf(interaction_type):
+        """Return INF, using 1 if both interaction sets are empty and 0 if only one is."""
+        reference = ref_struct.get_interactions(interaction_type)
+        prediction = pred_struct.get_interactions(interaction_type)
+        if not reference or not prediction:
+            return float(not reference and not prediction)
+        return c.INF(pred_struct, ref_struct, interaction_type)
+
     rmsd = c.rmsd(pred_struct, ref_struct)
-    INF_ALL = c.INF(pred_struct, ref_struct, "ALL")
+    INF_ALL = inf("ALL")
     DI_ALL = rmsd / INF_ALL if INF_ALL else None
-    INF_WC = c.INF(pred_struct, ref_struct, "PAIR_2D")
-    INF_NWC = c.INF(pred_struct, ref_struct, "PAIR_3D")
-    INF_STACK = c.INF(pred_struct, ref_struct, "STACK")
+    INF_WC = inf("PAIR_2D")
+    INF_NWC = inf("PAIR_3D")
+    INF_STACK = inf("STACK")
     return (rmsd, DI_ALL, INF_ALL, INF_WC, INF_NWC, INF_STACK)
 
 
