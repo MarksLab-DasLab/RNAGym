@@ -6,6 +6,7 @@
 /split.csv
 /*.tmp
 /RNAGym_Export*
+/todo
 
 # Datasets (must be downloaded directly)
 /datasets/rna3db-cmscans
