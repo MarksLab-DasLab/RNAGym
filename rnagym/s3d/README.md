@@ -1,23 +1,20 @@
 # RNAGym 3D structure benchmark
 
-This directory includes datasets, models, and benchmarks used by RNAGym
-for 3D structure prediction.
+This directory includes the code and environments used by RNAGym for 3D
+structure prediction. The datasets are stored under
+[`../../data/3d/`](../../data/3d/).
 
 ## Datasets
 
-RNAGym provides a carefully curated train/test split of 3D RNA structures that
-enables fair evaluation of models based on how well they capture known
-templates, while maximizing the available structures to train on.  The
-resulting dataset is derived from the PDB, has undergone strict quality
-filters, and is suitable for both secondary and tertiary structure prediction
-tasks.  See `train.csv` and the eponymous test sets `monomer.csv` and
-`complex.csv`.
+RNAGym provides quality-filtered PDB evaluation targets released after the
+latest baseline training cutoff. Targets are stored in
+`data/3d/rnagym_3d.parquet` with a `type` of `monomer` or `multimer`.
 
-`annotated_chains.csv` contains all RNA chains >16nt with useful annotations
-like Rfams hits, heteroatoms bound, % bound by polymer, resolution, and much
-more.  This can be used to easily filter the RNAs in the PDB by different
-selection criteria, for example identifying self-structured RNA monomers in the
-PDB that bind ligands.
+`data/3d/curation/annotated_chains.csv` contains all RNA chains >16nt with
+useful annotations like Rfams hits, heteroatoms bound, % bound by polymer,
+resolution, and much more. This can be used to easily filter the RNAs in the
+PDB by different selection criteria, for example identifying self-structured
+RNA monomers in the PDB that bind ligands.
 
 ### Data Sources
 
@@ -42,8 +39,7 @@ To run the RNAGym dataset curation pipeline:
 2. Run `pixi install`
 3. Install `rmsa` from [source][21]
 4. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
-   `pixi run pipeline` to generate `train.csv`, `monomer.csv`, and
-   `complex.csv`
+   `pixi run pipeline` to generate the processed files under `data/3d/`
 
 ```bash
 RNAGYM_DATABASE_DIR=/path/to/databases pixi run pipeline
@@ -51,11 +47,11 @@ RNAGYM_DATABASE_DIR=/path/to/databases pixi run pipeline
 
 The default workflow is as follows:
 
-1. `merge`: Merges the initial datasets into `merged_pdb_ids.csv`, a
+1. `merge`: Merges the initial datasets into `curation/merged_pdb_ids.csv`, a
    list of unique PDB IDs containing RNA chains.
-2. `annotate`: Individual RNA chains are annotated into `annotated_chains.csv`.
-3. `split`: Splits the annotated chains into the `monomer.csv` and
-   `complex.csv` datasets published by RNAGym.
+2. `annotate`: Individual RNA chains are annotated into
+   `curation/annotated_chains.csv`.
+3. `split`: Selects the monomer and multimer targets in `rnagym_3d.parquet`.
    - To determine the best split, RNAGym calculates the maximal TM score
      between each candidate chain and any chain from the baseline
      training sets. This requires about 5-60 minutes per CPU per
@@ -73,17 +69,8 @@ You can run any step individually with `pixi run <command>`.
 
 ### Using the precomputed 3D structural alignments
 
-To use our precomputed 3D USAlign outputs rather than computing them yourself
-(tricky and expensive), do the following steps:
-
-```bash
-> # Extract "./usalign" (our precomputed USAlign outputs)
-> wget https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_train_to_test_usalign.tar.xz
-> tar -xvJf 3D_train_to_test_usalign.tar.xz
-> # Put USAlign outputs where RNAGym expects them
-> mkdir -p ./out/chains
-> mv usalign/*.out ./out/chains
-```
+The shared data archive described in the [root README](../../README.md) includes
+the precomputed 3D US-align outputs under `data/3d/usalign/`.
 
 ## Launching RNA predictions
 
@@ -109,9 +96,14 @@ To launch the predictions, you can:
 
 ## Analysis
 
-Analysis can be conducted using `pixi run evcouplings` followed by
-`pixi run analyze`. See `gym.py`, `cmd/analyze.py`, and
-`cmd/evcouplings.py` for more details.
+Generate the [3D leaderboard](../../leaderboard/3d/) and detailed scores with:
+
+```bash
+pixi run leaderboard
+```
+
+Full structural analysis can be conducted using `pixi run evcouplings`
+followed by `pixi run analyze`.
 
 <!--Hyperlinks-->
 [1]: https://pubmed.ncbi.nlm.nih.gov/32276988/

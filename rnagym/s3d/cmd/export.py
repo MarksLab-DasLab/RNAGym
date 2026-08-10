@@ -7,6 +7,7 @@
 import shutil
 from datetime import datetime
 from pathlib import Path
+
 import pandas as pd
 
 from rnagym.s3d.util import Config
@@ -14,8 +15,8 @@ from rnagym.s3d.util.analysis import get_rf2na_chain_ids, write_chain_minimal_pd
 
 
 def main():
-    mon_df = pd.read_csv("./monomer.csv")
-    mul_df = pd.read_csv("./complex.csv")
+    mon_df = Config.load_targets("monomer")
+    mul_df = Config.load_targets("multimer")
 
     now_str = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
     export_dir = Path(f"./RNAGym_Export_{now_str}")
@@ -98,7 +99,7 @@ def main():
             shutil.copy2(couplings_afa, msa_dir / f"{chain_key}.afa")
 
             # USAlign output
-            usa_out = Path(f"./{Config.CHAINS_DIR}/{chain_key}.out")
+            usa_out = Path(f"{Config.USALIGN_DIR}/{chain_key}.out")
             shutil.copy2(usa_out, usa_dir / f"{chain_key}.usalign.out")
 
     # Copy in README.md describing the files

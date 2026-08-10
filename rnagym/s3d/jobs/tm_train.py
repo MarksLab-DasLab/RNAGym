@@ -8,10 +8,10 @@
 import itertools
 import shlex
 import subprocess
-from rnagym.s3d.cmd.split import get_split_candidates
 from pathlib import Path
 from typing import List
 
+from rnagym.s3d.cmd.split import get_split_candidates
 from rnagym.s3d.util import ChainID, Config
 from rnagym.s3d.util.analysis import prep_usalign
 
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
         # Run usalign only if the cached out file is absent or if it is present
         # but indicates that the previous run failed
-        cached_out_file = Path(f"{Config.CHAINS_DIR}/{pdb_id.lower()}_{asym_id}.out")
+        cached_out_file = Path(f"{Config.USALIGN_DIR}/{pdb_id.lower()}_{asym_id}.out")
         if cached_out_file.exists():
             with open(cached_out_file, "r") as f:
                 usa_results = f.read()

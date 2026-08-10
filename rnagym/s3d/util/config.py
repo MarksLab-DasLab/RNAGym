@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 
-import itertools
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
 import pandas as pd
-from rnagym.config import Config3D
 from rna3db.tabular import TabularOutput, read_tbls_from_dir
+
+from rnagym.config import Config3D
 
 ###############################################################################
 # `config.py`:  Configuration variables for RNA Gym 3D.
 ###############################################################################
 # ---- General ---- #
-OUT_DIR = "./out"
+OUT_DIR = Config3D.OUT_DIR.as_posix()
 PDB_OUT_PREFIX = OUT_DIR + "/{pdb_id}"
 CHAIN_OUT_PREFIX = PDB_OUT_PREFIX + "/{chain_id}"
 CHAIN_MINIMAL_PDB_FILE = CHAIN_OUT_PREFIX + "/{chain_id}.pdb"
@@ -87,10 +87,16 @@ MIN_RFAM_OBSERVED = 0.00  # Min. fraction of the Rfam hit observed in the chain
 # ALLOWABLE_COFACTORS = {"BA", "CA", "CL", "F", "FE", "K", "MG", "NI", "PO4", "SO4", "ZN"}
 MAX_CLUSTER_E_VALUE = 1.0
 TOP_N = 3  # The top # of sequence clusters to select from each Rfam
-MONOMER_CSV = Path("monomer.csv").resolve()
-MULTIMER_CSV = Path("complex.csv").resolve()
-MONOMER_ANALYZED_CSV = Path("out/monomer.analyzed.csv").resolve()
-MULTIMER_ANALYZED_CSV = Path("out/multimer.analyzed.csv").resolve()
+MONOMER_ANALYZED_CSV = Config3D.OUT_DIR / "monomer.analyzed.csv"
+MULTIMER_ANALYZED_CSV = Config3D.OUT_DIR / "complex.analyzed.csv"
+
+
+def load_targets(target_type=None):
+    """Load all evaluation targets or one target type."""
+    targets = pd.read_parquet(Config3D.TARGET_FILE)
+    if target_type is None:
+        return targets
+    return targets[targets["type"] == target_type].copy()
 
 # --- RNA3DB Sequence/Structure Clusters ---
 RNA3DB_DIR = "./datasets/rna3db"
@@ -145,8 +151,8 @@ for comp_id, chains in STRUCT_CLUST.items():
 # ---- Analysis ---- #
 SEQUENCE_ID = "{pdb_id}_{chain_id}"
 RNA3DBENCH_INPUT_DIR = RNA3DBENCH_DIR + "/Dataset3/inputs/{sequence_id}"
-CHAINS_DIR = OUT_DIR + "/chains"  # directory containing all RNA chain PDBs
-CHAINS_LIST_FILE = CHAINS_DIR + "/chains.txt"  # list of all RNA chains to align to
+USALIGN_DIR = Config3D.USALIGN_DIR.as_posix()
+USALIGN_REFERENCES_FILE = f"{USALIGN_DIR}/references.txt"
 # General EVCouplings configurations (replace with paths if not in $PATH)
 FONT = "Nimbus Sans"  # plot font
 TOOLS = {
@@ -190,7 +196,7 @@ class Baseline:
     mul_afa_file: Optional[Path]
 
 
-PREDICTIONS_DIR = Path("./predictions").resolve()
+PREDICTIONS_DIR = Config3D.PREDICTION_DIR
 AF3 = Baseline(
     name="af3",
     install_dir=Path("/path/to/alphafold3"),
@@ -266,7 +272,7 @@ def get_bl_out_pdb(
         name_lower=name.lower(),
     )
 
-    out_dir = (Path("predictions") / bl_name / label / name).resolve()
+    out_dir = (PREDICTIONS_DIR / bl_name / label / name).resolve()
     out_file = (out_dir / out_file).resolve()
     return out_dir, out_file
 

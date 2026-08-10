@@ -1,0 +1,4 @@
+# Ignore downloaded and generated data
+*
+!.gitignore
+!README.md

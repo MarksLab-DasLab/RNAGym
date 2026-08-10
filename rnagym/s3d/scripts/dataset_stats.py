@@ -5,11 +5,10 @@
 ###############################################################################
 
 import pandas as pd
-
 from rnagym.s3d.util import Config
 
-mon_df = pd.read_csv(Config.MONOMER_CSV)
-mul_df = pd.read_csv(Config.MULTIMER_CSV)
+mon_df = Config.load_targets("monomer")
+mul_df = Config.load_targets("multimer")
 cat_df = pd.concat([mon_df, mul_df])
 dfs = {"monomers": mon_df, "multimers": mul_df, "total": cat_df}
 

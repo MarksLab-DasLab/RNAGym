@@ -11,19 +11,11 @@ import shlex
 import subprocess
 from pathlib import Path
 
-import pandas as pd
-
 from rnagym.s3d.util import Config
 
 if __name__ == "__main__":
     root_path = Path(__file__).resolve().parent.parent
-    mon_df = pd.read_csv(
-        root_path / Config.MONOMER_CSV, keep_default_na=False, na_values=[""]
-    )
-    mul_df = pd.read_csv(
-        root_path / Config.MULTIMER_CSV, keep_default_na=False, na_values=[""]
-    )
-    df = pd.concat([mon_df, mul_df], axis=0)
+    df = Config.load_targets()
 
     # Launch rMSA jobs for each chain
     for _, row in df.iterrows():

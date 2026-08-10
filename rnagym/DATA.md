@@ -30,14 +30,12 @@ Model files for 2D structure prediction task were prepared for a linux 64-bit sy
 
 | Data | Size (unzipped) | Link |
 | --- | --- | --- |
-| Train.csv | 3.6MB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/train.csv |
-| Test.csv (monomers) | 84KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/monomer.csv |
-| Test.csv (complexes) | 140KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/complex.csv |
-| Alignments | 55.3MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_alignments.tar.xz |
-| Monomer scores | 7KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/monomer.csv |
-| Complex scores | 15KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/multimer.csv |
-| Model predictions (PDBs) | 165MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_model_outputs.tar.xz |
-| Test-to-train TM scores | 150MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_train_to_test_usalign.tar.xz |
+| Curation tables | 26MB | [`data/3d/curation/`](../data/3d/curation/) |
+| Evaluation targets | 130KB | [`data/3d/rnagym_3d.parquet`](../data/3d/rnagym_3d.parquet) |
+| Per-target scores | 16KB | [`data/3d/rnagym_3d_scores.parquet`](../data/3d/rnagym_3d_scores.parquet) |
+| Alignments | 53MB | [`data/3d/msa/`](../data/3d/msa/) |
+| Experimental and predicted structures | 158MB | [`data/3d/structures/`](../data/3d/structures/) |
+| Test-to-reference TM comparisons | 12GB | [`data/3d/usalign/`](../data/3d/usalign/) |
 
 Data is also available on our
 [HuggingFace](https://huggingface.co/datasets/Marks-lab/RNAgym) and

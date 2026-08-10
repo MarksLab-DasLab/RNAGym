@@ -32,6 +32,7 @@ from Bio.PDB import PDBIO, MMCIFParser
 from evcouplings.compare import PDB, Chain, DistanceMap, add_distances
 from evcouplings.utils.pipeline import execute
 
+from rnagym.config import Config3D
 from rnagym.s3d.util import (
     AltID,
     AtomName,
@@ -803,8 +804,8 @@ def prep_af3(out_dir=Config.AF3.out_dir):
     out_path = Path(out_dir)
     mon_path = (out_path / "monomers").resolve()
     mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
-    mul_df = pd.read_csv(Config.MULTIMER_CSV)
+    mon_df = Config.load_targets("monomer")
+    mul_df = Config.load_targets("multimer")
 
     # --- Process monomer runs ---
     # For each monomer (i.e. each row in mon_df) we create a configuration that
@@ -822,7 +823,7 @@ def prep_af3(out_dir=Config.AF3.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         # Create top-level AF3 input e.g., name = "AF3_1ABC_A"
-        sequence_a3m = Path(f"./out/{pdb_id}/{asym_chain_id}/rMSA/sequence.a3m")
+        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
         out_a3m = out_dir / "sequence.a3m"
         out_fp = out_dir / "config.json"
         seq_unmod = prep_fasta(sequence_a3m, out_a3m, seq_unmodified)
@@ -930,12 +931,12 @@ def prep_af3(out_dir=Config.AF3.out_dir):
                 }
             }
 
-            sequence_a3m = Path(f"./out/{pdb_id_lower}/{chain_id}/rMSA/sequence.a3m")
+            sequence_a3m = Config.get_out_prefix(pdb_id_lower, chain_id) / "rMSA/sequence.a3m"
             out_a3m = out_dir / f"sequence_{chain_id}.a3m"
             out_fp = out_dir / "config.json"
             out_fp.parent.mkdir(exist_ok=True)
 
-            # If this chain is RNA *and* is in complex.csv then we have a custom MSA
+            # Multimer RNA chains have custom MSAs
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
                 seq_unmod = prep_fasta(sequence_a3m, out_a3m, str(seq_unmod))
@@ -973,8 +974,8 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
     out_path = Path(out_dir)
     mon_path = (out_path / "monomers").resolve()
     mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
-    mul_df = pd.read_csv(Config.MULTIMER_CSV)
+    mon_df = Config.load_targets("monomer")
+    mul_df = Config.load_targets("multimer")
 
     # --- Process monomer runs ---
     # For each monomer (i.e. each row in mon_df) we create a configuration that
@@ -993,7 +994,7 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         # Create top-level RF2NA input
-        sequence_afa = Path(f"./out/{pdb_id}/{asym_chain_id}/rMSA/sequence.afa")
+        sequence_afa = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.afa"
         sequence_fa = out_dir / f"{asym_chain_id}.fa"
         out_afa = out_dir / f"{asym_chain_id}.afa"
         out_fp = out_dir / "launch.sh"
@@ -1090,12 +1091,12 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
             seq_unmod = info.sequences_unmod[chain_id]
 
             sequence_fa = out_dir / f"{chain_id}{sym_exp}.fa"
-            sequence_afa = Path(f"./out/{pdb_id_lower}/{chain_id}/rMSA/sequence.afa")
+            sequence_afa = Config.get_out_prefix(pdb_id_lower, chain_id) / "rMSA/sequence.afa"
             out_afa = out_dir / f"{chain_id}{sym_exp}.afa"
             out_fp = out_dir / "launch.sh"
             out_fp.parent.mkdir(exist_ok=True)
 
-            # If this chain is RNA *and* is in complex.csv then we have a custom MSA
+            # Multimer RNA chains have custom MSAs
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
                 seq_unmodified = prep_fasta(
@@ -1139,7 +1140,7 @@ def prep_rhofold(out_dir=Config.RHOFOLD.out_dir):
     out_path = Path(out_dir)
     mon_path = (out_path / "monomers").resolve()
     mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
+    mon_df = Config.load_targets("monomer")
 
     # --- Process monomer runs ---
     for _, row in mon_df.iterrows():
@@ -1154,7 +1155,7 @@ def prep_rhofold(out_dir=Config.RHOFOLD.out_dir):
             continue
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
-        sequence_a3m = Path(f"./out/{pdb_id}/{asym_chain_id}/rMSA/sequence.a3m")
+        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
         out_a3m = out_dir / "sequence.a3m"
         out_fp = out_dir / "sequence.fa"
 
@@ -1177,7 +1178,7 @@ def prep_nufold(out_dir=Config.NUFOLD.out_dir):
     out_path = Path(out_dir)
     mon_path = (out_path / "monomers").resolve()
     mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
+    mon_df = Config.load_targets("monomer")
 
     # --- Process monomer runs ---
     for _, row in mon_df.iterrows():
@@ -1195,7 +1196,7 @@ def prep_nufold(out_dir=Config.NUFOLD.out_dir):
 
         chain_key = f"{pdb_id.upper()}_{asym_chain_id}"
         input_dir = out_dir / "input" / chain_key
-        sequence_a3m = Path(f"./out/{pdb_id}/{asym_chain_id}/rMSA/sequence.a3m")
+        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
         in_a3m = input_dir / f"{chain_key}.a3m"
         in_fa = input_dir / f"{chain_key}.fasta"
         in_ss = input_dir / f"{chain_key}.ipknot.ss"
@@ -1227,7 +1228,7 @@ def prep_trRNA(out_dir=Config.TRRNA.out_dir):
     out_path = Path(out_dir)
     mon_path = (out_path / "monomers").resolve()
     mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
+    mon_df = Config.load_targets("monomer")
 
     # --- Process monomer runs ---
     for _, row in mon_df.iterrows():
@@ -1244,7 +1245,7 @@ def prep_trRNA(out_dir=Config.TRRNA.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         chain_key = f"{pdb_id.lower()}_{asym_chain_id}"
-        sequence_a3m = Path(f"./out/{pdb_id}/{asym_chain_id}/rMSA/sequence.a3m")
+        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
         out_fa = out_dir / "sequence.fa"
         out_a3m = out_dir / "sequence.a3m"
         out_a3m.parent.mkdir(exist_ok=True)
@@ -1298,14 +1299,14 @@ def __get_max_seq_id(args: Iterable[Any]):
 
 def __get_max_tm_results(args: Iterable[Any]):
     """
-    Helper function for identifying maximum sequence identities.
+    Helper function for identifying maximum TM scores.
     """
     index, pdb_id, asym_id, pdb_id_to_date = args
     chain_id = f"{pdb_id.lower()}_{asym_id}"
     query_file = Path(f"{Config.get_out_prefix(pdb_id.lower(), asym_id)}/{asym_id}.pdb")
-    cached_out_file = Path(f"./{Config.CHAINS_DIR}/{chain_id}.out")
-    chains_list_file = Path(Config.CHAINS_LIST_FILE)
-    chains_dir = Path(Config.CHAINS_DIR)
+    cached_out_file = Path(f"{Config.USALIGN_DIR}/{chain_id}.out")
+    references_file = Path(Config.USALIGN_REFERENCES_FILE)
+    usalign_dir = Path(Config.USALIGN_DIR)
     cached_out_file.touch(exist_ok=True)
 
     # Run USAlign if needed, or use cached output
@@ -1318,9 +1319,9 @@ def __get_max_tm_results(args: Iterable[Any]):
             or last_line.startswith("#Total CPU time is  0.00 seconds")
             or not last_line.startswith("#Total CPU time is")
         ):
-            # Trailing slash after chains_dir is required
+            # Trailing slash after usalign_dir is required
             usa_cmd = (
-                f"{Config.TOOLS['usalign']} -dir1 '{chains_dir}/' '{chains_list_file}' "
+                f"{Config.TOOLS['usalign']} -dir1 '{usalign_dir}/' '{references_file}' "
                 f"'{query_file}'"
             )
             print(f"Running {usa_cmd}")
@@ -1382,28 +1383,28 @@ def prep_usalign(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chains.csv",
+        Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
     )
     rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
 
-    # Symlink all RNA chains prior to the cutoff to CHAINS_DIR
+    # Symlink all RNA chains prior to the cutoff for US-align
     rna_chains = rcsb_df[["PDB ID", "Asym. Chain ID", "Published"]]
     rna_chains = [
         (pdb_id.lower(), asym_id)
         for pdb_id, asym_id, _ in rna_chains.itertuples(index=False)
     ]
-    os.makedirs(Config.CHAINS_DIR, exist_ok=True)
-    with open(Config.CHAINS_LIST_FILE, "w") as f:
+    os.makedirs(Config.USALIGN_DIR, exist_ok=True)
+    with open(Config.USALIGN_REFERENCES_FILE, "w") as f:
         for pdb_id, asym_id in rna_chains:
             chain_id = f"{pdb_id.lower()}_{asym_id}"
             prefix = Config.get_out_prefix(pdb_id, asym_id)
             source_pdb = Path(f"{prefix}/{asym_id}.pdb").resolve()
-            target_pdb = Path(f"{Config.CHAINS_DIR}/{chain_id}.pdb").resolve()
-            if not target_pdb.exists():
-                target_pdb.symlink_to(source_pdb)
+            reference_pdb = Path(f"{Config.USALIGN_DIR}/{chain_id}.pdb").resolve()
+            if not reference_pdb.exists():
+                reference_pdb.symlink_to(source_pdb)
             f.write(f"{chain_id}.pdb\n")
 
 
@@ -1431,15 +1432,15 @@ def add_tm_id(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chains.csv",
+        Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
     )
 
     rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
-    chains_list_file = Path(Config.CHAINS_LIST_FILE)
-    if not chains_list_file.exists():
+    references_file = Path(Config.USALIGN_REFERENCES_FILE)
+    if not references_file.exists():
         raise RuntimeError(
             "Attempted to call add_tm_id without first calling prep_usalign"
         )
@@ -1501,7 +1502,7 @@ def add_seq_id(
         considered as possible homology targets.
     """
     rcsb_df = pd.read_csv(
-        "./annotated_chains.csv",
+        Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
@@ -1599,17 +1600,15 @@ def get_baseline_scores(print_status=False, ignore_cache=False) -> pd.DataFrame:
     else:
         # Delete any cached MCAnnotate output files
         for root, dirs, files in itertools.chain(
-            os.walk("out/"), os.walk("predictions/")
+            os.walk(Config3D.OUT_DIR), os.walk(Config3D.PREDICTION_DIR)
         ):
             for file in files:
                 if file.endswith(".mcout"):
                     os.remove(os.path.join(root, file))
 
         # Process monomer and multimer CSVs
-        mon_df, mul_df = (
-            pd.read_csv(Config.MONOMER_CSV),
-            pd.read_csv(Config.MULTIMER_CSV),
-        )
+        mon_df = Config.load_targets("monomer")
+        mul_df = Config.load_targets("multimer")
         datasets = [("monomers", mon_df), ("multimers", mul_df)]
         for label, dataset in datasets:
             for bl_name, bl in Config.BASELINES.items():

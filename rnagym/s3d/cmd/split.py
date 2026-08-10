@@ -6,9 +6,9 @@
 
 import pandas as pd
 
+from rnagym.config import Config3D
 from rnagym.s3d.util import Config as Pipeline
 from rnagym.s3d.util.analysis import add_seq_id, add_tm_id, prep_usalign
-from rnagym.s3d.util.config import Config3D
 
 NMR_SENTINEL = 1.23456789
 
@@ -44,7 +44,7 @@ def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
     `util/config.py`.  Note that TM_train and %ID_train are not yet processed.
     """
     df = pd.read_csv(
-        "./annotated_chains.csv",
+        Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
@@ -155,98 +155,11 @@ def main():
     print(f"{len(mul_df)=}")
     print(f"{mul_df['PDB ID'].nunique()=}")
 
-    # --- Create training set ---
-    print("\n--- Creating training set ---")
-    test_df = pd.concat([mon_df, mul_df])
-    test_ids = set(zip(test_df["PDB ID"], test_df["Asym. Chain ID"]))
-
-    # Reload and apply quality filters (but not date filter)
-    all_chains_df = pd.read_csv(
-        "./annotated_chains.csv",
-        keep_default_na=False,
-        na_values=[""],
-        low_memory=False,
-    )
-    quality = all_chains_df.apply(Config3D.passes_quality, axis=1)
-    all_chains_df["Resolution"] = (
-        all_chains_df["Resolution"]
-        .str.split(",")
-        .explode()
-        .replace("N/A", NMR_SENTINEL)
-        .replace(".", None)
-        .replace("n.s.", None)
-        .astype(float)
-        .groupby(level=0)
-        .max()
-    )
-
-    # Apply quality filters and date filter for TRAINING (before cutoff)
-    train_df = all_chains_df[
-        quality
-        & (all_chains_df["L"] >= Config3D.MIN_LENGTH)
-        & (all_chains_df["Published"] < Pipeline.TRAINING_CUTOFF)
-    ]
-
-    # Remove test set chains and deduplicate by sequence
-    id_tuples = zip(train_df["PDB ID"], train_df["Asym. Chain ID"])
-    train_df = train_df[[i not in test_ids for i in id_tuples]].copy()
-    train_df = (
-        train_df.sort_values(
-            by=["Resolution", "L", "PDB ID", "Asym. Chain ID"],
-            ascending=[True, False, True, True],
-        )
-        .groupby("Sequence (unmod.)")
-        .first()
-        .reset_index()
-    )
-
-    # Count monomers and multimers
-    train_mon = train_df[
-        train_df["% covered (any polymer)"] <= Config3D.MAX_POLYMER_COVERAGE
-    ]
-    train_mul = train_df[
-        train_df["% covered (any polymer)"] > Config3D.MAX_POLYMER_COVERAGE
-    ]
-    print(f"Training set: {len(train_mon)} monomers, {len(train_mul)} multimers")
-
-    # Write to CSV
-    train_df["Resolution"] = train_df["Resolution"].replace(NMR_SENTINEL, "N/A")
-    train_df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(
-        "train.csv", index=False
-    )
-    print(f"{len(train_df)} training chains written to train.csv")
-    debug_df(train_df)
-    print("")
-
-    # Debug the RNAGym test dataset
-    print("--- Debug info for test dataset ---")
-    debug_df(test_df)
-    print("")
-
-    # Debug the full RNAGym dataset
-    print("--- Debug info for full dataset ---")
-    all_data = pd.concat([train_df, test_df])
-    debug_df(all_data)
-    print("")
-
-    # Calculate TM_train between test and train using AF3 TM_train, since it is
-    # the most recent model and therefore sets the training set date cutoff.
-    # Note this is slightly approximate, as our train set was filtered for high
-    # quality structures only.
-    print("\n--- Approximate test-to-train homology ---")
-    test_tm = pd.to_numeric(test_df["AF3 TM Homolog Score"], errors="coerce").dropna()
-    print(
-        f"min={test_tm.min():.3f}, max={test_tm.max():.3f}, "
-        f"avg={test_tm.mean():.3f}, median={test_tm.median():.3f}"
-    )
-    print("")
-
-    # --- Write to CSV ---
-    def write_to_csv(df, fname):
-        print(f"--- Writing {fname}... ---")
-        debug_df(df)
+    def prepare_targets(df, target_type):
+        """Restore published columns and label one target type."""
+        df = df.copy()
         df.columns = df.columns.str.replace("no.", "#")
-        target_cols = og_cols
+        target_cols = og_cols.copy()
         for bl_name in Pipeline.BASELINES.keys():
             new_col = f"{bl_name.upper()} Sequence Homolog"
             target_cols += [
@@ -262,13 +175,18 @@ def main():
                 f"{new_col} Rfam",
                 f"{new_col} Score",
             ]
-        df = df[target_cols]
+        df = df[target_cols].copy()
+        df.insert(0, "type", target_type)
         df["Resolution"] = df["Resolution"].replace(NMR_SENTINEL, "N/A")
-        df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(fname, index=False)
-        print("")
+        return df
 
-    write_to_csv(mon_df, Pipeline.MONOMER_CSV)
-    write_to_csv(mul_df, Pipeline.MULTIMER_CSV)
+    targets = pd.concat(
+        [prepare_targets(mon_df, "monomer"), prepare_targets(mul_df, "multimer")],
+        ignore_index=True,
+    ).sort_values(by=["type", "PDB ID", "Auth. Chain ID"])
+    debug_df(targets)
+    targets.to_parquet(Config3D.TARGET_FILE, compression="zstd", index=False)
+    print(f"Wrote {len(targets)} targets to {Config3D.TARGET_FILE}")
 
 
 if __name__ == "__main__":

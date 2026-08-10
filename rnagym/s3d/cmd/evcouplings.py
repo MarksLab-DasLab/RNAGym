@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, TypeVar
 
-import pandas as pd
 from evcouplings.utils import BailoutException
 
 from rnagym.s3d.util import ChainID, Config, PdbID
@@ -44,9 +43,7 @@ def run_ev_couplings(data: Dict[str, str]) -> JobOutput[Exception]:
 
 
 def main():
-    mon_df = pd.read_csv(Config.MONOMER_CSV)
-    mul_df = pd.read_csv(Config.MULTIMER_CSV)
-    df = pd.concat([mon_df, mul_df])
+    df = Config.load_targets()
     rows = df.to_dict(orient="records")  # Convert rows to dictionaries for easy access
 
     # Single-threaded (for debugging)

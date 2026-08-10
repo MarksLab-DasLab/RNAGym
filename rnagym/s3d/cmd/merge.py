@@ -11,8 +11,12 @@ from collections import defaultdict
 
 import pandas as pd
 
+from rnagym.config import Config3D
+
 
 def main():
+    Config3D.CURATION_DIR.mkdir(parents=True, exist_ok=True)
+
     # Data sources
     casp15_source = "datasets/casp15/rna_targetlist.csv"
     rna_2020_source = "datasets/2020_rna/PDB/pdb_ids.csv"
@@ -84,7 +88,7 @@ def main():
             merged_pdb_ids[pdb_id].append(name)
 
     # Output to merged_pdb_ids.csv with PDB ID and Source(s) columns
-    with open("merged_pdb_ids.csv", "w") as file:
+    with open(Config3D.MERGED_PDB_IDS_FILE, "w") as file:
         file.write("PDB ID,Source(s),Equivalence Class(es),EC size\n")
         for pdb_id, sources in sorted(merged_pdb_ids.items()):
             eq_classes = eq_class_ids[pdb_id]

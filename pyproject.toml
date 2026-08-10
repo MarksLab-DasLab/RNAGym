@@ -16,6 +16,7 @@ packages = [
   "rnagym.s3d",
   "rnagym.s3d.cmd",
   "rnagym.s3d.jobs",
+  "rnagym.s3d.tasks",
   "rnagym.s3d.util",
 ]
 

@@ -46,7 +46,7 @@ the highest-SNR measurement is the representative.
 | `resolved` | Positions resolved in the source structure and included in scoring. |
 
 PDB entries are canonical RNA monomers selected from
-`rnagym/s3d/annotated_chains.csv` using
+`data/3d/curation/annotated_chains.csv` using
 [`Config3D`](../../rnagym/config.py). Structures contain cis
 Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
 Contacts involving residues with multiple such partners are excluded because

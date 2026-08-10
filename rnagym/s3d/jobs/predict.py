@@ -5,14 +5,19 @@
 ###############################################################################
 
 import argparse
-import pandas as pd
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 from rnagym.s3d.util import Config
-from rnagym.s3d.util.analysis import prep_af3, prep_nufold, prep_rf2na, prep_rhofold, prep_trRNA
+from rnagym.s3d.util.analysis import (
+    prep_af3,
+    prep_nufold,
+    prep_rf2na,
+    prep_rhofold,
+    prep_trRNA,
+)
 
 
 def parse_args():
@@ -43,12 +48,12 @@ BL_PREP_FNS = {
 
 mon_chain_keys = {
     f"{pdb_id.lower()}_{asym_id}"
-    for _, pdb_id, asym_id in pd.read_csv(Config.MONOMER_CSV)[
+    for _, pdb_id, asym_id in Config.load_targets("monomer")[
         ["PDB ID", "Asym. Chain ID"]
     ].itertuples()
 }
 mul_pdb_ids = {
-    f"{pdb_id.lower()}" for pdb_id in pd.read_csv(Config.MULTIMER_CSV)["PDB ID"]
+    f"{pdb_id.lower()}" for pdb_id in Config.load_targets("multimer")["PDB ID"]
 }
 
 
@@ -91,7 +96,7 @@ if __name__ == "__main__":
                         name = pred_dir.name
 
                         # Only launch jobs for chain keys or PDB IDs currently
-                        # found in `monomer.csv` or `complex.csv`
+                        # found in the released evaluation targets
                         if chain_dir == "monomers" and name not in mon_chain_keys:
                             continue
                         if chain_dir == "multimers" and name not in mul_pdb_ids:

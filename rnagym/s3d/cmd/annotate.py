@@ -12,6 +12,7 @@ from typing import List
 
 import pandas as pd
 
+from rnagym.config import Config3D
 from rnagym.s3d.util.analysis import assign_cluster_0
 from rnagym.s3d.util.structure import StructureInfo
 
@@ -44,13 +45,13 @@ def process_row(row) -> List[str]:
 
 def main():
     # Write the headers
-    out_fname = "annotated_chains.csv"
+    out_fname = Config3D.ANNOTATED_CHAINS_FILE
     headers = StructureInfo.HEADERS
     with open(out_fname, "w") as file:
         file.write(f"{','.join(headers)}\n")
 
     # Load the data
-    data_path = "./merged_pdb_ids.csv"
+    data_path = Config3D.MERGED_PDB_IDS_FILE
     data = pd.read_csv(data_path)
 
     # Write the data in 50 splits (limits total memory utilization)

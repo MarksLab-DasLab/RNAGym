@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=usalign
-#SBATCH --output=out/%x_%j.out
-#SBATCH --error=out/%x_%j.err
+#SBATCH --output=../../data/3d/out/%x_%j.out
+#SBATCH --error=../../data/3d/out/%x_%j.err
 #SBATCH --time=02:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8G
