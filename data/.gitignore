@@ -1,0 +1,5 @@
+# Ignore generated data while retaining documentation
+*
+!*/
+!.gitignore
+!*.md

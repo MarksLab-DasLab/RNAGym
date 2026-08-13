@@ -117,7 +117,7 @@ class FamHits:
         """
         Constructs a Pfam FamHits for the input sequence as a pandas DataFrame.
         Returns the FamHits, and writes outputs to
-        `./out/{pdb_id}/{chain_id}/`.
+        `data/3d/cache/{pdb_id}/{chain_id}/`.
         """
         # Extract the sequence
         sequence_lines = fasta_file.read().splitlines()[1:]
@@ -149,7 +149,7 @@ class FamHits:
         """
         Constructs an Rfam FamHits for the input sequence as a pandas
         DataFrame. Returns the hits, and writes outputs to
-        `./out/{pdb_id}/{chain_id}/`.
+        `data/3d/cache/{pdb_id}/{chain_id}/`.
         """
         # Get the sequence
         _, sequence = next(Alignment.read_fasta(fasta_file))

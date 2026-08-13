@@ -1624,7 +1624,7 @@ def get_baseline_scores(print_status=False, ignore_cache=False) -> pd.DataFrame:
     else:
         # Delete any cached MCAnnotate output files
         for root, dirs, files in itertools.chain(
-            os.walk(Config3D.OUT_DIR), os.walk(Config3D.PREDICTION_DIR)
+            os.walk(Config3D.CACHE_DIR), os.walk(Config3D.PREDICTION_DIR)
         ):
             for file in files:
                 if file.endswith(".mcout"):

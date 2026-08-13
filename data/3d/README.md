@@ -7,7 +7,8 @@
 | `curation/` | Candidate PDB entries and annotated RNA chains |
 | `predictions/` | Predicted structures grouped by model |
 | `structures/` | Experimental and predicted PDB structures |
-| `msa/` | Input multiple sequence alignments |
+| `msa/` | One input multiple sequence alignment per unique sequence |
+| `cache/` | Downloaded PDB assemblies and derived per-chain files |
 | `usalign/` | Precomputed test-to-reference US-align outputs |
 
 The dataset curation pipeline is documented in

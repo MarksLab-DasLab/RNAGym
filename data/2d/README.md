@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
 | `rnagym_2d.parquet` | 358 PseudoBase and 2,062 PDB structures | `uid` |
-| `rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
+| `../rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
 | `rnagym_rfams.parquet` | Rfam hits for each registered sequence | `sequence_id` |
 
 
@@ -53,7 +53,7 @@ Contacts involving residues with multiple such partners are excluded because
 dot-bracket cannot represent them. All residues in these conflicting contact
 components are marked unresolved and excluded from scoring.
 
-### `rnagym_sequences.parquet`
+### `../rnagym_sequences.parquet`
 
 | Column | Description |
 | --- | --- |

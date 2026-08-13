@@ -186,7 +186,7 @@ def get_pdb_candidates() -> list[tuple[str, Path, str]]:
         candidates.append(
             (
                 f"pdb:{pdb_id}_{asym_id}",
-                Config3D.OUT_DIR / pdb_id / asym_id / f"{asym_id}.pdb",
+                Config3D.CACHE_DIR / pdb_id / asym_id / f"{asym_id}.pdb",
                 row["Sequence (unmod.)"],
             )
         )

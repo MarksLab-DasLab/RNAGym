@@ -14,8 +14,7 @@ from rnagym.config import Config3D
 # `config.py`:  Configuration variables for RNA Gym 3D.
 ###############################################################################
 # ---- General ---- #
-OUT_DIR = Config3D.OUT_DIR.as_posix()
-PDB_OUT_PREFIX = OUT_DIR + "/{pdb_id}"
+PDB_OUT_PREFIX = f"{Config3D.CACHE_DIR}/{{pdb_id}}"
 CHAIN_OUT_PREFIX = PDB_OUT_PREFIX + "/{chain_id}"
 CHAIN_MINIMAL_PDB_FILE = CHAIN_OUT_PREFIX + "/{chain_id}.pdb"
 
@@ -87,8 +86,8 @@ MIN_RFAM_OBSERVED = 0.00  # Min. fraction of the Rfam hit observed in the chain
 # ALLOWABLE_COFACTORS = {"BA", "CA", "CL", "F", "FE", "K", "MG", "NI", "PO4", "SO4", "ZN"}
 MAX_CLUSTER_E_VALUE = 1.0
 TOP_N = 3  # The top # of sequence clusters to select from each Rfam
-MONOMER_ANALYZED_CSV = Config3D.OUT_DIR / "monomer.analyzed.csv"
-MULTIMER_ANALYZED_CSV = Config3D.OUT_DIR / "complex.analyzed.csv"
+MONOMER_ANALYZED_CSV = Config3D.DATA_DIR / "monomer.analyzed.csv"
+MULTIMER_ANALYZED_CSV = Config3D.DATA_DIR / "complex.analyzed.csv"
 
 
 def load_targets(target_type=None):

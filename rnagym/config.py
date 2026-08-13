@@ -12,7 +12,9 @@ class _Config:
     """Configuration shared by every benchmark."""
 
     REPO_DIR = _REPO_DIR
+    DATA_DIR = _DATA_DIR
     DATABASE_DIR = _DATABASE_DIR
+    SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
 
 
 class Config2D(_Config):
@@ -23,7 +25,6 @@ class Config2D(_Config):
     RAW_DIR = DATA_DIR / "raw_data"
     MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
     STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
-    SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
     RFAM_FILE = DATA_DIR / "rnagym_rfams.parquet"
     PREDICTION_DIR = DATA_DIR / "predictions"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "2d"
@@ -51,6 +52,15 @@ class Config2D(_Config):
     RFAM_SHARDS = 16
 
 
+class ConfigFitness(_Config):
+    """Fitness benchmark configuration."""
+
+    DIR = _REPO_DIR / "fitness"
+    DATA_DIR = _DATA_DIR / "fitness"
+    MSA_DIR = DATA_DIR / "msa"
+    REFERENCE_FILE = DIR / "reference_sheet_final.csv"
+
+
 class Config3D(_Config):
     """3D benchmark configuration."""
 
@@ -64,7 +74,7 @@ class Config3D(_Config):
     STRUCTURE_DIR = DATA_DIR / "structures"
     MSA_DIR = DATA_DIR / "msa"
     PREDICTION_DIR = DATA_DIR / "predictions"
-    OUT_DIR = DATA_DIR / "out"
+    CACHE_DIR = DATA_DIR / "cache"
     USALIGN_DIR = DATA_DIR / "usalign"
     USALIGN_ANNOTATION_DIR = USALIGN_DIR / "annotations"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "3d"
