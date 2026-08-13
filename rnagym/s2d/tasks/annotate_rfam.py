@@ -11,8 +11,7 @@ from pathlib import Path
 import polars as pl
 
 from rnagym.config import Config2D
-
-from .utils import load_registry
+from rnagym.sequences import load_registry
 
 HIT_FIELDS = {
     "sequence_id": (3, pl.String),

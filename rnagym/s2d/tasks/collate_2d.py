@@ -2,12 +2,8 @@
 
 """Collate RNAGym chemical mapping and discrete structure data."""
 
-import os
-import random
 import re
-import shlex
 import subprocess
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -16,9 +12,9 @@ import polars as pl
 from tqdm.auto import tqdm
 
 from rnagym.config import Config2D, Config3D
+from rnagym.sequences import fitness_sequences, update_registry
 
 from ..models.utils import dot_bracket
-from .utils import SEQUENCE_SCHEMA, add_sequences, load_registry
 
 CWW_PATTERN = re.compile(
     r"^A(\d+)-A(\d+) : \w+-\w+ Ww/Ww.*pairing "
@@ -259,108 +255,6 @@ def get_pdb_structures() -> pl.DataFrame:
     )
 
 
-def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
-    """Write sequence IDs and sequences in FASTA format."""
-    with path.open("w") as handle:
-        handle.writelines(
-            f">{sequence_id}\n{sequence}\n"
-            for sequence_id, sequence in sequences.iter_rows()
-        )
-
-
-def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
-    """Cluster sequences with MMseqs2."""
-    sequence_table = sequence_table.sort("sequence")
-
-    with tempfile.TemporaryDirectory(prefix="rnagym-mmseqs-") as temporary_dir:
-        work_dir = Path(temporary_dir)
-        fasta_path = work_dir / "sequences.fasta"
-        cluster_prefix = work_dir / "clusters"
-        mmseqs_tmp = work_dir / "tmp"
-
-        print(f"Clustering {sequence_table.height:,} unique sequences with MMseqs2")
-        write_fasta(sequence_table, fasta_path)
-
-        command = (
-            f"mmseqs easy-cluster {fasta_path} {cluster_prefix} {mmseqs_tmp} "
-            f"--min-seq-id {Config2D.MIN_SEQUENCE_IDENTITY} -c {Config2D.MIN_COVERAGE} "
-            f"--cov-mode {Config2D.COVERAGE_MODE} --cluster-mode {Config2D.CLUSTER_MODE} "
-            f"--threads {Config2D.MMSEQS_THREADS} -v 3"
-        )
-
-        # Run the MMseqs2 command, capturing only progress bars and descriptors
-        # Nonfatal set-cover errors are expected: https://github.com/soedinglab/MMseqs2/issues/765
-        with subprocess.Popen(
-            shlex.split(command),
-            stdout=subprocess.PIPE,
-            text=True,
-            env={**os.environ, "TTY": "1"},
-        ) as process:
-            description = ""
-            for line in process.stdout:
-                line = line.rstrip()
-                if line.startswith("[") and "%" in line:
-                    if "] 0.00%" in line:
-                        print(description)
-                    print(
-                        line,
-                        end="\n" if "100.00%" in line else "\r",
-                        flush=True,
-                    )
-                elif line:
-                    description = line.split()[0] if f" {work_dir}/" in line else line
-        if process.returncode:
-            raise subprocess.CalledProcessError(process.returncode, process.args)
-
-        cluster_members = pl.read_csv(
-            cluster_prefix.with_name(f"{cluster_prefix.name}_cluster.tsv"),
-            separator="\t",
-            has_header=False,
-            new_columns=["cluster_rep", "sequence_id"],
-        )
-
-    if (
-        cluster_members.height != sequence_table.height
-        or cluster_members["sequence_id"].n_unique() != sequence_table.height
-    ):
-        raise RuntimeError("MMseqs2 output does not assign every sequence exactly once")
-
-    assignments = sequence_table.join(
-        cluster_members, on="sequence_id", how="left"
-    ).select("sequence_id", "cluster_rep")
-    if assignments["cluster_rep"].null_count():
-        raise RuntimeError("Some sequences did not receive a cluster assignment")
-    print(f"MMseqs2 clusters: {assignments['cluster_rep'].n_unique():,}")
-    return assignments
-
-
-def assign_folds(assignments: pl.DataFrame, modalities: pl.DataFrame) -> pl.DataFrame:
-    """Balance cluster folds across modality signatures."""
-    # Label each cluster by its modalities, for example mapping+pseudobase
-    signatures = (
-        modalities.join(assignments, on="sequence_id")
-        .group_by("cluster_rep")
-        .agg(pl.col("modality").unique().sort().str.join("+").alias("signature"))
-        .sort(["signature", "cluster_rep"])
-    )
-    rng = random.Random(Config2D.RANDOM_SEED)
-    rows = []
-    # Shuffle and distribute each signature evenly across folds
-    for group in signatures.partition_by("signature", maintain_order=True):
-        cluster_reps = group["cluster_rep"].to_list()
-        rng.shuffle(cluster_reps)
-        offset = rng.randrange(Config2D.NUM_FOLDS)
-        rows.extend(
-            (cluster_rep, (i + offset) % Config2D.NUM_FOLDS)
-            for i, cluster_rep in enumerate(cluster_reps)
-        )
-    return pl.DataFrame(
-        rows,
-        schema={"cluster_rep": pl.String, "fold": pl.UInt8},
-        orient="row",
-    )
-
-
 def get_modality_sequences(
     data: pl.DataFrame, registry: pl.DataFrame, modality: str
 ) -> pl.DataFrame:
@@ -386,36 +280,35 @@ def main() -> None:
     pseudobase = get_pseudobase_structures()
     pdb = get_pdb_structures()
     structures = pl.concat([pseudobase, pdb])
-    registry = load_registry(Config2D.SEQUENCE_FILE, required=False).select(
-        SEQUENCE_SCHEMA.names()
-    )
-    registry = add_sequences(registry, filtered["sequence"])
-    registry = add_sequences(registry, structures["sequence"])
 
     datasets = {"mapping": filtered, "pseudobase": pseudobase, "pdb": pdb}
+    modalities = pl.concat(
+        [
+            *(
+                data.select("sequence").with_columns(pl.lit(name).alias("modality"))
+                for name, data in datasets.items()
+            ),
+            fitness_sequences(),
+        ]
+    )
+    if Config3D.TARGET_FILE.is_file():
+        modalities = pl.concat(
+            [
+                modalities,
+                pl.read_parquet(Config3D.TARGET_FILE)
+                .select(pl.col("Sequence (unmod.)").alias("sequence"))
+                .with_columns(pl.lit("3d").alias("modality")),
+            ]
+        )
+    registry = update_registry(modalities)
     sequence_tables = {
         name: get_modality_sequences(data, registry, name)
         for name, data in datasets.items()
     }
-    modalities = pl.concat(sequence_tables.values()).select("sequence_id", "modality")
-    if modalities["sequence_id"].n_unique() != registry.height:
-        raise RuntimeError("Every registered sequence must belong to a dataset")
-
-    assignments = cluster_sequences(registry)
-    folds = assign_folds(assignments, modalities)
-    registry = (
-        registry.join(assignments, on="sequence_id")
-        .join(folds, on="cluster_rep")
-        .sort("sequence_id")
-    )
-    if registry["fold"].null_count():
-        raise RuntimeError("Some sequences did not receive a fold assignment")
 
     # Count each cluster once per modality and fold
     fold_counts = (
-        modalities.join(
-            registry.select("sequence_id", "cluster_rep", "fold"), on="sequence_id"
-        )
+        modalities.join(registry, on="sequence")
         .group_by(["modality", "fold"])
         .agg(pl.col("cluster_rep").n_unique().alias("clusters"))
         .sort(["modality", "fold"])

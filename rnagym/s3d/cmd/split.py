@@ -5,10 +5,12 @@
 ###############################################################################
 
 import pandas as pd
+import polars as pl
 
-from rnagym.config import Config3D
+from rnagym.config import Config2D, Config3D
 from rnagym.s3d.util import Config as Pipeline
 from rnagym.s3d.util.analysis import add_seq_id, add_tm_id, prep_usalign
+from rnagym.sequences import fitness_sequences, update_registry
 
 NMR_SENTINEL = 1.23456789
 
@@ -203,8 +205,41 @@ def main():
                 targets, pd.concat(map(pd.read_parquet, annotations))
             )
 
+    structures = pl.read_parquet(Config2D.STRUCTURE_FILE).select("uid", "sequence")
+    modalities = pl.concat(
+        [
+            pl.read_parquet(Config2D.MAPPING_FILE)
+            .select("sequence")
+            .with_columns(pl.lit("mapping").alias("modality")),
+            structures.select(
+                "sequence",
+                pl.col("uid").str.split(":").list.first().alias("modality"),
+            ),
+            pl.from_pandas(targets[["Sequence (unmod.)"]])
+            .rename({"Sequence (unmod.)": "sequence"})
+            .with_columns(pl.lit("3d").alias("modality")),
+            fitness_sequences(),
+        ]
+    )
+    registry = update_registry(modalities)
+    identifiers = pd.DataFrame(
+        registry.select(
+            pl.col("sequence").alias("Sequence (unmod.)"),
+            "sequence_id",
+            "cluster_rep",
+        ).to_dict(as_series=False)
+    )
+    targets = targets.merge(identifiers, on="Sequence (unmod.)", validate="many_to_one")
+
     debug_df(targets)
-    targets.to_parquet(Config3D.TARGET_FILE, compression="zstd", index=False)
+    Config2D.SEQUENCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    registry_tmp = Config2D.SEQUENCE_FILE.with_suffix(".parquet.tmp")
+    targets_tmp = Config3D.TARGET_FILE.with_suffix(".parquet.tmp")
+    registry.write_parquet(registry_tmp, compression="zstd", statistics=True)
+    targets.to_parquet(targets_tmp, compression="zstd", index=False)
+    registry_tmp.replace(Config2D.SEQUENCE_FILE)
+    targets_tmp.replace(Config3D.TARGET_FILE)
+    print(f"Wrote {registry.height:,} sequences to {Config2D.SEQUENCE_FILE}")
     print(f"Wrote {len(targets)} targets to {Config3D.TARGET_FILE}")
 
 

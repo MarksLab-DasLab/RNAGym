@@ -11,8 +11,7 @@ from scipy.stats import rankdata
 from tqdm.auto import tqdm
 
 from rnagym.config import Config2D
-
-from .utils import load_registry
+from rnagym.sequences import load_registry
 
 PAIRS = dict(zip("([{<", ")]}>"))
 
