@@ -31,10 +31,10 @@ echo "json_path is: '$json_path'"
 set -euo pipefail
 echo "Launching AF3 on $json_path..."
 python3 "$af3_dir/alphafold3/run_alphafold.py" \
-    --db_dir="$db_dir" \
-    --model_dir="$model_dir" \
-    --json_path="$json_path" \
-    --output_dir="$output_dir"
+	--db_dir="$db_dir" \
+	--model_dir="$model_dir" \
+	--json_path="$json_path" \
+	--output_dir="$output_dir"
 
 # Note successful completion
 touch SUCCESS

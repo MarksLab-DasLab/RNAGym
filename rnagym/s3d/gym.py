@@ -4,6 +4,7 @@
 """
 
 import argparse
+
 from rnagym.s3d.cmd import Analyze, Annotate, EVCouplings, Export, Merge, Split
 
 

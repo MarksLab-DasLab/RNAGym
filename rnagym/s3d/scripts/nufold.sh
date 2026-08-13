@@ -22,10 +22,10 @@ run_dir="$(pwd -P)"
 echo "Launching nufold in $run_dir..."
 mkdir -p output
 python3 "$nufold_dir/run_nufold.py" \
-    --ckpt_path "$nufold_dir/checkpoints/global_step145245.pt" \
-    --input_fasta "$run_dir/input/"*"/"*".fasta" \
-    --input_dir "$run_dir/input" \
-    --output_dir "$run_dir/output" \
-    --config_preset "initial_training"
+	--ckpt_path "$nufold_dir/checkpoints/global_step145245.pt" \
+	--input_fasta "$run_dir/input/"*"/"*".fasta" \
+	--input_dir "$run_dir/input" \
+	--output_dir "$run_dir/output" \
+	--config_preset "initial_training"
 
 touch SUCCESS

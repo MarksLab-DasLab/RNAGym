@@ -7,6 +7,7 @@ platforms = ["linux-64"]
 [dependencies]
 biopython = "1.*"
 gemmi = "0.*"
+go-shfmt = "==3.13.1"
 hhsuite = "3.*"
 hmmer = "3.*"
 infernal = "1.*"
@@ -16,9 +17,12 @@ pandas = "2.*"
 fastparquet = "*"
 python = "3.11.*"
 requests = "2.*"
+ruff = "==0.15.21"
 scikit-learn = "1.*"
 scipy = "1.*"
 setuptools = "<81"
+shellcheck = "==0.11.0"
+taplo = "==0.10.0"
 tqdm = "4.*"
 usalign = "==2024.07.30"
 
@@ -29,6 +33,8 @@ rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "8744e853c4b6
 rnagym = { path = "../..", editable = true }
 
 [tasks]
+fmt = "bash sh/format.sh"
+lint = "bash sh/lint.sh"
 pipeline = "python -m rnagym.s3d.gym"
 merge = "python -m rnagym.s3d.gym merge"
 annotate = "python -m rnagym.s3d.gym annotate"

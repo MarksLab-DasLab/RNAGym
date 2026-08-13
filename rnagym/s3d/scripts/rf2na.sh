@@ -27,8 +27,7 @@ STATUS=$?
 
 # If script succeeded, create SUCCESS file
 if [ "$STATUS" -eq 0 ]; then
-    touch SUCCESS
-    echo "launch.sh completed successfully."
+	touch SUCCESS
+	echo "launch.sh completed successfully."
 fi
 exit "$STATUS"
-

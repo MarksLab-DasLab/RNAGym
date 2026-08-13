@@ -27,8 +27,8 @@ echo "Launching trRNA prediction in $run_dir..."
 
 # Launch trRNA folding
 python3 "$trRNA_dir/fold.py" \
-    -npz "$run_dir/sequence.npz" \
-    -fa "$run_dir/sequence.fa" \
-    -out "$run_dir/model_1.pdb" \
+	-npz "$run_dir/sequence.npz" \
+	-fa "$run_dir/sequence.fa" \
+	-out "$run_dir/model_1.pdb"
 
 touch SUCCESS

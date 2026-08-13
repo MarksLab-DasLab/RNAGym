@@ -21,10 +21,10 @@ run_dir="$(pwd -P)"
 echo "Launching RhoFold in $run_dir..."
 mkdir -p output
 python3 "$rhofold_dir/inference.py" \
-    --input_fas "$run_dir/sequence.fa" \
-    --input_a3m "$run_dir/sequence.a3m" \
-    --output_dir "$run_dir/output" \
-    --ckpt "$rhofold_dir/pretrained/RhoFold_pretrained.pt" \
-    --device "cuda:0"
+	--input_fas "$run_dir/sequence.fa" \
+	--input_a3m "$run_dir/sequence.a3m" \
+	--output_dir "$run_dir/output" \
+	--ckpt "$rhofold_dir/pretrained/RhoFold_pretrained.pt" \
+	--device "cuda:0"
 
 touch SUCCESS
