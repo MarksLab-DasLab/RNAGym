@@ -184,6 +184,25 @@ def main():
         [prepare_targets(mon_df, "monomer"), prepare_targets(mul_df, "multimer")],
         ignore_index=True,
     ).sort_values(by=["type", "PDB ID", "Auth. Chain ID"])
+
+    def update_homology(data, cached):
+        """Merge cached homology columns by PDB chain."""
+        index = ["PDB ID", "Asym. Chain ID"]
+        data = data.set_index(index)
+        cached = cached.set_index(index)
+        data.update(cached[[column for column in cached if "Homolog" in column]])
+        return data.reset_index()
+
+    # Preserve cached training-homology annotations for previously released targets
+    if Config3D.TARGET_FILE.is_file():
+        targets = update_homology(targets, pd.read_parquet(Config3D.TARGET_FILE))
+    if Config3D.USALIGN_ANNOTATION_DIR.is_dir():
+        annotations = list(Config3D.USALIGN_ANNOTATION_DIR.glob("*.parquet"))
+        if annotations:
+            targets = update_homology(
+                targets, pd.concat(map(pd.read_parquet, annotations))
+            )
+
     debug_df(targets)
     targets.to_parquet(Config3D.TARGET_FILE, compression="zstd", index=False)
     print(f"Wrote {len(targets)} targets to {Config3D.TARGET_FILE}")

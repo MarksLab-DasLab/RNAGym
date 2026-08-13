@@ -61,13 +61,11 @@ The default workflow is as follows:
 
 You can run any step individually with `pixi run <command>`.
 
-> [!TIP]
-> Creating the RNAGym split requires an all-to-all 3D structure alignment
-> between train and test splits.  To avoid having to do this yourself, use
-> our pre-computed outputs.  For more info, see `Using the precomputed 3D
-> structural alignments` below.
+### Training-structure comparisons
 
-### Using the precomputed 3D structural alignments
+`pixi run usalign` launches a 64-task Slurm array for missing target-to-training
+comparisons. Completed outputs are reused, and rerunning `pixi run split` adds
+the resulting annotations to `rnagym_3d.parquet`.
 
 The shared data archive described in the [root README](../../README.md) includes
 the precomputed 3D US-align outputs under `data/3d/usalign/`.

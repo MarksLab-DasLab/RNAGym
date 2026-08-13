@@ -1316,6 +1316,9 @@ def __get_max_tm_results(args: Iterable[Any]):
     cached_out_file = Path(f"{Config.USALIGN_DIR}/{chain_id}.out")
     references_file = Path(Config.USALIGN_REFERENCES_FILE)
     usalign_dir = Path(Config.USALIGN_DIR)
+    usa_cmd = (
+        f"{Config.TOOLS['usalign']} -dir1 {usalign_dir}/ {references_file} {query_file}"
+    )
     cached_out_file.touch(exist_ok=True)
 
     # Run USAlign if needed, or use cached output
@@ -1328,17 +1331,9 @@ def __get_max_tm_results(args: Iterable[Any]):
             or last_line.startswith("#Total CPU time is  0.00 seconds")
             or not last_line.startswith("#Total CPU time is")
         ):
-            # Trailing slash after usalign_dir is required
-            usa_cmd = (
-                f"{Config.TOOLS['usalign']} -dir1 '{usalign_dir}/' '{references_file}' "
-                f"'{query_file}'"
-            )
             print(f"Running {usa_cmd}")
-
-            # MUST run as a shell instead of the usual shlex.split(usa_cmd),
-            # shell=False
             usa_result = subprocess.run(
-                usa_cmd, capture_output=True, text=True, check=True, shell=True
+                shlex.split(usa_cmd), capture_output=True, text=True, check=True
             )
             usa_results = usa_result.stdout
             usa_errors = usa_result.stderr
@@ -1391,6 +1386,16 @@ def prep_usalign(
         where cutoff_col is less than or equal to this cutoff will be
         considered as possible homology targets.
     """
+    references_file = Path(Config.USALIGN_REFERENCES_FILE)
+    if (
+        references_file.is_file()
+        and references_file.stat().st_size
+        and references_file.stat().st_mtime
+        >= Config3D.ANNOTATED_CHAINS_FILE.stat().st_mtime
+    ):
+        print(f"Reusing {references_file}")
+        return
+
     rcsb_df = pd.read_csv(
         Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
@@ -1406,15 +1411,26 @@ def prep_usalign(
         for pdb_id, asym_id, _ in rna_chains.itertuples(index=False)
     ]
     os.makedirs(Config.USALIGN_DIR, exist_ok=True)
-    with open(Config.USALIGN_REFERENCES_FILE, "w") as f:
+    missing = 0
+    temporary = references_file.with_suffix(".txt.tmp")
+    with temporary.open("w") as f:
         for pdb_id, asym_id in rna_chains:
             chain_id = f"{pdb_id.lower()}_{asym_id}"
             prefix = Config.get_out_prefix(pdb_id, asym_id)
             source_pdb = Path(f"{prefix}/{asym_id}.pdb").resolve()
-            reference_pdb = Path(f"{Config.USALIGN_DIR}/{chain_id}.pdb").resolve()
+            reference_pdb = Path(f"{Config.USALIGN_DIR}/{chain_id}.pdb")
+            if not source_pdb.is_file():
+                missing += 1
+                continue
+            if reference_pdb.is_symlink() and not reference_pdb.exists():
+                reference_pdb.unlink()
             if not reference_pdb.exists():
                 reference_pdb.symlink_to(source_pdb)
             f.write(f"{chain_id}.pdb\n")
+    temporary.replace(references_file)
+    print(f"Prepared {len(rna_chains) - missing:,} US-align references")
+    if missing:
+        print(f"Skipped {missing:,} references without cached coordinates")
 
 
 def add_tm_id(
@@ -1455,18 +1471,17 @@ def add_tm_id(
         )
 
     pdb_id_to_date = rcsb_df.set_index("PDB ID")[cutoff_col].to_dict()
-    with ProcessPoolExecutor() as executor:
-        results = list(
-            executor.map(
-                __get_max_tm_results,
-                (
-                    (index, pdb_id, asym_id, pdb_id_to_date)
-                    for index, pdb_id, asym_id in chains[
-                        ["PDB ID", "Asym. Chain ID"]
-                    ].itertuples(index=True, name=None)
-                ),
-            )
+    tasks = [
+        (index, pdb_id, asym_id, pdb_id_to_date)
+        for index, pdb_id, asym_id in chains[["PDB ID", "Asym. Chain ID"]].itertuples(
+            index=True, name=None
         )
+    ]
+    if len(tasks) == 1:
+        results = [__get_max_tm_results(tasks[0])]
+    else:
+        with ProcessPoolExecutor() as executor:
+            results = list(executor.map(__get_max_tm_results, tasks))
 
     # Add max TM homologs for each baseline
     for index, baseline_results in results:

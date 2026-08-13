@@ -66,6 +66,7 @@ class Config3D(_Config):
     PREDICTION_DIR = DATA_DIR / "predictions"
     OUT_DIR = DATA_DIR / "out"
     USALIGN_DIR = DATA_DIR / "usalign"
+    USALIGN_ANNOTATION_DIR = USALIGN_DIR / "annotations"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "3d"
     LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
