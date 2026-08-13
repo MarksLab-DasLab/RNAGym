@@ -22,35 +22,56 @@ def score_dataset(dataset: str) -> pd.DataFrame:
     if scores.duplicated([*IDENTIFIERS, "model"]).any():
         raise ValueError(f"Duplicate {dataset} score rows")
 
-    data = scores.merge(references, on=IDENTIFIERS, how="inner", validate="many_to_one")
-    if len(data) != len(scores):
-        raise ValueError(f"Missing {dataset} references")
-
     rows = []
     for key, model in MODELS.items():
-        model_scores = data.query("model == @key")
-        if model_scores.empty:
+        predictions = scores.query("model == @key")
+        if predictions.empty:
             continue
+        model_scores = references.merge(
+            predictions, on=IDENTIFIERS, how="left", validate="one_to_one"
+        )
         if (model_scores[["inf_wc", "inf_nwc"]] == -1).any().any():
             raise ValueError(f"Unresolved {dataset} INF score")
         tm_train_column = f"{key} TM Homolog Score"
-        tm_scores = model_scores["tm_score"].fillna(0)
-        inf_wc = model_scores["inf_wc"].fillna(0)
-        inf_nwc = model_scores["inf_nwc"].fillna(0)
-        complete = pd.concat([tm_scores, model_scores[tm_train_column]], axis=1)
+        if model_scores[tm_train_column].isna().any():
+            raise RuntimeError("Run `pixi run usalign`, then `pixi run split`")
+        completed = model_scores["tm_score"].notna().sum()
+        inf_wc_samples = model_scores["inf_wc"].notna().sum()
+        inf_nwc_samples = model_scores["inf_nwc"].notna().sum()
+        model_scores = model_scores.assign(
+            tm_score=model_scores["tm_score"].fillna(0),
+            inf_wc=model_scores["inf_wc"].fillna(0),
+            inf_nwc=model_scores["inf_nwc"].fillna(0),
+        )
+        unit_ids = (
+            ["cluster_rep", "sequence_id"]
+            if dataset == "monomer"
+            else ["cluster_rep", *IDENTIFIERS]
+        )
+        units = model_scores.groupby(unit_ids).agg(
+            tm_score=("tm_score", "max"),
+            tm_train=(tm_train_column, "max"),
+            inf_wc=("inf_wc", "max"),
+            inf_nwc=("inf_nwc", "max"),
+        )
+        units["delta_tm"] = units["tm_score"] - units["tm_train"]
+        clusters = units.groupby("cluster_rep").mean()
         rows.append(
             {
                 "dataset": dataset,
                 "model": model,
                 "samples": len(model_scores),
-                "completed": model_scores["tm_score"].notna().sum(),
-                "tm_score": tm_scores.mean(),
-                "delta_tm": (complete["tm_score"] - complete[tm_train_column]).mean(),
-                "rho_tm": complete.corr(method="spearman").iloc[0, 1],
-                "inf_wc": inf_wc.mean(),
-                "inf_wc_samples": inf_wc.notna().sum(),
-                "inf_nwc": inf_nwc.mean(),
-                "inf_nwc_samples": inf_nwc.notna().sum(),
+                "clusters": len(clusters),
+                "completed": completed,
+                "tm_score": clusters["tm_score"].mean(),
+                "delta_tm": clusters["delta_tm"].mean(),
+                "rho_tm": clusters[["tm_score", "tm_train"]]
+                .corr(method="spearman")
+                .iloc[0, 1],
+                "inf_wc": clusters["inf_wc"].mean(),
+                "inf_wc_samples": inf_wc_samples,
+                "inf_nwc": clusters["inf_nwc"].mean(),
+                "inf_nwc_samples": inf_nwc_samples,
             }
         )
 
@@ -62,13 +83,13 @@ def score_dataset(dataset: str) -> pd.DataFrame:
 def markdown_table(scores: pd.DataFrame) -> str:
     """Format one dataset leaderboard as Markdown."""
     lines = [
-        "| Rank | Model | n | TM | ΔTM | ρTM | INF-WC | INF-NWC |",
-        "| ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |",
+        "| ---: | :--- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in scores.itertuples():
         lines.append(
-            f"| {row.rank} | {row.model} | {row.samples} | "
-            f"{row.tm_score:.3f} | {row.delta_tm:.3f} | {row.rho_tm:.2f} | "
+            f"| {row.rank} | {row.model} | {row.tm_score:.3f} | "
+            f"{row.delta_tm:.3f} | {row.rho_tm:.2f} | "
             f"{row.inf_wc:.2f} | {row.inf_nwc:.2f} |"
         )
     return "\n".join(lines)
