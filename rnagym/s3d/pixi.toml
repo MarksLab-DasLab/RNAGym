@@ -6,6 +6,7 @@ platforms = ["linux-64"]
 
 [dependencies]
 biopython = "1.*"
+curl = "8.*"
 gemmi = "0.*"
 go-shfmt = "==3.13.1"
 hhsuite = "3.*"
@@ -44,8 +45,55 @@ split = "python -m rnagym.s3d.gym split"
 evcouplings = "python -m rnagym.s3d.gym evcouplings"
 analyze = "python -m rnagym.s3d.gym analyze"
 leaderboard = "python -m rnagym.s3d.tasks.score"
+rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
+score-af3 = { cmd = "python -m rnagym.s3d.tasks.score_af3", depends-on = [
+  "rna-assessment-source",
+] }
 export = "python -m rnagym.s3d.gym export"
+# TODO(MCA): Replace this installer once Riboseek is available through Bioconda
+install-riboseek = "bash sh/fetch-riboseek.sh"
+riboseek-db = { cmd = "bash sh/riboseek-db.sh", depends-on = [
+  "install-riboseek",
+] }
+riboseek = { cmd = "bash sh/riboseek.sh", depends-on = ["install-riboseek"] }
 usalign = "bash sh/usalign.sh"
-rmsa = "python -m rnagym.s3d.jobs.rmsa"
 predict = "python -m rnagym.s3d.jobs.predict"
-afa-to-a3m = "bash scripts/afa_to_a3m.sh"
+
+[feature.model.dependencies]
+git = "2.*"
+
+[feature.model.pypi-dependencies]
+rnagym = { path = "../..", editable = true }
+
+[feature.af3.dependencies]
+c-compiler = "1.*"
+cmake = ">=3.28"
+hmmer = "3.*"
+ninja = "1.*"
+pip = "*"
+pybind11 = "*"
+python = "3.11.*"
+scikit-build-core = "*"
+
+[feature.af3.pypi-dependencies]
+absl-py = "*"
+chex = "==0.1.90"
+dm-haiku = "==0.0.13"
+dm-tree = "*"
+jax = { version = "==0.4.34", extras = ["cuda12"] }
+jax-triton = "==0.2.0"
+jaxtyping = "==0.2.34"
+numpy = "==1.26.4"
+rdkit = "==2024.3.5"
+triton = "==3.1.0"
+tqdm = "*"
+typeguard = "==2.13.3"
+zstandard = "*"
+
+[feature.af3.tasks]
+source = "bash sh/fetch-source.sh"
+build = { cmd = "bash sh/build-af3.sh", depends-on = ["source"] }
+
+[environments]
+default = { solve-group = "default" }
+af3 = { features = ["model", "af3"], no-default-feature = true }

@@ -370,10 +370,11 @@ class Analysis:
         ResID, int
     ]  # Mapping from seqres ID to its index in __chain.residues
 
-    def __init__(self, pdb_id: str, asym_id: str, auth_id: str):
+    def __init__(self, pdb_id: str, asym_id: str, auth_id: str, sequence_id: str):
         self.pdb_id = pdb_id.lower()
         self.asym_id = asym_id
         self.auth_id = auth_id
+        self.sequence_id = sequence_id
         self.__contacts = None
         self.__distance_map = None
         self.__state = State.INIT
@@ -434,27 +435,21 @@ class Analysis:
         """
         Returns the path to the .fasta file for this analysis.
         """
-        fasta_path = self.prefix / "rMSA/sequence.fa"
-        return fasta_path
+        return Config3D.MSA_DIR / f"{self.sequence_id}.fa"
 
     @property
     def sto_path(self) -> Path:
         """
         Returns the path to the .sto file for this analysis.
         """
-        sto_path = self.prefix / "rMSA/sequence.sto"
+        sto_path = Config3D.MSA_DIR / f"{self.sequence_id}.sto"
 
-        # Convert to Stockholm from rMSA output `.afa` when needed
+        # Convert to Stockholm from aligned FASTA when needed
         if not os.path.exists(sto_path):
-            afa_path = self.prefix / "rMSA/sequence.afa"
+            afa_path = Config3D.MSA_DIR / f"{self.sequence_id}.afa"
             with open(afa_path, "r") as inp, open(sto_path, "w") as out:
                 alignment = AlignIO.read(inp, "fasta")
 
-                # Replace the 'query' record ID with the proper identifier
-                if not alignment[0].id == "query":
-                    raise ValueError(
-                        "Expected 'query' to be the first record in {afa_path}"
-                    )
                 alignment[0].id = self.identifier
 
                 # Convert each record to RNA if it is DNA
@@ -758,8 +753,8 @@ def prep_fasta(input_fa, output, seq_unmod, I_compatible=True, wrap_col=100) -> 
                 f"MSA query ({old_seq}) and sequence ({seq_unmod}) length do not match"
             )
 
-        # Retain the MSA's best guess sequence if the output MSA contains Ns
-        seq_unmod = old_seq.replace("T", "U").replace("N", "-")
+        # Retain the MSA query, including unknown RNA residues
+        seq_unmod = old_seq.replace("T", "U")
 
         # Only wrap lines if output extension is .a3m
         rest_of_msa = contents[i:]
@@ -801,6 +796,11 @@ def prep_fasta(input_fa, output, seq_unmod, I_compatible=True, wrap_col=100) -> 
         return seq_unmod
 
 
+def msa_path(row: pd.Series, suffix: str) -> Path:
+    """Return the shared MSA path for a target row."""
+    return Config3D.MSA_DIR / f"{row['sequence_id']}.{suffix}"
+
+
 def prep_af3(out_dir=Config.AF3.out_dir):
     """
     Writes run configurations for AlphaFold3.
@@ -832,7 +832,7 @@ def prep_af3(out_dir=Config.AF3.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         # Create top-level AF3 input e.g., name = "AF3_1ABC_A"
-        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
+        sequence_a3m = msa_path(row, "a3m")
         out_a3m = out_dir / "sequence.a3m"
         out_fp = out_dir / "config.json"
         seq_unmod = prep_fasta(sequence_a3m, out_a3m, seq_unmodified)
@@ -940,7 +940,6 @@ def prep_af3(out_dir=Config.AF3.out_dir):
                 }
             }
 
-            sequence_a3m = Config.get_out_prefix(pdb_id_lower, chain_id) / "rMSA/sequence.a3m"
             out_a3m = out_dir / f"sequence_{chain_id}.a3m"
             out_fp = out_dir / "config.json"
             out_fp.parent.mkdir(exist_ok=True)
@@ -948,6 +947,7 @@ def prep_af3(out_dir=Config.AF3.out_dir):
             # Multimer RNA chains have custom MSAs
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
+                sequence_a3m = msa_path(csv_rows[csv_key], "a3m")
                 seq_unmod = prep_fasta(sequence_a3m, out_a3m, str(seq_unmod))
                 chain_dict[af3_chain_type]["sequence"] = seq_unmod
                 chain_dict[af3_chain_type]["unpairedMsaPath"] = str(out_a3m)
@@ -1003,7 +1003,7 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         # Create top-level RF2NA input
-        sequence_afa = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.afa"
+        sequence_afa = msa_path(row, "afa")
         sequence_fa = out_dir / f"{asym_chain_id}.fa"
         out_afa = out_dir / f"{asym_chain_id}.afa"
         out_fp = out_dir / "launch.sh"
@@ -1100,7 +1100,6 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
             seq_unmod = info.sequences_unmod[chain_id]
 
             sequence_fa = out_dir / f"{chain_id}{sym_exp}.fa"
-            sequence_afa = Config.get_out_prefix(pdb_id_lower, chain_id) / "rMSA/sequence.afa"
             out_afa = out_dir / f"{chain_id}{sym_exp}.afa"
             out_fp = out_dir / "launch.sh"
             out_fp.parent.mkdir(exist_ok=True)
@@ -1108,6 +1107,7 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
             # Multimer RNA chains have custom MSAs
             csv_key = f"{pdb_id_lower}_{chain_id}"
             if ctype == ChainType.RNA and csv_key in csv_rows:
+                sequence_afa = msa_path(csv_rows[csv_key], "afa")
                 seq_unmodified = prep_fasta(
                     sequence_afa, out_afa, str(seq_unmod), I_compatible=False
                 )
@@ -1164,7 +1164,7 @@ def prep_rhofold(out_dir=Config.RHOFOLD.out_dir):
             continue
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
-        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
+        sequence_a3m = msa_path(row, "a3m")
         out_a3m = out_dir / "sequence.a3m"
         out_fp = out_dir / "sequence.fa"
 
@@ -1205,7 +1205,7 @@ def prep_nufold(out_dir=Config.NUFOLD.out_dir):
 
         chain_key = f"{pdb_id.upper()}_{asym_chain_id}"
         input_dir = out_dir / "input" / chain_key
-        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
+        sequence_a3m = msa_path(row, "a3m")
         in_a3m = input_dir / f"{chain_key}.a3m"
         in_fa = input_dir / f"{chain_key}.fasta"
         in_ss = input_dir / f"{chain_key}.ipknot.ss"
@@ -1254,7 +1254,7 @@ def prep_trRNA(out_dir=Config.TRRNA.out_dir):
         print(f"Preparing {pdb_id}_{asym_chain_id}")
 
         chain_key = f"{pdb_id.lower()}_{asym_chain_id}"
-        sequence_a3m = Config.get_out_prefix(pdb_id, asym_chain_id) / "rMSA/sequence.a3m"
+        sequence_a3m = msa_path(row, "a3m")
         out_fa = out_dir / "sequence.fa"
         out_a3m = out_dir / "sequence.a3m"
         out_a3m.parent.mkdir(exist_ok=True)
@@ -1645,7 +1645,7 @@ def get_baseline_scores(print_status=False, ignore_cache=False) -> pd.DataFrame:
                     pdb_id = row["PDB ID"].lower()
                     asym_id = row["Asym. Chain ID"]
                     auth_id = row["Auth. Chain ID"]
-                    a = Analysis(pdb_id=pdb_id, asym_id=asym_id, auth_id=auth_id)
+                    a = Analysis(pdb_id, asym_id, auth_id, row["sequence_id"])
 
                     # Check if run completed successfully
                     if a.success(bl, is_multimer):

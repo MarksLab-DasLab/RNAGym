@@ -35,10 +35,9 @@ datasets were noted:
 
 To run the RNAGym dataset curation pipeline:
 
-1. Modify `util/config.py` to suit your system & needs
+1. Modify [`rnagym/config.py`](../config.py) to suit your system
 2. Run `pixi install`
-3. Install `rmsa` from [source][21]
-4. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
+3. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
    `pixi run pipeline` to generate the processed files under `data/3d/`
 
 ```bash
@@ -82,10 +81,15 @@ RNAGym currently evaluates the following baselines:
 
 To launch the predictions, you can:
 
-1. Generate MSAs with `pixi run rmsa`
-    - For some baselines, `.a3m` formatted MSAs are required.  You can
-      use `./scripts/afa_to_a3m.sh` to generate these automatically.
-2. Launch your predictions using `pixi run predict <baseline>`.
+1. Once per database release, run `pixi run riboseek-db` to install
+   [Riboseek][21] 1.0.0 and prepare RNAcentral 27.0 and full NCBI nt under
+   `RNAGYM_DATABASE_DIR`. Full nt requires several terabytes of storage.
+2. Generate one A3M and aligned FASTA for each unique 3D or ncRNA fitness
+   sequence with `pixi run riboseek`. RNAcentral is searched forward-only and
+   nt on both strands using four GPUs. The combined hits seed a covariance
+   model that realigns them before MSA construction. Alignments are stored
+   under each benchmark's directory in `data/`.
+3. Launch your predictions using `pixi run predict <baseline>`.
     - Valid baselines are currently `af3`, `nufold`, `rhofold`, `rf2na`,
       and `trRNA`.
     - Before running, configure `./scripts/<baseline>.sh` for your Slurm
@@ -123,6 +127,6 @@ followed by `pixi run analyze`.
 [18]: https://docs.google.com/spreadsheets/d/1AORpL9zm9m-Tvdw5xvg7cbyo4C-blKD5/edit?gid=1555832897#gid=1555832897
 [19]: https://github.com/marcellszi/rna3db/tree/main
 [20]: https://github.com/marcellszi/rna3db/releases/tag/2024-12-04-full-release
-[21]: https://github.com/pylelab/rMSA
+[21]: https://github.com/steineggerlab/riboseek
 [22]: https://github.com/marcellszi/rna3db
 [23]: https://github.com/RNA-Puzzles/RNA_assessment

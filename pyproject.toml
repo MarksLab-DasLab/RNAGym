@@ -18,6 +18,7 @@ packages = [
   "rnagym.s3d.jobs",
   "rnagym.s3d.tasks",
   "rnagym.s3d.util",
+  "rnagym.tasks",
 ]
 
 [tool.distutils.egg_info]

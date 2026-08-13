@@ -5,7 +5,9 @@ from pathlib import Path
 
 _REPO_DIR = Path(__file__).resolve().parents[1]
 _DATA_DIR = _REPO_DIR / "data"
-_DATABASE_DIR = Path(os.environ.get("RNAGYM_DATABASE_DIR", "/n/groups/marks/databases"))
+_DATABASE_DIR = Path(
+    os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
+)
 
 
 class _Config:
@@ -59,6 +61,27 @@ class ConfigFitness(_Config):
     DATA_DIR = _DATA_DIR / "fitness"
     MSA_DIR = DATA_DIR / "msa"
     REFERENCE_FILE = DIR / "reference_sheet_final.csv"
+
+
+class ConfigRiboseek(_Config):
+    """Shared Riboseek configuration."""
+
+    RNACENTRAL_VERSION = "27.0"
+    RNACENTRAL_DIR = _DATABASE_DIR / "RNAcentral" / RNACENTRAL_VERSION
+    NT_VERSION = "2026-08-04"
+    NT_DIR = _DATABASE_DIR / "NCBI-nt" / NT_VERSION
+    DATABASE_RNACENTRAL = RNACENTRAL_DIR / "riboseek_gpu"
+    DATABASE_NT = NT_DIR / "chunks" / "riboseek_gpu"
+    MAX_TARGET_LENGTH = 10_000
+    TARGET_OVERLAP = 2_000  # Maximum benchmark query length
+    NT_PARTITION_DIR = NT_DIR / "partitions"
+    DATABASE_NT_PARTS = tuple(
+        sorted(
+            path
+            for path in NT_PARTITION_DIR.glob("riboseek_gpu_*")
+            if path.is_file() and not path.suffix and not path.name.endswith("_h")
+        )
+    )
 
 
 class Config3D(_Config):

@@ -34,7 +34,7 @@ def run_ev_couplings(data: Dict[str, str]) -> JobOutput[Exception]:
     )
 
     try:
-        analysis = Analysis(pdb_id, asym_id, auth_id)
+        analysis = Analysis(pdb_id, asym_id, auth_id, data["sequence_id"])
         analysis.run_ev_couplings()
         return None
     except BailoutException as e:

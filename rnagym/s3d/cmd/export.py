@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from rnagym.config import Config3D
 from rnagym.s3d.util import Config
 from rnagym.s3d.util.analysis import get_rf2na_chain_ids, write_chain_minimal_pdb
 
@@ -95,7 +96,8 @@ def main():
             shutil.copytree(couplings_dir, couplings_out / chain_key)
 
             # MSA
-            couplings_afa = prefix / "rMSA" / "sequence.afa"
+            sequence_id = row["sequence_id"]
+            couplings_afa = Config3D.MSA_DIR / f"{sequence_id}.afa"
             shutil.copy2(couplings_afa, msa_dir / f"{chain_key}.afa")
 
             # USAlign output
