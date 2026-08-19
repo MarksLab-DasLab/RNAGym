@@ -48,14 +48,20 @@ def combine_csv_data(
 
         save = True
         for model_name in model_list:
-            model_path = os.path.join(model_predictions_folder, model_name, csv_file)
+            folder = resolve_source(score_cols_dict, model_name)[0]
+            model_path = os.path.join(model_predictions_folder, folder, csv_file)
             if not os.path.exists(model_path):
                 logger.warning(f"Model file {csv_file} not found in {model_name}")
                 continue
 
             model_df = pd.read_csv(model_path)
             model_mutation_col = get_mutation_column(model_df)
-            score_col = score_cols_dict[model_name]
+            score_col = resolve_source(score_cols_dict, model_name)[1]
+            if score_col not in model_df.columns:
+                raise KeyError(
+                    f"{model_path} has no column {score_col!r}; it holds "
+                    f"{list(model_df.columns)}"
+                )
             model_df = model_df[[model_mutation_col, score_col]]
             model_df.columns = [mutation_col, f"{model_name}_score"]
             model_df[mutation_col] = model_df[mutation_col].apply(standardize_mutation)
@@ -75,6 +81,40 @@ def combine_csv_data(
             output_file = os.path.join(output_folder, csv_file)
             df.to_csv(output_file, index=False)
             logger.info(f"Saved combined data to {output_file}")
+
+
+def resolve_source(score_cols_dict, model_name):
+    """
+    Return the (folder, column) a model's scores are read from.
+
+    An entry is either a bare column name, meaning the predictions live in a
+    folder named after the model, or a dict giving the folder and column
+    explicitly. The explicit form is what lets several entries read different
+    columns of the same prediction files, which is how the four masked-marginal
+    fill strategies are exposed: one run writes all four columns into one folder.
+    """
+    try:
+        spec = score_cols_dict[model_name]
+    except KeyError:
+        raise KeyError(f"No score column configured for model {model_name!r}")
+    if isinstance(spec, str):
+        return model_name, spec
+    return spec["folder"], spec["column"]
+
+
+def four_fill_entries(name, folder, column_stem):
+    """
+    Register a masked language model's four fill strategies.
+
+    A single scoring run writes one file per assay holding all four columns, so
+    the four entries share a folder and differ only in the column they read.
+    The fill named is what the model sees at a variant's OTHER mutated positions
+    while one position is masked: see fitness/baselines/masked_lm.
+    """
+    return {
+        f"{name}_{strategy}": {"folder": folder, "column": f"{column_stem}_{strategy}"}
+        for strategy in ("wt_fill", "mask_fill", "mut_fill", "match_fill")
+    }
 
 
 SCORE_COLS = {
@@ -98,6 +138,25 @@ SCORE_COLS = {
     "aido_rna_650m": "aido_rna_score",
     "EVmutation": "prediction_epistatic",
 }
+
+# The four fill strategies, for every masked language model that runs them. Each
+# model has one prediction folder holding all four columns. These are not in
+# ALL_MODELS: pass them to --models explicitly, since one model appears four
+# times and a default merge should not multiply the released leaderboard.
+FOUR_FILL_MODELS = []
+for _name, _folder, _stem in [
+    ("rna_fm", "rna_fm_4fill", "RNA_FM_scores"),
+    ("rinalmo", "rinalmo_4fill", "logit_scores"),
+    ("rnagenesis", "rnagenesis_4fill", "rnagenesis_score"),
+    ("aido_rna", "aido_rna_4fill", "aido_rna_score"),
+    ("aido_rna_1m", "aido_rna_1m_4fill", "aido_rna_score"),
+    ("aido_rna_25m", "aido_rna_25m_4fill", "aido_rna_score"),
+    ("aido_rna_300m", "aido_rna_300m_4fill", "aido_rna_score"),
+    ("aido_rna_650m", "aido_rna_650m_4fill", "aido_rna_score"),
+]:
+    _entries = four_fill_entries(_name, _folder, _stem)
+    SCORE_COLS.update(_entries)
+    FOUR_FILL_MODELS.extend(_entries)
 
 ALL_MODELS = [
     "evo1",
@@ -140,13 +199,27 @@ def main():
         help="Path to the folder where combined CSV files will be saved.",
     )
     parser.add_argument(
+        "--models",
+        nargs="+",
+        default=None,
+        help="Model entries to merge (default: every entry in ALL_MODELS). Use "
+        "this to merge a subset, such as one masked model's four fill "
+        "strategies: rna_fm_wt_fill rna_fm_mask_fill rna_fm_mut_fill rna_fm_match_fill",
+    )
+    parser.add_argument(
         "--assays_with_MSAs_only",
         action="store_true",
         help="Focus on assays with MSAs only (i.e., EVmutation)",
     )
     args = parser.parse_args()
 
-    model_list = ["EVmutation"] if args.assays_with_MSAs_only else ALL_MODELS
+    if args.assays_with_MSAs_only:
+        model_list = ["EVmutation"]
+    else:
+        model_list = args.models if args.models else ALL_MODELS
+    unknown = [m for m in model_list if m not in SCORE_COLS]
+    if unknown:
+        parser.error(f"No score column configured for: {unknown}")
 
     combine_csv_data(
         args.processed_folder,
