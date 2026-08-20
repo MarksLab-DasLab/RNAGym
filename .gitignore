@@ -6,6 +6,7 @@ __pycache__/
 # Anywhere files
 slurm
 archives
+todo
 
 # Fitness data (downloadable or generated)
 fitness/assays/
