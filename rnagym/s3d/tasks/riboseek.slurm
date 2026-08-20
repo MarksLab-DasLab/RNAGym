@@ -5,8 +5,11 @@
 
 set -euo pipefail
 
-module="$1"
 cd "$SLURM_SUBMIT_DIR"
 export PATH="$PWD/.pixi/envs/default/bin:$PATH"
-.pixi/envs/default/bin/python -m "$module" \
-	"${SLURM_ARRAY_TASK_ID:-0}" "${SLURM_ARRAY_TASK_COUNT:-1}"
+
+args=("$@")
+if [[ "$1" == cmsearch ]]; then
+	args+=("$SLURM_ARRAY_TASK_ID" "$SLURM_ARRAY_TASK_COUNT")
+fi
+.pixi/envs/default/bin/python -m rnagym.tasks.riboseek "${args[@]}"

@@ -2,11 +2,11 @@
 
 set -euo pipefail
 
-version="1.0.0"
-install_dir=".pixi/tools/riboseek"
+version="1.0.1"
+install_dir=".pixi/tools/riboseek-$version"
 archive="riboseek-linux-gpu.tar.gz"
 url="https://github.com/steineggerlab/riboseek/releases/download/v${version}/${archive}"
-sha256="0492b80d27dbc5da1d085e458618236fe58060a68e10d22ace26d045034af6bd"
+sha256="e77eb763ee6fdd577fa448066423a594201eb04c4b6a9ea9cd095669f51bdff0"
 
 if [[ ! -x "$install_dir/bin/riboseek" ]]; then
 	temporary=$(mktemp -d)

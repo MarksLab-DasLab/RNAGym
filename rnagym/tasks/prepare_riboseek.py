@@ -10,6 +10,8 @@ from shlex import split
 
 from rnagym.config import ConfigRiboseek
 
+DINUCLEOTIDE_FLAG = 64
+
 
 def set_latest(directory: Path) -> None:
     """Point the database's latest symlink to one completed version."""
@@ -20,8 +22,18 @@ def set_latest(directory: Path) -> None:
     temporary.replace(latest)
 
 
-def build(directory: Path, create: Callable[[Path, Path], None]) -> None:
-    """Atomically build one padded Riboseek database."""
+def mark_dinucleotide(database: Path) -> None:
+    """Mark Riboseek's dinucleotide-encoded database correctly."""
+    # makepaddedseqdb drops this flag from downloaded nt databases
+    path = database.with_suffix(".dbtype")
+    dbtype = int.from_bytes(path.read_bytes(), sys.byteorder)
+    path.write_bytes((dbtype | (DINUCLEOTIDE_FLAG << 16)).to_bytes(4, sys.byteorder))
+
+
+def build(
+    directory: Path, create: Callable[[Path, Path], None], padded: bool = True
+) -> None:
+    """Atomically build one Riboseek database."""
     if (directory / "SUCCESS").is_file():
         set_latest(directory)
         print(f"Skipping complete database: {directory}")
@@ -36,15 +48,16 @@ def build(directory: Path, create: Callable[[Path, Path], None]) -> None:
         build_dir = Path(temporary)
         database = build_dir / "riboseek"
         create(database, build_dir / "tmp")
-        threads = os.environ.get("SLURM_CPUS_PER_TASK", "32")
-        subprocess.run(
-            split(
-                f"riboseek makepaddedseqdb {database} "
-                f"{database}_gpu --threads {threads}"
-            ),
-            check=True,
-        )
-        subprocess.run(split(f"riboseek rmdb {database}"), check=True)
+        if padded:
+            threads = os.environ.get("SLURM_CPUS_PER_TASK", "32")
+            subprocess.run(
+                split(
+                    f"riboseek makepaddedseqdb {database} "
+                    f"{database}_gpu --threads {threads}"
+                ),
+                check=True,
+            )
+            subprocess.run(split(f"riboseek rmdb {database}"), check=True)
         (build_dir / "SUCCESS").touch()
         build_dir.chmod(0o2750)
         build_dir.rename(directory)
@@ -78,7 +91,10 @@ def create_nt(database: Path, work_dir: Path) -> None:
 
 
 def split_nt(directory: Path) -> None:
-    """Split exceptionally long nt entries for bounded GPU memory use."""
+    """Split exceptionally long nt sequences before GPU padding."""
+    if (ConfigRiboseek.NT_PARTITION_DIR / "SUCCESS").is_file():
+        print(f"Skipping complete database: {ConfigRiboseek.NT_PARTITION_DIR}")
+        return
     if ConfigRiboseek.DATABASE_NT.with_suffix(".dbtype").is_file():
         print(f"Skipping complete database: {ConfigRiboseek.DATABASE_NT}")
     else:
@@ -87,7 +103,7 @@ def split_nt(directory: Path) -> None:
             output = Path(temporary) / "riboseek_gpu"
             subprocess.run(
                 split(
-                    f"riboseek splitsequence {directory / 'riboseek_gpu'} {output} "
+                    f"riboseek splitsequence {directory / 'riboseek'} {output} "
                     f"--max-seq-len {ConfigRiboseek.MAX_TARGET_LENGTH} "
                     f"--sequence-overlap {ConfigRiboseek.TARGET_OVERLAP} "
                     "--headers-split-mode 1 --sequence-split-mode 1 "
@@ -99,6 +115,7 @@ def split_nt(directory: Path) -> None:
             Path(temporary).rename(ConfigRiboseek.DATABASE_NT.parent)
         print(f"Wrote {ConfigRiboseek.DATABASE_NT}")
 
+    mark_dinucleotide(ConfigRiboseek.DATABASE_NT)
     partition_nt()
 
 
@@ -125,6 +142,7 @@ def partition_nt() -> None:
             ),
             check=True,
         )
+        mark_dinucleotide(directory / "riboseek_gpu_00")
         (directory / "SUCCESS").touch()
         directory.chmod(0o2750)
         directory.rename(ConfigRiboseek.NT_PARTITION_DIR)
@@ -134,8 +152,8 @@ def partition_nt() -> None:
 def main() -> None:
     """Build one database selected by the Slurm array index."""
     databases = (
-        (ConfigRiboseek.RNACENTRAL_DIR, create_rnacentral),
-        (ConfigRiboseek.NT_DIR, create_nt),
+        (ConfigRiboseek.RNACENTRAL_DIR, create_rnacentral, True),
+        (ConfigRiboseek.NT_DIR, create_nt, False),
     )
     index = int(sys.argv[1])
     build(*databases[index])

@@ -66,6 +66,7 @@ class ConfigFitness(_Config):
 class ConfigRiboseek(_Config):
     """Shared Riboseek configuration."""
 
+    CACHE_DIR = _DATA_DIR / "riboseek" / "cache"
     RNACENTRAL_VERSION = "27.0"
     RNACENTRAL_DIR = _DATABASE_DIR / "RNAcentral" / RNACENTRAL_VERSION
     NT_VERSION = "2026-08-04"
