@@ -36,6 +36,9 @@ class Config2D(_Config):
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "2d"
     LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
+    BPRNA_FILE = RAW_DIR / "bprna_1m_dbn.zip"
+    EFOLD_LNCRNA_FILE = RAW_DIR / "lncRNA_nonFiltered.json"
+    EFOLD_VIRAL_FILE = RAW_DIR / "viral_fragments.json"
     PSEUDOBASE_FILE = RAW_DIR / "pseudobase.csv"
     MC_ANNOTATE = DIR / ".pixi/model-sources/RNA_assessment/MC-Annotate"
 
@@ -50,6 +53,8 @@ class Config2D(_Config):
     HEADLINE_MODIFIERS = ("1M7", "2A3", "DMS", "NMIA")
     TRAINING_OVERLAP = {
         "mapping": {"eternafold", "ribonanzanet"},
+        "bprna": set(),
+        "efold_challenging": set(),
         "pseudobase": set(),
         "pdb": {"ribonanzanet", "rna-fm", "ufold"},
     }

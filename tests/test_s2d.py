@@ -5,8 +5,11 @@ import os
 
 import numpy as np
 import pytest
-from rnagym.s2d.models.utils import decode_pair_probabilities
-from rnagym.s2d.tasks.score import parse_pairs
+from rnagym.s2d.models.utils import (
+    decode_pair_probabilities,
+    pairs_to_dot_bracket,
+    parse_pairs,
+)
 
 SEQUENCE = "GGGGAAAACCCC"
 MODEL = os.environ.get("PIXI_ENVIRONMENT_NAME")
@@ -38,6 +41,13 @@ def test_extended_dot_bracket() -> None:
     expected = {(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)}
     assert parse_pairs("([{<A)]}>a") == expected
     assert parse_pairs("([{<a)]}>A") == expected
+
+
+def test_sparse_pairs_to_dot_bracket() -> None:
+    """Encode nested and crossing sparse base pairs without a dense matrix."""
+    expected = {(0, 5), (1, 4), (2, 7), (3, 6)}
+    structure = pairs_to_dot_bracket(8, expected)
+    assert parse_pairs(structure) == expected
 
 
 def test_adapter() -> None:

@@ -2,10 +2,12 @@
 
 """Collate RNAGym chemical mapping and discrete structure data."""
 
+import json
 import re
 import subprocess
 from collections import Counter
 from pathlib import Path
+from zipfile import ZipFile
 
 import numpy as np
 import polars as pl
@@ -14,7 +16,7 @@ from tqdm.auto import tqdm
 from rnagym.config import Config2D, Config3D
 from rnagym.sequences import fitness_sequences, update_registry
 
-from ..models.utils import dot_bracket
+from ..models.utils import dot_bracket, pairs_to_dot_bracket, parse_pairs
 
 CWW_PATTERN = re.compile(
     r"^A(\d+)-A(\d+) : \w+-\w+ Ww/Ww.*pairing "
@@ -161,6 +163,93 @@ def get_pseudobase_structures() -> pl.DataFrame:
     )
 
 
+def consolidate_structures(
+    rows: list[dict[str, str]], source: str, source_count: int
+) -> pl.DataFrame:
+    """Collapse exact duplicates while retaining every source identifier."""
+    structures = (
+        pl.DataFrame(rows)
+        .sort("source_id")
+        .group_by(["sequence", "secondary_structure"], maintain_order=True)
+        .agg(pl.col("source_id").str.join("|").alias("source_id"))
+        .with_columns(
+            pl.concat_str(pl.lit(f"{source}:"), "source_id").alias("uid"),
+            pl.col("sequence")
+            .map_elements(lambda sequence: [True] * len(sequence), pl.List(pl.Boolean))
+            .alias("resolved"),
+        )
+        .select("uid", "sequence", "secondary_structure", "resolved")
+    )
+    print(
+        f"{source}: {source_count:,} source -> {len(rows):,} canonical -> "
+        f"{structures.height:,} unique"
+    )
+    return structures
+
+
+def get_bprna_structures(path: Path = Config2D.BPRNA_FILE) -> pl.DataFrame:
+    """Load canonical structures from the official bpRNA-1m archive."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing source file: {path.name}")
+
+    rows = []
+    with ZipFile(path) as archive:
+        names = sorted(name for name in archive.namelist() if name.endswith(".dbn"))
+        for name in names:
+            lines = archive.read(name).decode().splitlines()
+            source_id = Path(name).stem
+            if len(lines) < 5 or lines[0] != f"#Name: {source_id}":
+                raise ValueError(f"Invalid bpRNA record: {name}")
+            sequence, structure = (line.strip() for line in lines[-2:])
+            sequence = sequence.upper().replace("T", "U")
+            if any(base not in "ACGU" for base in sequence):
+                continue
+            if len(sequence) != len(structure):
+                raise ValueError(f"Sequence/structure length mismatch: {name}")
+            parse_pairs(structure)
+            rows.append(
+                {
+                    "source_id": source_id,
+                    "sequence": sequence,
+                    "secondary_structure": structure,
+                }
+            )
+    return consolidate_structures(rows, "bprna", len(names))
+
+
+def get_efold_challenging_structures(
+    paths: tuple[tuple[str, Path], ...] = (
+        ("lncrna", Config2D.EFOLD_LNCRNA_FILE),
+        ("viral", Config2D.EFOLD_VIRAL_FILE),
+    ),
+) -> pl.DataFrame:
+    """Load eFold's long noncoding RNA and viral challenging sets."""
+    missing = [path.name for _, path in paths if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"Missing source files: {', '.join(missing)}")
+
+    rows = []
+    source_count = 0
+    for subset, path in paths:
+        with path.open() as handle:
+            records = json.load(handle)
+        source_count += len(records)
+        for source_id, record in sorted(records.items()):
+            sequence = record["sequence"].upper().replace("T", "U")
+            if any(base not in "ACGU" for base in sequence):
+                continue
+            rows.append(
+                {
+                    "source_id": f"{subset}:{source_id}",
+                    "sequence": sequence,
+                    "secondary_structure": pairs_to_dot_bracket(
+                        len(sequence), record["structure"]
+                    ),
+                }
+            )
+    return consolidate_structures(rows, "efold_challenging", source_count)
+
+
 def is_pdb_candidate(row: dict[str, str]) -> bool:
     """Apply the 3D monomer and quality filters to one PDB chain."""
     return Config3D.is_monomer(row) and all(
@@ -277,11 +366,19 @@ def print_summary(data: pl.DataFrame, path: Path) -> None:
 def main() -> None:
     """Collate and write chemical mapping and discrete structure datasets."""
     filtered = get_source_profiles()
+    bprna = get_bprna_structures()
+    efold_challenging = get_efold_challenging_structures()
     pseudobase = get_pseudobase_structures()
     pdb = get_pdb_structures()
-    structures = pl.concat([pseudobase, pdb])
+    structures = pl.concat([bprna, efold_challenging, pseudobase, pdb])
 
-    datasets = {"mapping": filtered, "pseudobase": pseudobase, "pdb": pdb}
+    datasets = {
+        "mapping": filtered,
+        "bprna": bprna,
+        "efold_challenging": efold_challenging,
+        "pseudobase": pseudobase,
+        "pdb": pdb,
+    }
     modalities = pl.concat(
         [
             *(

@@ -15,12 +15,15 @@ Constant predictions receive zero.
 
 **Discrete structures:** Cluster-macro base-pair F1 uses each model's
 official decoders. PDB pairs touching unresolved residues are excluded.
-Unsupported sequences receive zero. PseudoBase and PDB report each model's best
-decoder. Macro is the unweighted mean of the three columns.
-
-<!-- TODO(MCA): Add bpRNA-1m -->
+Unsupported sequences receive zero. PseudoBase, PDB, bpRNA-1m, and eFold
+Challenging report each model's best decoder. Macro is the unweighted mean of
+chemical mapping and the four discrete-structure benchmarks.
 
 ## Leaderboard
+
+The generated table reflects the prediction artifacts available when it was
+last run. Regenerate predictions for the current sequence registry before
+running `pixi run leaderboard` to populate newly added benchmark columns.
 
 <!-- BEGIN GENERATED TABLE -->
 | Rank | Model | Chemical mapping (n=584k) | PseudoBase (n=358) | PDB (n=946) | Macro |

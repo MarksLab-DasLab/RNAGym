@@ -5,7 +5,7 @@
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
 | `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
-| `rnagym_2d.parquet` | 358 PseudoBase and 2,062 PDB structures | `uid` |
+| `rnagym_2d.parquet` | 66,715 bpRNA-1m, 70 eFold Challenging, 358 PseudoBase, and 2,404 PDB structures | `uid` |
 | `../rnagym_sequences.parquet` | Global sequence registry, clusters, and folds | `sequence_id` |
 | `rnagym_rfams.parquet` | Rfam hits for each registered sequence | `sequence_id` |
 
@@ -44,6 +44,14 @@ the highest-SNR measurement is the representative.
 | `sequence` | RNA sequence. |
 | `secondary_structure` | Structure in dot-bracket notation. |
 | `resolved` | Positions resolved in the source structure and included in scoring. |
+
+The `uid` prefix identifies the source: `bprna`, `efold_challenging`,
+`pseudobase`, or `pdb`. bpRNA-1m records are restricted to canonical RNA and
+exact duplicate sequence/structure pairs are collapsed while retaining all
+source identifiers. The eFold Challenging records combine its 30 long
+noncoding RNA and 40 viral-fragment examples. Their zero-based base-pair lists
+are converted to extended dot-bracket notation. Every position in bpRNA-1m,
+eFold Challenging, and PseudoBase is marked resolved.
 
 PDB entries are canonical RNA monomers selected from
 `data/3d/curation/annotated_chains.csv` using

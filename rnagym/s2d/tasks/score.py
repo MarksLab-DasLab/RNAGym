@@ -3,7 +3,6 @@
 """Score secondary structure model predictions."""
 
 from pathlib import Path
-from string import ascii_letters
 
 import numpy as np
 import polars as pl
@@ -13,7 +12,14 @@ from tqdm.auto import tqdm
 from rnagym.config import Config2D
 from rnagym.sequences import load_registry
 
-PAIRS = dict(zip("([{<", ")]}>"))
+from ..models.utils import parse_pairs
+
+STRUCTURE_MODALITIES = (
+    ("pseudobase", "PseudoBase"),
+    ("pdb", "PDB"),
+    ("bprna", "bpRNA-1m"),
+    ("efold_challenging", "eFold Challenging"),
+)
 
 
 def prediction_files(model: str, dataset: str) -> list[Path]:
@@ -25,32 +31,6 @@ def prediction_files(model: str, dataset: str) -> list[Path]:
     if not files:
         raise FileNotFoundError(f"No {dataset} predictions found for {model}")
     return files
-
-
-def parse_pairs(structure: str) -> set[tuple[int, int]]:
-    """Parse base pairs from extended dot-bracket notation."""
-    stacks = {opener: [] for opener in PAIRS}
-    openers_by_closer = {closer: opener for opener, closer in PAIRS.items()}
-    pairs = set()
-    for position, symbol in enumerate(structure):
-        if symbol == ".":
-            continue
-        if symbol in stacks:
-            stacks[symbol].append(position)
-        elif symbol in openers_by_closer:
-            opener = openers_by_closer[symbol]
-            if not stacks[opener]:
-                raise ValueError(f"Unmatched {symbol} in {structure}")
-            pairs.add((stacks[opener].pop(), position))
-        elif symbol in ascii_letters:
-            # Arnie uses the first case encountered as the opener
-            stacks[symbol] = [position]
-            openers_by_closer[symbol.swapcase()] = symbol
-        else:
-            raise ValueError(f"Unknown structure symbol {symbol}")
-    if any(stacks.values()):
-        raise ValueError(f"Unmatched opener in {structure}")
-    return pairs
 
 
 def structure_f1(
@@ -296,9 +276,10 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         .first()
         .pivot(on="modality", index="model", values="score")
     )
+    structure_columns = [modality for modality, _ in STRUCTURE_MODALITIES]
     summary = (
         mapping.join(structures, on="model")
-        .with_columns(pl.mean_horizontal("mapping", "pseudobase", "pdb").alias("macro"))
+        .with_columns(pl.mean_horizontal("mapping", *structure_columns).alias("macro"))
         .sort("macro", descending=True)
     )
 
@@ -309,12 +290,12 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         "mapping": profiles.filter(
             pl.col("modifier").is_in(Config2D.HEADLINE_MODIFIERS)
         )["sequence_id"].n_unique(),
-        "pseudobase": references.filter(pl.col("uid").str.starts_with("pseudobase:"))[
-            "sequence_id"
-        ].n_unique(),
-        "pdb": references.filter(pl.col("uid").str.starts_with("pdb:"))[
-            "sequence_id"
-        ].n_unique(),
+        **{
+            modality: references.filter(pl.col("uid").str.starts_with(f"{modality}:"))[
+                "sequence_id"
+            ].n_unique()
+            for modality in structure_columns
+        },
     }
 
     def count(value: int) -> str:
@@ -330,14 +311,15 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         "ufold": "UFold",
         "vienna": "Vienna",
     }
+    score_columns = [("mapping", "Chemical mapping"), *STRUCTURE_MODALITIES]
     lines = [
-        (
-            "| Rank | Model | "
-            f"Chemical mapping (n={count(counts['mapping'])}) | "
-            f"PseudoBase (n={count(counts['pseudobase'])}) | "
-            f"PDB (n={count(counts['pdb'])}) | Macro |"
-        ),
-        "| ---: | :--- | ---: | ---: | ---: | ---: |",
+        "| Rank | Model | "
+        + " | ".join(
+            f"{label} (n={count(counts[modality])})"
+            for modality, label in score_columns
+        )
+        + " | Macro |",
+        "| ---: | :--- | " + " | ".join("---:" for _ in score_columns) + " | ---: |",
     ]
     for rank, row in enumerate(summary.iter_rows(named=True), start=1):
         model = row["model"]
@@ -348,8 +330,8 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         )
         lines.append(
             f"| {rank} | {names.get(model, model)}{suffix} | "
-            f"{row['mapping']:.4f} | {row['pseudobase']:.4f} | "
-            f"{row['pdb']:.4f} | {row['macro']:.4f} |"
+            + " | ".join(f"{row[modality]:.4f}" for modality, _ in score_columns)
+            + f" | {row['macro']:.4f} |"
         )
 
     start, end = "<!-- BEGIN GENERATED TABLE -->", "<!-- END GENERATED TABLE -->"
@@ -381,13 +363,14 @@ def main() -> None:
         pl.concat(summaries)
         .with_columns(
             (
-                (
+                pl.any_horizontal(
                     (pl.col("dataset") == "mapping")
-                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["mapping"])
-                )
-                | (
-                    (pl.col("modality") == "pdb")
-                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["pdb"])
+                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["mapping"]),
+                    *(
+                        (pl.col("modality") == modality)
+                        & pl.col("model").is_in(Config2D.TRAINING_OVERLAP[modality])
+                        for modality, _ in STRUCTURE_MODALITIES
+                    ),
                 )
             ).alias("training_overlap"),
             pl.col("score")
