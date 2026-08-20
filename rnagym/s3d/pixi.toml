@@ -45,8 +45,9 @@ split = "python -m rnagym.s3d.gym split"
 evcouplings = "python -m rnagym.s3d.gym evcouplings"
 analyze = "python -m rnagym.s3d.gym analyze"
 leaderboard = "python -m rnagym.s3d.tasks.score"
+af3 = "bash sh/af3.sh"
 rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
-score-af3 = { cmd = "python -m rnagym.s3d.tasks.score_af3", depends-on = [
+score = { cmd = "python -m rnagym.s3d.tasks.score_predictions", depends-on = [
   "rna-assessment-source",
 ] }
 export = "python -m rnagym.s3d.gym export"

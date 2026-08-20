@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from io import StringIO
 from pathlib import Path
-from tempfile import NamedTemporaryFile as NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import gemmi
@@ -31,6 +31,7 @@ from Bio import Align, AlignIO
 from Bio.PDB import PDBIO, MMCIFParser
 from evcouplings.compare import PDB, Chain, DistanceMap, add_distances
 from evcouplings.utils.pipeline import execute
+from RNA_normalizer import mcannotate
 
 from rnagym.config import Config3D
 from rnagym.s3d.util import (
@@ -50,6 +51,10 @@ from rnagym.s3d.util import (
     SymmetryOp,
 )
 from rnagym.s3d.util.structure import ChainType, StructureInfo, get_structure
+
+# RNA_normalizer still assumes Python 2 and the import-time working directory
+RNA_normalizer.xrange = range
+mcannotate.MCAnnotate_bin = str(Config3D.MC_ANNOTATE)
 
 
 @dataclass
@@ -479,9 +484,8 @@ class Analysis:
         out_pdb : Optional[Path]
             The output PDB containing the baseline's prediction.
         """
-        out_dir, out_pdb = Config.get_bl_out_pdb(
-            baseline.name, self.pdb_id, self.asym_id, multimer
-        )
+        name = self.pdb_id if multimer else self.sequence_id
+        out_dir, out_pdb = Config.get_bl_out_pdb(baseline.name, name, multimer)
 
         if not out_pdb.exists():
             return (out_dir, None)
@@ -557,26 +561,24 @@ class Analysis:
             )
         )
 
-        # RNA_normalizer requires PDB inputs
-        if out_pdb.suffix == ".cif":
-            chain_key = f"{self.pdb_id}_{self.asym_id}"
-            structure = MMCIFParser(QUIET=True).get_structure(chain_key, out_pdb)
+        with TemporaryDirectory() as temporary_dir:
+            # RNA_normalizer requires PDB inputs
+            if out_pdb.suffix == ".cif":
+                chain_key = f"{self.pdb_id}_{self.asym_id}"
+                structure = MMCIFParser(QUIET=True).get_structure(chain_key, out_pdb)
 
-            # Ensure chain IDs are single-character by assigning them to "A"
-            # NOTE(MCA): This is acceptable because out_pdb is guaranteed to be
-            #   a single chain file.
-            for model in structure:
-                for chain in model:
-                    chain.id = "A"
+                # The extracted prediction contains only one chain
+                for model in structure:
+                    for chain in model:
+                        chain.id = "A"
 
-            io = PDBIO()
-            io.set_structure(structure)
-            out_pdb = out_pdb.with_suffix(".pdb")
-            io.save(str(out_pdb))
+                io = PDBIO()
+                io.set_structure(structure)
+                out_pdb = Path(temporary_dir) / "prediction.pdb"
+                io.save(str(out_pdb))
 
-        rmsd, di_all, inf_all, inf_wc, inf_nwc, inf_stack = InteractionNetworkFidelity(
-            reference_pdb, out_pdb
-        )
+            metrics = InteractionNetworkFidelity(reference_pdb, out_pdb)
+            _, _, _, inf_wc, inf_nwc, _ = metrics
 
         return inf_wc, inf_nwc
 
@@ -801,6 +803,18 @@ def msa_path(row: pd.Series, suffix: str) -> Path:
     return Config3D.MSA_DIR / f"{row['sequence_id']}.{suffix}"
 
 
+def monomer_runs(out_path: Path):
+    """Yield one run directory per exact monomer sequence."""
+    monomer_dir = (out_path / "monomers").resolve()
+    monomer_dir.mkdir(parents=True, exist_ok=True)
+    targets = Config.load_targets("monomer").drop_duplicates("sequence_id")
+    for _, row in targets.iterrows():
+        name = row["sequence_id"]
+        run_dir = monomer_dir / name
+        run_dir.mkdir(exist_ok=True)
+        yield row, name, run_dir
+
+
 def prep_af3(out_dir=Config.AF3.out_dir):
     """
     Writes run configurations for AlphaFold3.
@@ -811,38 +825,29 @@ def prep_af3(out_dir=Config.AF3.out_dir):
         The output directory to place the run configuration.
     """
     out_path = Path(out_dir)
-    mon_path = (out_path / "monomers").resolve()
-    mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = Config.load_targets("monomer")
     mul_df = Config.load_targets("multimer")
 
     # --- Process monomer runs ---
-    # For each monomer (i.e. each row in mon_df) we create a configuration that
-    # provides both the sequence file and the pre-computed MSA file.
-    for _, row in mon_df.iterrows():
-        # Extract minimal fields from CSV
-        pdb_id = row["PDB ID"].lower()
-        asym_chain_id = row["Asym. Chain ID"]
+    # Each exact monomer sequence gets one configuration
+    for row, name, out_dir in monomer_runs(out_path):
         seq_unmodified = row["Sequence (unmod.)"]
-        out_dir = mon_path / f"{pdb_id}_{asym_chain_id}"
 
         # Don't overwrite successful run configs
         if (out_dir / "SUCCESS").exists():
             continue
-        print(f"Preparing {pdb_id}_{asym_chain_id}")
+        print(f"Preparing {name}")
 
-        # Create top-level AF3 input e.g., name = "AF3_1ABC_A"
         sequence_a3m = msa_path(row, "a3m")
         out_a3m = out_dir / "sequence.a3m"
         out_fp = out_dir / "config.json"
         seq_unmod = prep_fasta(sequence_a3m, out_a3m, seq_unmodified)
         config = {
-            "name": f"{pdb_id}_{asym_chain_id}",
+            "name": name,
             "modelSeeds": [0],  # or any seeds you like, e.g. [42, 123].
             "sequences": [
                 {
                     "rna": {
-                        "id": str(asym_chain_id),
+                        "id": "A",
                         "sequence": str(seq_unmod),
                         "unpairedMsaPath": str(out_a3m),
                     }
@@ -852,8 +857,6 @@ def prep_af3(out_dir=Config.AF3.out_dir):
             "version": 2,
         }
 
-        # Write the JSON file named "<pdb_id>_<asym_chain_id>.json"
-        # under the out_dir directory.
         out_fp.parent.mkdir(exist_ok=True)
         with open(out_fp, "w") as f:
             json.dump(config, f, indent=2)
@@ -981,31 +984,24 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
         The output directory to place the run configuration.
     """
     out_path = Path(out_dir)
-    mon_path = (out_path / "monomers").resolve()
-    mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = Config.load_targets("monomer")
     mul_df = Config.load_targets("multimer")
 
     # --- Process monomer runs ---
-    # For each monomer (i.e. each row in mon_df) we create a configuration that
-    # provides both the sequence file and the pre-computed MSA file.
-    for _, row in mon_df.iterrows():
-        # Extract minimal fields from CSV
-        pdb_id = row["PDB ID"].lower()
-        asym_chain_id = row["Asym. Chain ID"]
+    # Each exact monomer sequence gets one configuration
+    for row, name, out_dir in monomer_runs(out_path):
+        chain_id = "A"
         seq_unmodified = row["Sequence (unmod.)"]
-        out_dir = mon_path / f"{pdb_id}_{asym_chain_id}"
         out_dir.mkdir(exist_ok=True)
 
         # Don't overwrite successful run configs
         if (out_dir / "SUCCESS").exists():
             continue
-        print(f"Preparing {pdb_id}_{asym_chain_id}")
+        print(f"Preparing {name}")
 
         # Create top-level RF2NA input
         sequence_afa = msa_path(row, "afa")
-        sequence_fa = out_dir / f"{asym_chain_id}.fa"
-        out_afa = out_dir / f"{asym_chain_id}.afa"
+        sequence_fa = out_dir / f"{chain_id}.fa"
+        out_afa = out_dir / f"{chain_id}.afa"
         out_fp = out_dir / "launch.sh"
 
         # Write sequence fasta and afa
@@ -1019,11 +1015,9 @@ def prep_rf2na(out_dir=Config.RF2NA.out_dir):
             "#!/usr/bin/env bash",
             "",
             f"{Config.RF2NA_LAUNCH_SH} . \\",
-            f"    R:{asym_chain_id}.fa",
+            f"    R:{chain_id}.fa",
         ]
 
-        # Write the JSON file named "<pdb_id>_<asym_chain_id>.json"
-        # under the out_dir directory.
         out_fp.parent.mkdir(exist_ok=True)
         with open(out_fp, "w") as f:
             f.write("\n".join(cmd) + "\n")
@@ -1147,22 +1141,14 @@ def prep_rhofold(out_dir=Config.RHOFOLD.out_dir):
         The output directory to place the run configuration.
     """
     out_path = Path(out_dir)
-    mon_path = (out_path / "monomers").resolve()
-    mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = Config.load_targets("monomer")
-
     # --- Process monomer runs ---
-    for _, row in mon_df.iterrows():
-        # Extract minimal fields from CSV
-        pdb_id = row["PDB ID"].lower()
-        asym_chain_id = row["Asym. Chain ID"]
+    for row, name, out_dir in monomer_runs(out_path):
         seq_unmodified = row["Sequence (unmod.)"]
-        out_dir = mon_path / f"{pdb_id}_{asym_chain_id}"
 
         # Don't overwrite successful run configs
         if (out_dir / "SUCCESS").exists():
             continue
-        print(f"Preparing {pdb_id}_{asym_chain_id}")
+        print(f"Preparing {name}")
 
         sequence_a3m = msa_path(row, "a3m")
         out_a3m = out_dir / "sequence.a3m"
@@ -1185,25 +1171,17 @@ def prep_nufold(out_dir=Config.NUFOLD.out_dir):
         The output directory to place the run configuration.
     """
     out_path = Path(out_dir)
-    mon_path = (out_path / "monomers").resolve()
-    mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = Config.load_targets("monomer")
-
     # --- Process monomer runs ---
-    for _, row in mon_df.iterrows():
-        # Extract minimal fields from CSV
-        pdb_id = row["PDB ID"].lower()
-        asym_chain_id = row["Asym. Chain ID"]
+    for row, name, out_dir in monomer_runs(out_path):
         seq_unmodified = row["Sequence (unmod.)"]
-        out_dir = mon_path / f"{pdb_id}_{asym_chain_id}"
 
         # Don't overwrite successful run configs
         if (out_dir / "SUCCESS").exists():
             continue
 
-        print(f"Preparing {pdb_id}_{asym_chain_id}")
+        print(f"Preparing {name}")
 
-        chain_key = f"{pdb_id.upper()}_{asym_chain_id}"
+        chain_key = name.upper()
         input_dir = out_dir / "input" / chain_key
         sequence_a3m = msa_path(row, "a3m")
         in_a3m = input_dir / f"{chain_key}.a3m"
@@ -1235,25 +1213,16 @@ def prep_trRNA(out_dir=Config.TRRNA.out_dir):
         The output directory to place the run configuration.
     """
     out_path = Path(out_dir)
-    mon_path = (out_path / "monomers").resolve()
-    mon_path.mkdir(parents=True, exist_ok=True)
-    mon_df = Config.load_targets("monomer")
-
     # --- Process monomer runs ---
-    for _, row in mon_df.iterrows():
-        # Extract minimal fields from CSV
-        pdb_id = row["PDB ID"].lower()
-        asym_chain_id = row["Asym. Chain ID"]
+    for row, name, out_dir in monomer_runs(out_path):
         seq_unmodified = row["Sequence (unmod.)"]
-        out_dir = mon_path / f"{pdb_id}_{asym_chain_id}"
 
         # Don't overwrite successful run configs
         if (out_dir / "SUCCESS").exists():
             continue
 
-        print(f"Preparing {pdb_id}_{asym_chain_id}")
+        print(f"Preparing {name}")
 
-        chain_key = f"{pdb_id.lower()}_{asym_chain_id}"
         sequence_a3m = msa_path(row, "a3m")
         out_fa = out_dir / "sequence.fa"
         out_a3m = out_dir / "sequence.a3m"
@@ -1263,7 +1232,7 @@ def prep_trRNA(out_dir=Config.TRRNA.out_dir):
             sequence_a3m, out_a3m, seq_unmodified, wrap_col=None
         )
         with open(out_fa, "w") as f:
-            f.write(f">{chain_key}\n")
+            f.write(f">{name}\n")
             f.write(f"{seq_unmodified}\n")
 
 
@@ -1312,7 +1281,10 @@ def __get_max_tm_results(args: Iterable[Any]):
     """
     index, pdb_id, asym_id, pdb_id_to_date = args
     chain_id = f"{pdb_id.lower()}_{asym_id}"
-    query_file = Path(f"{Config.get_out_prefix(pdb_id.lower(), asym_id)}/{asym_id}.pdb")
+    source_pdb = Path(f"{Config.get_out_prefix(pdb_id.lower(), asym_id)}/{asym_id}.pdb")
+    query_file = _prepare_usalign_pdb(
+        source_pdb, Path(Config.USALIGN_DIR) / "queries" / f"{chain_id}.pdb"
+    )
     cached_out_file = Path(f"{Config.USALIGN_DIR}/{chain_id}.out")
     references_file = Path(Config.USALIGN_REFERENCES_FILE)
     usalign_dir = Path(Config.USALIGN_DIR)
@@ -1370,6 +1342,29 @@ def __get_max_tm_results(args: Iterable[Any]):
     return index, max_tm_results
 
 
+def _prepare_usalign_pdb(source: Path, output: Path) -> Path:
+    """Write one RNA chain in the canonical form expected by US-align."""
+    if (
+        output.is_file()
+        and not output.is_symlink()
+        and output.stat().st_mtime >= source.stat().st_mtime
+    ):
+        return output
+
+    structure = gemmi.read_structure(str(source))
+    # US-align ignores modified HETATM records, and its default alignment is sequence independent
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                residue.name = "A"
+                residue.het_flag = "A"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".pdb.tmp")
+    structure.write_minimal_pdb(str(temporary))
+    temporary.replace(output)
+    return output
+
+
 def prep_usalign(
     cutoff_col="Published",
     cutoff=Config.TRAINING_CUTOFF,
@@ -1387,11 +1382,17 @@ def prep_usalign(
         considered as possible homology targets.
     """
     references_file = Path(Config.USALIGN_REFERENCES_FILE)
+    first_reference = None
+    if references_file.is_file():
+        with references_file.open() as handle:
+            first_reference = handle.readline().strip()
     if (
         references_file.is_file()
         and references_file.stat().st_size
         and references_file.stat().st_mtime
         >= Config3D.ANNOTATED_CHAINS_FILE.stat().st_mtime
+        and first_reference
+        and not (Path(Config.USALIGN_DIR) / first_reference).is_symlink()
     ):
         print(f"Reusing {references_file}")
         return
@@ -1404,7 +1405,7 @@ def prep_usalign(
     )
     rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
 
-    # Symlink all RNA chains prior to the cutoff for US-align
+    # Prepare all RNA chains prior to the cutoff for US-align
     rna_chains = rcsb_df[["PDB ID", "Asym. Chain ID", "Published"]]
     rna_chains = [
         (pdb_id.lower(), asym_id)
@@ -1422,10 +1423,7 @@ def prep_usalign(
             if not source_pdb.is_file():
                 missing += 1
                 continue
-            if reference_pdb.is_symlink() and not reference_pdb.exists():
-                reference_pdb.unlink()
-            if not reference_pdb.exists():
-                reference_pdb.symlink_to(source_pdb)
+            _prepare_usalign_pdb(source_pdb, reference_pdb)
             f.write(f"{chain_id}.pdb\n")
     temporary.replace(references_file)
     print(f"Prepared {len(rna_chains) - missing:,} US-align references")

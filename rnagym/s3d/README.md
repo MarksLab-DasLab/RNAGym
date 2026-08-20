@@ -92,17 +92,18 @@ To launch the predictions, you can:
    model that realigns them before MSA construction. Alignments are stored
    under each benchmark's directory in `data/`.
 3. Launch your predictions using `pixi run predict <baseline>`.
-    - Valid baselines are currently `af3`, `nufold`, `rhofold`, `rf2na`,
-      and `trRNA`.
+    - Valid baselines are currently `af3`, `nu`, `rho`, `rf2na`, and `trRNA`.
     - Before running, configure `./scripts/<baseline>.sh` for your Slurm
       cluster and point it to a valid installation of the respective
       baseline.
 
 ## Analysis
 
-Generate the [3D leaderboard](../../leaderboard/3d/) and detailed scores with:
+Score every available model and generate the
+[3D leaderboard](../../leaderboard/3d/) with:
 
 ```bash
+pixi run score
 pixi run leaderboard
 ```
 

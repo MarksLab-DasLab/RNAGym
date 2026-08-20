@@ -8,6 +8,9 @@ _DATA_DIR = _REPO_DIR / "data"
 _DATABASE_DIR = Path(
     os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
 )
+_CHECKPOINT_DIR = Path(
+    os.environ.get("RNAGYM_CHECKPOINT_DIR", "/n/lw_groups/marks/ckpt")
+)
 
 
 class _Config:
@@ -16,6 +19,7 @@ class _Config:
     REPO_DIR = _REPO_DIR
     DATA_DIR = _DATA_DIR
     DATABASE_DIR = _DATABASE_DIR
+    CHECKPOINT_DIR = _CHECKPOINT_DIR
     SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
 
 
@@ -106,6 +110,10 @@ class Config3D(_Config):
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
     RFAM_VERSION = "15.0"
     RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
+    AF3_DIR = DIR / ".pixi" / "model-sources" / "alphafold3"
+    AF3_DATABASE_DIR = _DATABASE_DIR / "AlphaFold3" / "latest"
+    AF3_PARAM_DIR = _CHECKPOINT_DIR / "alphafold3" / "latest"
+    MC_ANNOTATE = DIR / ".pixi" / "model-sources" / "RNA_assessment" / "MC-Annotate"
 
     MAX_RESOLUTION = 5.0
     MAX_MISSING = 0.25

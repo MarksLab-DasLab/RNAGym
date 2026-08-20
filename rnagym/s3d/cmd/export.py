@@ -52,8 +52,9 @@ def main():
                 pdb_id = row["PDB ID"].lower()
                 chain_id = row["Asym. Chain ID"]
                 chain_key = f"{pdb_id}_{chain_id}"
+                name = pdb_id if is_multimer else row["sequence_id"]
                 out_dir, out_pdb = Config.get_bl_out_pdb(
-                    baseline.name, pdb_id, chain_id, is_multimer
+                    baseline.name, name, is_multimer
                 )
                 success_file = out_dir / "SUCCESS"
 

@@ -43,12 +43,7 @@ def score_dataset(dataset: str) -> pd.DataFrame:
             inf_wc=model_scores["inf_wc"].fillna(0),
             inf_nwc=model_scores["inf_nwc"].fillna(0),
         )
-        unit_ids = (
-            ["cluster_rep", "sequence_id"]
-            if dataset == "monomer"
-            else ["cluster_rep", *IDENTIFIERS]
-        )
-        units = model_scores.groupby(unit_ids).agg(
+        units = model_scores.groupby(["cluster_rep", "sequence_id"]).agg(
             tm_score=("tm_score", "max"),
             tm_train=(tm_train_column, "max"),
             inf_wc=("inf_wc", "max"),

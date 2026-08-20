@@ -46,12 +46,7 @@ BL_PREP_FNS = {
     "trRNA": prep_trRNA,
 }
 
-mon_chain_keys = {
-    f"{pdb_id.lower()}_{asym_id}"
-    for _, pdb_id, asym_id in Config.load_targets("monomer")[
-        ["PDB ID", "Asym. Chain ID"]
-    ].itertuples()
-}
+mon_chain_keys = set(Config.load_targets("monomer")["sequence_id"])
 mul_pdb_ids = {
     f"{pdb_id.lower()}" for pdb_id in Config.load_targets("multimer")["PDB ID"]
 }

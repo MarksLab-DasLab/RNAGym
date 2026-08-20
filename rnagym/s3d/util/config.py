@@ -256,14 +256,10 @@ BASELINES = {b.name: b for b in BASELINES}
 TRAINING_CUTOFF = max(b.training_cutoff for b in BASELINES.values())
 
 
-def get_bl_out_pdb(
-    bl_name: str, pdb_id: str, chain_id: str, multimer: bool
-) -> Tuple[Path, Path]:
-    """
-    Gets the output PDB file for a given baseline, PDB ID, and asym. chain ID.
-    """
+def get_bl_out_pdb(bl_name: str, name: str, multimer: bool) -> Tuple[Path, Path]:
+    """Get one baseline prediction path."""
     label = "multimers" if multimer else "monomers"
-    name = pdb_id.lower() if multimer else f"{pdb_id.lower()}_{chain_id}"
+    name = name.lower()
     out_file = BASELINES[bl_name].out_pdb.format(
         name_upper=name.upper(),
         name_lower=name.lower(),
