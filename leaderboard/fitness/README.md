@@ -163,8 +163,15 @@ adapter supplying its alphabet, tokenization and forward pass. `tests/test_maske
 strategies against a per-variant reference implementation and needs no checkpoint or GPU.
 
 All are registered in `fitness/merge_scoring_files.py` and `fitness/performance_fitness.py`.
-Reproduce the aggregate with `performance_fitness.py --type ncRNA`, and the sensitivity table,
-category spreads and bootstrap intervals above with `fitness/analyze_fill_strategies.py`.
+
+**`performance_fitness.py` does not reproduce the signed values on this page.** It reports the
+absolute Spearman, along with a direction-folded AUC and an absolute MCC, so a model whose scores
+anti-correlate with fitness is credited the same as one that correlates, which is exactly the
+distinction the v0.1.1 metric was introduced to make. The four rescored rows here, the scaling series
+and the sensitivity table are reproduced by `fitness/analyze_fill_strategies.py`, which computes the
+signed per-assay Spearman and the category macro directly from the prediction files; the eight
+unaffected rows are carried over unchanged from the previous release. Giving
+`performance_fitness.py` a signed option is worth doing separately.
 
 Scores computed in bfloat16 depend on the GPU: the same code and checkpoint on an L40S and an H100
 differ by up to 0.2 in score and about 0.001 in per-assay Spearman. Every prediction file is written
