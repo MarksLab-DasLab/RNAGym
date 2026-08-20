@@ -92,8 +92,8 @@ unmasked wild-type pass (`wt-marginals`) rather than the masked strategy its run
 ## Sensitivity to the fill strategy
 
 Every masked model is scored under all four conventions, so the effect of the choice is visible
-rather than assumed. Macro over the 3 ncRNA categories; full per-category values in
-[`four_fill_sensitivity.csv`](four_fill_sensitivity.csv).
+rather than assumed. Macro over the 3 ncRNA categories; regenerate this table, the per-category
+values and the bootstrap intervals with `fitness/analyze_fill_strategies.py`.
 
 | Checkpoint | `wt-fill` | `mask-fill` | `mut-fill` | `match-fill` |
 |:--|--:|--:|--:|--:|
@@ -158,15 +158,15 @@ strategies against a per-variant reference implementation and needs no checkpoin
 
 All are registered in `fitness/merge_scoring_files.py` and `fitness/performance_fitness.py`.
 
-**`performance_fitness.py` does not reproduce the signed values on this page.** It reports the
-absolute Spearman, along with a direction-folded AUC and an absolute MCC, so a model whose scores
-anti-correlate with fitness is credited the same as one that correlates, which is exactly the
-distinction the v0.1.1 metric was introduced to make. All eight masked checkpoint rows here, meaning the
-four model families and the five AIDO.RNA sizes, together with the sensitivity table, are reproduced
-by `fitness/analyze_fill_strategies.py`, which computes the signed per-assay Spearman and the
-category macro directly from the prediction files; the eight remaining rows are carried over
-unchanged from the previous release and it does not recompute them. Giving
-`performance_fitness.py` a signed option is worth doing separately.
+Reproduce the aggregate with `performance_fitness.py --type ncRNA`, whose Spearman is now signed.
+It previously reported the absolute value, which credited a model whose scores anti-correlate with
+fitness exactly as much as one that correlates, so it could not produce the numbers this page
+publishes. Its per-category means now match the columns above, and the macro is their unweighted
+mean. Note that AUC and MCC in that script are still folded onto their better direction, which is the
+same conflation and is worth revisiting separately.
+
+`fitness/analyze_fill_strategies.py` regenerates the sensitivity table, the category spreads and the
+bootstrap intervals from the prediction files.
 
 Scores computed in bfloat16 depend on the GPU: the same code and checkpoint on an L40S and an H100
 differ by up to 0.2 in score and about 0.001 in per-assay Spearman. Every prediction file is written

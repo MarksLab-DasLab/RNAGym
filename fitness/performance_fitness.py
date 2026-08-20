@@ -27,13 +27,26 @@ METRICS = ["Spearman", "AUC", "MCC"]
 def calculate_metrics(
     assay_scores: np.ndarray, model_scores: np.ndarray
 ) -> Dict[str, float]:
-    """Calculate Spearman correlation, AUC, and MCC."""
+    """
+    Calculate Spearman correlation, AUC, and MCC.
+
+    The Spearman correlation is SIGNED. It used to be reported as an absolute
+    value, which credited a model whose scores anti-correlate with fitness
+    exactly as much as one that correlates, and that is the distinction the
+    signed metric adopted in v0.1.1 exists to make. The leaderboard has
+    published signed values since then, so the absolute form no longer
+    corresponds to anything the benchmark reports.
+
+    AUC and MCC are still folded onto their better direction below. That is the
+    same conflation and should be revisited, but it is left alone here because
+    it would change published numbers this change is not otherwise touching.
+    """
     spearman_corr = stats.spearmanr(assay_scores, model_scores).correlation
     binary_true = (assay_scores > np.median(assay_scores)).astype(int)
     binary_pred = (model_scores > np.median(model_scores)).astype(int)
     auc = roc_auc_score(y_true=binary_true, y_score=model_scores)
     mcc = matthews_corrcoef(y_true=binary_true, y_pred=binary_pred)
-    return {"Spearman": abs(spearman_corr), "AUC": max(auc, 1 - auc), "MCC": abs(mcc)}
+    return {"Spearman": spearman_corr, "AUC": max(auc, 1 - auc), "MCC": abs(mcc)}
 
 
 def get_performance_dataset(
