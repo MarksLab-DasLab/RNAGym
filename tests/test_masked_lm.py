@@ -604,3 +604,25 @@ def test_adapters_keep_their_historical_defaults(module_dir, module_name, expect
     adapter.add_arguments(parser)
     defaults = {a.dest: a.default for a in parser._actions}
     assert defaults.get("dtype") == expect["dtype"]
+
+
+def test_performance_fitness_reports_a_signed_spearman():
+    """
+    The benchmark metric is signed: a model that ranks variants the wrong way
+    round must score negative, not positive. This was reported as an absolute
+    value once, which credited anti-correlation as strongly as correlation, so
+    it is pinned here rather than left to a reviewer to notice again.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from fitness.performance_fitness import calculate_metrics
+
+    truth = np.arange(40, dtype=float)
+    assert calculate_metrics(truth, truth)["Spearman"] == pytest.approx(1.0)
+    assert calculate_metrics(truth, -truth)["Spearman"] == pytest.approx(-1.0)
+
+    rng = np.random.default_rng(0)
+    noisy = truth + rng.normal(0, 5, truth.size)
+    forward = calculate_metrics(truth, noisy)["Spearman"]
+    reversed_ = calculate_metrics(truth, -noisy)["Spearman"]
+    assert forward > 0 and reversed_ < 0
+    assert forward == pytest.approx(-reversed_)

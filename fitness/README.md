@@ -34,7 +34,7 @@ The following directories are gitignored. Download them from
 
 ## Metrics
 
-- **Spearman** — absolute Spearman correlation between predicted and experimental scores
+- **Spearman** — signed Spearman correlation between predicted and experimental scores. A negative value means the model ranks variants the wrong way round, which the metric reports rather than hides
 - **AUC** — AUROC using median-threshold binarisation (max of AUC and 1−AUC)
 - **MCC** — absolute Matthews correlation coefficient (median-threshold binarisation)
 
