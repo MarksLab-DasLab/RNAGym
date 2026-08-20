@@ -117,6 +117,11 @@ def four_fill_entries(name, folder, column_stem):
     }
 
 
+# The masked language models resolve to the wild-type fill, which is the
+# convention the leaderboard publishes. Their prediction folders hold all four
+# fill strategies as separate columns, so the entries below name the folder and
+# the column explicitly, and the {name}_{strategy} entries further down read the
+# other three from those same files.
 SCORE_COLS = {
     "evo1": "evo_1_131k_base_score",
     "evo1.5": "evo_1.5_8k_base_score",
@@ -124,18 +129,18 @@ SCORE_COLS = {
     "evo2_40b": "evo2_40b_score",
     "GenSLM": "logit_scores",
     "NT": "kmer_pseudo_LL",
-    "RNA-FM": "RNA_FM_scores",
-    "rinalmo": "logit_scores",
+    "RNA-FM": {"folder": "rna_fm_4fill", "column": "RNA_FM_scores_wt_fill"},
+    "rinalmo": {"folder": "rinalmo_4fill", "column": "logit_scores_wt_fill"},
     "RNAErnie": "Mutation_Scores",
     "orthrus": "orthrus_score",
-    "aido_rna": "aido_rna_score",
-    "rnagenesis": "rnagenesis_score",
-    # AIDO.RNA size series, for the scaling comparison. Every checkpoint writes the
-    # same aido_rna_score column, so they differ only by prediction folder.
-    "aido_rna_1m": "aido_rna_score",
-    "aido_rna_25m": "aido_rna_score",
-    "aido_rna_300m": "aido_rna_score",
-    "aido_rna_650m": "aido_rna_score",
+    "aido_rna": {"folder": "aido_rna_4fill", "column": "aido_rna_score_wt_fill"},
+    "rnagenesis": {"folder": "rnagenesis_4fill", "column": "rnagenesis_score_wt_fill"},
+    # AIDO.RNA size series. Every checkpoint writes the same column, so they
+    # differ by prediction folder.
+    "aido_rna_1m": {"folder": "aido_rna_1m_4fill", "column": "aido_rna_score_wt_fill"},
+    "aido_rna_25m": {"folder": "aido_rna_25m_4fill", "column": "aido_rna_score_wt_fill"},
+    "aido_rna_300m": {"folder": "aido_rna_300m_4fill", "column": "aido_rna_score_wt_fill"},
+    "aido_rna_650m": {"folder": "aido_rna_650m_4fill", "column": "aido_rna_score_wt_fill"},
     "EVmutation": "prediction_epistatic",
 }
 
