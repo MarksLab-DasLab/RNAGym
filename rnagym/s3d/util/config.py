@@ -49,9 +49,7 @@ COVERAGE_RADIUS = 4.5  # Radius used to determine polymer coverage
 # Protein/RNA family HMM/CM databases
 RFAM_DIR = Config3D.RFAM_DIR.as_posix()
 RFAM_CM = f"{RFAM_DIR}/Rfam.cm"
-RFAM_SEED = f"{RFAM_DIR}/Rfam.utf8.seed"
-RFAM_FULL_ALIGNMENT = f"{RFAM_DIR}/alignments/{{accession}}.sto"
-RFAM_ALIGNMENT_STATS = f"{RFAM_DIR}/alignments/{{accession}}.stat"
+RFAM_FAMILY_TABLE = f"{RFAM_DIR}/family.txt.gz"
 RNA3DB_CMSCANS_DIR = "./datasets/rna3db/cmscans"
 RNA3DBENCH_DIR = "./datasets/2024_3d_bench"
 RNA3DBENCH_DS3 = RNA3DBENCH_DIR + "/Dataset3/Dataset3_new.csv"
@@ -85,7 +83,6 @@ RFAM_BAD_CUTOFF = 1.00  # min. E-value to be considered "bad" Rfam hit
 MIN_RFAM_OBSERVED = 0.00  # Min. fraction of the Rfam hit observed in the chain
 # ALLOWABLE_COFACTORS = {"BA", "CA", "CL", "F", "FE", "K", "MG", "NI", "PO4", "SO4", "ZN"}
 MAX_CLUSTER_E_VALUE = 1.0
-TOP_N = 3  # The top # of sequence clusters to select from each Rfam
 MONOMER_ANALYZED_CSV = Config3D.DATA_DIR / "monomer.analyzed.csv"
 MULTIMER_ANALYZED_CSV = Config3D.DATA_DIR / "complex.analyzed.csv"
 
@@ -96,6 +93,7 @@ def load_targets(target_type=None):
     if target_type is None:
         return targets
     return targets[targets["type"] == target_type].copy()
+
 
 # --- RNA3DB Sequence/Structure Clusters ---
 RNA3DB_DIR = "./datasets/rna3db"

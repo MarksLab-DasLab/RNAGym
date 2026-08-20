@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from concurrent.futures import ProcessPoolExecutor
 from typing import List
 
@@ -54,14 +55,14 @@ def main():
     data_path = Config3D.MERGED_PDB_IDS_FILE
     data = pd.read_csv(data_path)
 
-    # Write the data in 50 splits (limits total memory utilization)
+    # Process in 10 batches to limit memory use
     data = list(data.iterrows())
     for split in [data[i::10] for i in range(10)]:
         # Single-threaded for debugging
         # data = [process_row(row) for _, row in split if row.iloc[0] == "8TOC"]
 
-        # Multi-threaded for speed
-        with ProcessPoolExecutor() as executor:
+        # Process each batch in parallel
+        with ProcessPoolExecutor(max_workers=len(os.sched_getaffinity(0))) as executor:
             data = list(executor.map(process_row, (row for _, row in split)))
 
         data = list(filter(None, data))

@@ -188,8 +188,6 @@ def update_registry(modalities: pl.DataFrame) -> pl.DataFrame:
     modalities = modalities.join(registry, on="sequence").select(
         "sequence_id", "modality"
     )
-    if modalities["sequence_id"].n_unique() != registry.height:
-        raise RuntimeError("Every registered sequence must belong to a dataset")
 
     assignments = (
         previous.select("sequence_id", "cluster_rep")
@@ -197,9 +195,15 @@ def update_registry(modalities: pl.DataFrame) -> pl.DataFrame:
         else cluster_sequences(registry)
     )
     folds = assign_folds(assignments, modalities)
+    previous_folds = previous.select(
+        "sequence_id", pl.col("fold").alias("previous_fold")
+    )
     registry = (
         registry.join(assignments, on="sequence_id")
-        .join(folds, on="cluster_rep")
+        .join(folds, on="cluster_rep", how="left")
+        .join(previous_folds, on="sequence_id", how="left")
+        .with_columns(pl.coalesce("fold", "previous_fold").alias("fold"))
+        .drop("previous_fold")
         .sort("sequence_id")
     )
     if registry["fold"].null_count():

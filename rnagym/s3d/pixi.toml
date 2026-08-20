@@ -30,9 +30,9 @@ tqdm = "4.*"
 usalign = "==2024.07.30"
 
 [pypi-dependencies]
-evcouplings = "==0.2.1"
+evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
 rna-normalizer = { git = "https://github.com/RNA-Puzzles/RNA_assessment.git", rev = "d46f0472e7d52629283bb046a9c8f5d36b35f685" }
-rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "8744e853c4b6a86060423164ae39b96745b291c5" }
+rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "a58c1557d43104bb290781eb2d4c8d4f9538baf8" }
 rnagym = { path = "../..", editable = true }
 
 [tasks]

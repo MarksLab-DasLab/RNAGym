@@ -2,7 +2,7 @@
 
 | File or directory | Contents |
 | --- | --- |
-| `rnagym_3d.parquet` | 88 monomer and 127 multimer evaluation targets |
+| `rnagym_3d.parquet` | 855 monomer and 404 multimer evaluation structures |
 | `rnagym_3d_scores.parquet` | Released per-target baseline scores |
 | `curation/` | Candidate PDB entries and annotated RNA chains |
 | `predictions/` | Predicted structures grouped by model |

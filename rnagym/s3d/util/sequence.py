@@ -7,11 +7,11 @@
 from __future__ import annotations
 
 import os
-import re
 import shlex
 import subprocess
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import cache
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional
 
@@ -20,6 +20,21 @@ import pandas as pd
 from rna3db.tabular import TabularOutput
 
 from rnagym.s3d.util import AccessionID, ChainID, Config, PdbID, Sequence
+
+
+@cache
+def rfam_families() -> pd.DataFrame:
+    """Load family sizes and covariance-model lengths from Rfam."""
+    # Columns follow Rfam's official family table schema
+    return pd.read_csv(
+        Config.RFAM_FAMILY_TABLE,
+        sep="\t",
+        header=None,
+        encoding="latin-1",
+        usecols=[0, 15, 29],
+        names=["accession", "num_full", "model_length"],
+        index_col="accession",
+    )
 
 
 @dataclass
@@ -73,11 +88,6 @@ class FamHits:
     # Instance variables
     data_frame: Optional[pd.DataFrame]
     __fam_hits: List[FamHit]
-
-    # Regex for grabbing the alignment length from an alignment statistics file
-    # generated using `esl-alistat`
-    __n_sequences_re = re.compile(r"Number of sequences:\s+(\d+)", re.MULTILINE)
-    __alignment_length_re = re.compile(r"Alignment length:\s+(\d+)", re.MULTILINE)
 
     def __init__(self, data_frame: pd.DataFrame, source: Source):
         """
@@ -200,37 +210,13 @@ class FamHits:
 
     @staticmethod
     def get_rfam_length(accession: AccessionID) -> int:
-        """
-        Returns the # of sequences in the Stockholm alignment for the input
-        accession ID.
-        """
-        # NOTE(MCA): Special cases for Rfams without provided alignments (too
-        #   large/computationally intensive).
-        if accession == "RF02541":
-            return 51934
-        if accession == "RF02543":
-            return 107465
-
-        # Initialize the Rfam seed if necessary
-        alistat_file = Config.RFAM_ALIGNMENT_STATS.format(accession=accession)
-        with open(alistat_file, "r") as f:
-            match = FamHits.__n_sequences_re.search(f.read())
-        return int(match.group(1))
+        """Return the number of full Rfam family members."""
+        return int(rfam_families().loc[accession, "num_full"])
 
     @staticmethod
     def get_rfam_model_length(accession: AccessionID) -> int:
-        # NOTE(MCA): Special cases for Rfams without provided alignments (too
-        #   large/computationally intensive).
-        if accession == "RF02541":
-            return 2950
-        if accession == "RF02543":
-            return 3350
-
-        # Initialize the Rfam seed if necessary
-        alistat_file = Config.RFAM_ALIGNMENT_STATS.format(accession=accession)
-        with open(alistat_file, "r") as f:
-            match = FamHits.__alignment_length_re.search(f.read())
-        return int(match.group(1))
+        """Return the covariance-model length for one Rfam family."""
+        return int(rfam_families().loc[accession, "model_length"])
 
     def __getitem__(self, index) -> Optional[FamHit]:
         """

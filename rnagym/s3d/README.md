@@ -8,7 +8,11 @@ structure prediction. The datasets are stored under
 
 RNAGym provides quality-filtered PDB evaluation targets released after the
 latest baseline training cutoff. Targets are stored in
-`data/3d/rnagym_3d.parquet` with a `type` of `monomer` or `multimer`.
+`data/3d/rnagym_3d.parquet` with a `type` of `monomer` or `multimer`. Repeated
+sequences with distinct experimental structures are retained. `sequence_id`
+identifies exact sequences, and `cluster_rep` identifies the shared 40%
+sequence identity clusters. Monomer predictions and MSAs are generated once
+per `sequence_id`, then scored against every corresponding structure.
 
 `data/3d/curation/annotated_chains.csv` contains all RNA chains >16nt with
 useful annotations like Rfams hits, heteroatoms bound, % bound by polymer,
@@ -22,9 +26,9 @@ RNA chain candidates were collected from [RNA3DB][22] prior to
 processing and filtering. Where appropriate, overlaps with the following
 datasets were noted:
 
-| Dataset                                                                                              | # of PDBs |
-| ---------------------------------------------------------------------------------------------------- | --------- |
-| [RNA3DB][22]                                                                                         | 23816     |
+| Dataset                                                                                              | # of RNA chains |
+| ---------------------------------------------------------------------------------------------------- | --------------- |
+| [RNA3DB][22]                                                                                         | 25666           |
 | [RNA 3D Hub][4]                                                                                      | 23027     |
 | [Evaluating DCA-based method performances for RNA contact prediction by a well-curated data set][1]  | 68        |
 | [RNA Puzzles][2]                                                                                     | 49        |
@@ -40,6 +44,9 @@ To run the RNAGym dataset curation pipeline:
 3. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
    `pixi run pipeline` to generate the processed files under `data/3d/`
 
+`Rfam-15.0/` must contain a pressed `Rfam.cm` and the release's
+`database_files/family.txt.gz` as `family.txt.gz`.
+
 ```bash
 RNAGYM_DATABASE_DIR=/path/to/databases pixi run pipeline
 ```
@@ -50,13 +57,8 @@ The default workflow is as follows:
    list of unique PDB IDs containing RNA chains.
 2. `annotate`: Individual RNA chains are annotated into
    `curation/annotated_chains.csv`.
-3. `split`: Selects the monomer and multimer targets in `rnagym_3d.parquet`.
-   - To determine the best split, RNAGym calculates the maximal TM score
-     between each candidate chain and any chain from the baseline
-     training sets. This requires about 5-60 minutes per CPU per
-     candidate chain.  To speed things up, you can launch Slurm jobs for
-     all these tasks using `pixi run tm-train`.  The results will
-     be cached for the next `split`.
+3. `split`: Selects every quality-filtered post-cutoff monomer and multimer,
+   then updates the shared sequence registry and 40% identity clusters.
 
 You can run any step individually with `pixi run <command>`.
 
@@ -126,7 +128,7 @@ followed by `pixi run analyze`.
 [17]: https://docs.google.com/spreadsheets/d/1AORpL9zm9m-Tvdw5xvg7cbyo4C-blKD5/edit?gid=1076929196#gid=1076929196&fvid=1703988487
 [18]: https://docs.google.com/spreadsheets/d/1AORpL9zm9m-Tvdw5xvg7cbyo4C-blKD5/edit?gid=1555832897#gid=1555832897
 [19]: https://github.com/marcellszi/rna3db/tree/main
-[20]: https://github.com/marcellszi/rna3db/releases/tag/2024-12-04-full-release
+[20]: https://github.com/marcellszi/rna3db/releases/tag/2025-10-01-incremental-release
 [21]: https://github.com/steineggerlab/riboseek
 [22]: https://github.com/marcellszi/rna3db
 [23]: https://github.com/RNA-Puzzles/RNA_assessment

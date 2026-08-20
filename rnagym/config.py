@@ -108,23 +108,29 @@ class Config3D(_Config):
 
     MAX_RESOLUTION = 5.0
     MAX_MISSING = 0.25
+    MAX_UNKNOWN_RATIO = 0.10
     MAX_POLYMER_COVERAGE = 0.33
     MIN_LENGTH = 16
-    MAX_LENGTH = 2000
+    MAX_LENGTH = 1024
+    MAX_COMPLEX_LENGTH = 2000
 
     @classmethod
     def passes_quality(cls, chain):
-        """Apply the shared PDB download, resolution, and missing-data filters."""
+        """Apply the shared PDB quality filters."""
         resolution = chain["Resolution"]
+        sequence = chain["Sequence (unmod.)"]
+        if not isinstance(resolution, str) or resolution in {".", "n.s."}:
+            return False
+        if resolution != "N/A":
+            resolutions = [
+                float(value) for value in resolution.split(",") if value.strip() != "?"
+            ]
+            if not resolutions or max(resolutions) > cls.MAX_RESOLUTION:
+                return False
         return (
             chain["Asym. Chain ID"] != "ERROR: Failed to download"
-            and isinstance(resolution, str)
-            and resolution not in {".", "n.s."}
-            and (
-                resolution == "N/A"
-                or max(map(float, resolution.split(","))) <= cls.MAX_RESOLUTION
-            )
             and chain["Fraction missing"] <= cls.MAX_MISSING
+            and sequence.count("N") / len(sequence) <= cls.MAX_UNKNOWN_RATIO
         )
 
     @classmethod

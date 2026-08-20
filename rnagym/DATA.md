@@ -30,8 +30,8 @@ Model files for 2D structure prediction task were prepared for a linux 64-bit sy
 
 | Data | Size (unzipped) | Link |
 | --- | --- | --- |
-| Curation tables | 26MB | [`data/3d/curation/`](../data/3d/curation/) |
-| Evaluation targets | 130KB | [`data/3d/rnagym_3d.parquet`](../data/3d/rnagym_3d.parquet) |
+| Curation tables | 29MB | [`data/3d/curation/`](../data/3d/curation/) |
+| Evaluation targets | 220KB | [`data/3d/rnagym_3d.parquet`](../data/3d/rnagym_3d.parquet) |
 | Per-target scores | 16KB | [`data/3d/rnagym_3d_scores.parquet`](../data/3d/rnagym_3d_scores.parquet) |
 | Alignments | — | [`data/3d/msa/`](../data/3d/msa/) |
 | Experimental and predicted structures | 158MB | [`data/3d/structures/`](../data/3d/structures/) |
