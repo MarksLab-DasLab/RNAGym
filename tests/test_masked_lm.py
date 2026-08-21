@@ -322,8 +322,9 @@ def test_multi_mask_context_is_gathered_at_every_masked_position(adapter):
 def test_prefix_offset_is_applied(adapter):
     """
     A model with leading special tokens must read the token that carries the
-    nucleotide, not the special token. Scoring the same context with and without
-    a prefix must agree.
+    nucleotide, not the special token. An adapter that forgets the offset reads
+    a neighbour and still returns plausible finite scores, so the check is that
+    forgetting it changes the answer.
     """
     wild_type, mutants, sequences, _ = make_assay(12, 2, seed=9)
     table = build_tasks(mutants, sequences, wild_type, "ACGU", ("mut_fill",), verbose=False)
@@ -337,8 +338,9 @@ def test_prefix_offset_is_applied(adapter):
     without_prefix = accumulate_scores(
         bare, table, len(sequences), batch_size=8, max_batch_tokens=10**6, progress=False
     )
-    # Different inputs, so different numbers, but both must be finite and the
-    # offset must have moved with the prefix rather than staying at zero.
+    # Removing the prefix changes the model's input, so the two are NOT expected
+    # to agree; what matters is that both are finite and that the offset moved
+    # with the prefix instead of staying at zero.
     assert np.isfinite(with_prefix).all() and np.isfinite(without_prefix).all()
     assert not np.allclose(with_prefix, without_prefix)
 
@@ -536,6 +538,7 @@ def test_windowing_keeps_masks_and_positions_consistent(adapter):
         mutants.append(f"{wt_base}{pos + 1}{mut_base}")
         sequences.append("".join(seq))
     table = build_tasks(mutants, sequences, wild_type, "ACGU", ("mut_fill",), verbose=False)
+    windows = [c for c in table.contexts]  # full-length, before trimming
     window_contexts(table, 64)
     validate_table(table)
     assert all(len(c) <= 64 for c in table.contexts)
@@ -543,6 +546,17 @@ def test_windowing_keeps_masks_and_positions_consistent(adapter):
         adapter, table, len(sequences), batch_size=2, max_batch_tokens=10**6, progress=False
     )
     assert np.isfinite(scores).all()
+
+    # Structure and finiteness are not enough: a window holding the wrong slice
+    # would pass both. Score each trimmed context independently and compare.
+    for row, (context, full) in enumerate(zip(table.contexts, windows)):
+        pos = int(table.pos[table.ctx_id == row][0])
+        assert context[pos] == MASK_CHAR
+        assert context in full  # a contiguous slice of the untrimmed context
+        wt_base, mut_base = mutants[row][0], mutants[row][-1]
+        lp = adapter.naive_log_probs(context, pos)
+        expected = lp[adapter.base_ids[mut_base]] - lp[adapter.base_ids[wt_base]]
+        assert np.isclose(scores[0, row], expected, atol=1e-6)
 
 
 def test_window_guard_uses_the_declared_special_token_count():
@@ -639,3 +653,46 @@ def test_performance_fitness_metrics_are_directed():
     assert forward["Spearman"] == pytest.approx(-reversed_["Spearman"])
     assert forward["AUC"] > 0.5 > reversed_["AUC"]
     assert forward["MCC"] > 0 > reversed_["MCC"]
+
+
+def test_registry_resolves_the_leaderboard_models_to_the_published_fill():
+    """
+    Every masked model on the leaderboard must resolve, by default, to the
+    prediction folder and column the leaderboard was computed from. This is the
+    failure that nearly shipped: the canonical entries still pointed at the
+    superseded mut-fill files, so the default pipeline reproduced the old
+    numbers while the leaderboard published the new ones, and nothing failed.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from fitness.merge_scoring_files import ALL_MODELS, SCORE_COLS, resolve_source
+
+    expected = {
+        "RNA-FM": ("rna_fm_4fill", "RNA_FM_scores_wt_fill"),
+        "rinalmo": ("rinalmo_4fill", "logit_scores_wt_fill"),
+        "rnagenesis": ("rnagenesis_4fill", "rnagenesis_score_wt_fill"),
+        "aido_rna": ("aido_rna_4fill", "aido_rna_score_wt_fill"),
+        "aido_rna_650m": ("aido_rna_650m_4fill", "aido_rna_score_wt_fill"),
+        "aido_rna_300m": ("aido_rna_300m_4fill", "aido_rna_score_wt_fill"),
+        "aido_rna_25m": ("aido_rna_25m_4fill", "aido_rna_score_wt_fill"),
+        "aido_rna_1m": ("aido_rna_1m_4fill", "aido_rna_score_wt_fill"),
+    }
+    for model, want in expected.items():
+        assert model in ALL_MODELS, f"{model} is on the leaderboard but not in ALL_MODELS"
+        assert resolve_source(SCORE_COLS, model) == want, model
+
+
+def test_every_leaderboard_row_is_a_registered_model():
+    """The published table and the merge registry must name the same models."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import csv
+
+    from fitness.merge_scoring_files import SCORE_COLS
+
+    board = Path(__file__).resolve().parent.parent / "leaderboard" / "fitness"
+    with open(board / "leaderboard_signed_3ncRNA.csv") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 16
+    unregistered = [r["model"] for r in rows if r["model"] not in SCORE_COLS]
+    assert not unregistered, f"on the leaderboard but not in SCORE_COLS: {unregistered}"
+    macros = [float(r["macro_3ncRNA"]) for r in rows]
+    assert macros == sorted(macros, reverse=True), "the leaderboard is not sorted by macro"

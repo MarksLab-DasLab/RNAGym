@@ -47,6 +47,16 @@ rather than the final scores.
 | `adapter.py` | the model interface |
 | `runner.py` | command line, assay input, wild-type cross-check, output and manifest |
 
+## Sequence length
+
+RNA-FM and RiNALMo cap the number of positions they accept. The non-coding assays
+are 45 to 425 nucleotides and never reach it, but the mRNA constructs are
+kilobases. Windowing a context drops mutations from the conditioning sequence, so
+a windowed `mask-fill` and a windowed `mut-fill` no longer estimate the same
+quantity as each other. The runner therefore refuses a multi-strategy request on
+any assay that needs windowing, and offers the four strategies only where the
+whole construct fits. Score long assays one strategy at a time.
+
 ## Adding a model
 
 Subclass `MaskedLMAdapter`, declare the alphabet, output column, special-token

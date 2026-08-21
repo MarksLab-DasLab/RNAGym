@@ -83,9 +83,12 @@ def test_result_matches_published(fitness_results, csv_name):
     expected = expected_dir / csv_name
     actual = actual_dir / csv_name
 
-    if not expected.exists():
-        pytest.skip(f"{csv_name} not in published results")
-
+    # A published archive missing one of these is a broken release, not a reason
+    # to pass quietly. Skipping here meant the comparison could report success
+    # while checking nothing.
+    assert expected.exists(), (
+        f"{csv_name} is missing from the published results archive at {BASE_URL}"
+    )
     assert actual.exists(), f"{csv_name} was not produced by the pipeline"
 
     df_expected = pd.read_csv(expected)

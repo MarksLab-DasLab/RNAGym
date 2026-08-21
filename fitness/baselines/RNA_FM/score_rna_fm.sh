@@ -14,9 +14,16 @@ export reference_sheet="reference_sheet.csv"
 export output_scores_dir="path/to/model_predictions/rna_fm_4fill"
 export dms_data_dir="path/to/dms/data/dir"
 
-# Reference-sheet row to score. Set by a Slurm array job (0-69), or defaults
-# to 0 when run directly. Rows 0-8,11-32 are the 31 ncRNA assays; read an
-# ncRNA-only aggregate with performance_fitness.py --type ncRNA.
+# Reference-sheet row to score, set by a Slurm array job or defaulting to 0.
+# Submit the non-coding set with --array=0-8,11-32, which is the 31 ribozyme,
+# tRNA and aptamer assays the v0.2 leaderboard reports; read the aggregate with
+# performance_fitness.py --type ncRNA.
+#
+# The mRNA-coding and mRNA-splicing assays are NOT part of this leaderboard, and
+# the four-strategy default does not run on them: their constructs exceed the
+# model's position limit, and a windowed context drops mutations from the
+# conditioning sequence, so the four fills would no longer estimate the same
+# quantity. Score those one strategy at a time if you need them.
 
 # Masked-marginal fill strategy. The default computes all four (wt-fill,
 # mask-fill, mut-fill, match-fill), which share their contexts and so cost only

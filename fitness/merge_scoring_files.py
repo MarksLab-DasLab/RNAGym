@@ -33,9 +33,21 @@ def combine_csv_data(
     output_folder,
     model_list,
     score_cols_dict,
+    allow_incomplete=False,
 ):
-    """Merge each assay CSV with model prediction scores via inner join on mutations."""
+    """
+    Merge each assay CSV with model prediction scores via inner join on mutations.
+
+    A model that has no prediction for a particular assay is skipped for that
+    assay, which is normal: the masked language models are scored on the
+    non-coding assays only. A model with no predictions for ANY assay is a
+    configuration error, not partial coverage, and raises unless
+    ``allow_incomplete`` is set. Without that distinction a misspelled folder
+    produces a full set of merged files with the model silently absent, and the
+    aggregation downstream drops it without comment.
+    """
     Path(output_folder).mkdir(parents=True, exist_ok=True)
+    contributed = {model: 0 for model in model_list}
 
     for csv_file in os.listdir(processed_folder):
         if not csv_file.endswith(".csv"):
@@ -53,6 +65,7 @@ def combine_csv_data(
             if not os.path.exists(model_path):
                 logger.warning(f"Model file {csv_file} not found in {model_name}")
                 continue
+            contributed[model_name] += 1
 
             model_df = pd.read_csv(model_path)
             model_mutation_col = get_mutation_column(model_df)
@@ -81,6 +94,16 @@ def combine_csv_data(
             output_file = os.path.join(output_folder, csv_file)
             df.to_csv(output_file, index=False)
             logger.info(f"Saved combined data to {output_file}")
+
+    absent = sorted(m for m, n in contributed.items() if n == 0)
+    if absent and not allow_incomplete:
+        raise FileNotFoundError(
+            f"No predictions found for {absent} under {model_predictions_folder}. "
+            "Check the folder names against SCORE_COLS, or pass --allow_incomplete "
+            "to merge without them."
+        )
+    for model_name, n in sorted(contributed.items()):
+        logger.info(f"{model_name}: {n} assays merged")
 
 
 def resolve_source(score_cols_dict, model_name):
@@ -212,6 +235,13 @@ def main():
         "strategies: rna_fm_wt_fill rna_fm_mask_fill rna_fm_mut_fill rna_fm_match_fill",
     )
     parser.add_argument(
+        "--allow_incomplete",
+        action="store_true",
+        help="Merge even when a requested model has no predictions at all. Off by "
+        "default, so that a misspelled prediction folder fails instead of "
+        "producing a merge with that model silently missing",
+    )
+    parser.add_argument(
         "--assays_with_MSAs_only",
         action="store_true",
         help="Focus on assays with MSAs only (i.e., EVmutation)",
@@ -232,6 +262,7 @@ def main():
         args.output_folder,
         model_list,
         SCORE_COLS,
+        allow_incomplete=args.allow_incomplete,
     )
 
 
