@@ -618,6 +618,10 @@ def test_performance_fitness_metrics_are_directed():
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from fitness.performance_fitness import calculate_metrics
 
+    # 40 distinct values, so the median splits both classes evenly and a fully
+    # reversed prediction reaches MCC -1 exactly. That is not general: with an
+    # odd count the median observation falls in the same class under both
+    # splits, and reversing arange(5) gives -2/3 rather than -1.
     truth = np.arange(40, dtype=float)
     perfect = calculate_metrics(truth, truth)
     backwards = calculate_metrics(truth, -truth)
