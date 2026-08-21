@@ -162,8 +162,8 @@ Reproduce the aggregate with `performance_fitness.py --type ncRNA`, whose Spearm
 It previously reported the absolute value, which credited a model whose scores anti-correlate with
 fitness exactly as much as one that correlates, so it could not produce the numbers this page
 publishes. Its per-category means now match the columns above, and the macro is their unweighted
-mean. Note that AUC and MCC in that script are still folded onto their better direction, which is the
-same conflation and is worth revisiting separately.
+mean. AUC and MCC are directed too: an AUC below 0.5 or an MCC below 0 means the model ranks variants
+the wrong way round, where both were previously folded onto their better side.
 
 `fitness/analyze_fill_strategies.py` regenerates the sensitivity table, the category spreads and the
 bootstrap intervals from the prediction files.

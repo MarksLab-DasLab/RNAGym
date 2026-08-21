@@ -30,23 +30,24 @@ def calculate_metrics(
     """
     Calculate Spearman correlation, AUC, and MCC.
 
-    The Spearman correlation is SIGNED. It used to be reported as an absolute
-    value, which credited a model whose scores anti-correlate with fitness
-    exactly as much as one that correlates, and that is the distinction the
-    signed metric adopted in v0.1.1 exists to make. The leaderboard has
-    published signed values since then, so the absolute form no longer
-    corresponds to anything the benchmark reports.
+    All three are DIRECTED. They used to be reported as an absolute Spearman, an
+    AUC folded onto its better side with max(auc, 1 - auc), and an absolute MCC,
+    which together credited a model whose scores anti-correlate with fitness
+    exactly as much as one that correlates. That is the distinction the signed
+    metric adopted in v0.1.1 exists to make, and folding two of the three
+    metrics let a single row report a model as badly wrong by Spearman and
+    moderately good by AUC at the same time.
 
-    AUC and MCC are still folded onto their better direction below. That is the
-    same conflation and should be revisited, but it is left alone here because
-    it would change published numbers this change is not otherwise touching.
+    Read them as: Spearman in [-1, 1] with 0 unrelated; AUC in [0, 1] with 0.5
+    random, so below 0.5 means the model ranks variants the wrong way round; MCC
+    in [-1, 1] with 0 random. Higher remains better for all three.
     """
     spearman_corr = stats.spearmanr(assay_scores, model_scores).correlation
     binary_true = (assay_scores > np.median(assay_scores)).astype(int)
     binary_pred = (model_scores > np.median(model_scores)).astype(int)
     auc = roc_auc_score(y_true=binary_true, y_score=model_scores)
     mcc = matthews_corrcoef(y_true=binary_true, y_pred=binary_pred)
-    return {"Spearman": spearman_corr, "AUC": max(auc, 1 - auc), "MCC": abs(mcc)}
+    return {"Spearman": spearman_corr, "AUC": auc, "MCC": mcc}
 
 
 def get_performance_dataset(

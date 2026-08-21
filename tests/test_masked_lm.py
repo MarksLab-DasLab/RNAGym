@@ -606,23 +606,32 @@ def test_adapters_keep_their_historical_defaults(module_dir, module_name, expect
     assert defaults.get("dtype") == expect["dtype"]
 
 
-def test_performance_fitness_reports_a_signed_spearman():
+def test_performance_fitness_metrics_are_directed():
     """
-    The benchmark metric is signed: a model that ranks variants the wrong way
-    round must score negative, not positive. This was reported as an absolute
-    value once, which credited anti-correlation as strongly as correlation, so
-    it is pinned here rather than left to a reviewer to notice again.
+    All three benchmark metrics report direction: a model that ranks variants
+    the wrong way round must score worse than random, not the same as a model
+    that ranks them correctly. Spearman was once an absolute value, the AUC was
+    folded with max(auc, 1 - auc) and the MCC was absolute, which let one row
+    call a model badly wrong and moderately good at the same time. Pinned here
+    rather than left to a reviewer to notice again.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from fitness.performance_fitness import calculate_metrics
 
     truth = np.arange(40, dtype=float)
-    assert calculate_metrics(truth, truth)["Spearman"] == pytest.approx(1.0)
-    assert calculate_metrics(truth, -truth)["Spearman"] == pytest.approx(-1.0)
+    perfect = calculate_metrics(truth, truth)
+    backwards = calculate_metrics(truth, -truth)
+    assert perfect["Spearman"] == pytest.approx(1.0)
+    assert backwards["Spearman"] == pytest.approx(-1.0)
+    assert perfect["AUC"] == pytest.approx(1.0)
+    assert backwards["AUC"] == pytest.approx(0.0)
+    assert perfect["MCC"] == pytest.approx(1.0)
+    assert backwards["MCC"] == pytest.approx(-1.0)
 
     rng = np.random.default_rng(0)
     noisy = truth + rng.normal(0, 5, truth.size)
-    forward = calculate_metrics(truth, noisy)["Spearman"]
-    reversed_ = calculate_metrics(truth, -noisy)["Spearman"]
-    assert forward > 0 and reversed_ < 0
-    assert forward == pytest.approx(-reversed_)
+    forward = calculate_metrics(truth, noisy)
+    reversed_ = calculate_metrics(truth, -noisy)
+    assert forward["Spearman"] == pytest.approx(-reversed_["Spearman"])
+    assert forward["AUC"] > 0.5 > reversed_["AUC"]
+    assert forward["MCC"] > 0 > reversed_["MCC"]
