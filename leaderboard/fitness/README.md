@@ -45,9 +45,14 @@ unweighted average of the three category means. Underlying values: [`leaderboard
 
 The masked language models (AIDO.RNA at five sizes, RNAGenesis, RiNALMo, RNA-FM) are scored with `wt-fill`,
 the convention the ESM and ProteinGym reference implementations use; see below. Their previous
-numbers on this table used a different fill and were lower. **RNA-ERNIE is the one masked model not
-on this convention**: it needs a paddlepaddle environment we do not have, so its score is carried
-over from its original script, whose convention was never verified. Read its rank with that caveat.
+numbers on this table used a different fill and were lower. **Two entries are not on this convention.**
+RNA-ERNIE's scorer runs a single forward pass over the UNMASKED wild type, applies a softmax rather
+than a log-softmax, and sums raw probability differences `p(mutant) - p(wild type)` at the mutated
+positions. That is neither a masked marginal nor a log-likelihood ratio, and for multi-mutants no
+rank-preserving transformation relates the two, so its 0.1937 is not comparable with the masked
+checkpoints above; it cannot be rescored here because it needs a paddlepaddle environment. Orthrus
+masks one position at a time in the variant's OWN sequence, which is `mut-fill` rather than
+`wt-fill`. Read both ranks with those caveats.
 
 ## Scoring convention
 
@@ -138,8 +143,12 @@ position in that table in particular should not be read as current.
 ## Notes
 
 Categories: ribozyme (26 assays), tRNA (3), aptamer (2). Because the macro-mean weights each category
-equally, the small tRNA and aptamer sets carry outsized, higher-variance weight. Ranks that differ by
-less than about 0.01 should not be read as meaningful separations.
+equally, the small tRNA and aptamer sets carry outsized, higher-variance weight. Small differences in macro are not resolved by 31
+assays. A paired bootstrap over assays, resampled within each category, puts the gap between the top
+two entries at +0.0043 with a 95% interval of [-0.0224, +0.0314], so its sign is not determined;
+treat differences of a few hundredths as unresolved rather than as an ordering. The `bootstrap_se`
+columns emitted by `performance_fitness.py` do not measure this: they are standard errors of an
+assay-weighted difference from the best model, not of the equal-weight category macro reported here.
 
 ## Scoring scripts
 
