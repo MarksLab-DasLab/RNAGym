@@ -332,7 +332,6 @@ def save_results(
             )
     transposed.to_csv(output_dir / "assay_level_results_transposed.csv", index=False)
 
-
 def select_assays(reference: pd.DataFrame, assay_type: str) -> pd.DataFrame:
     """Select an assay group."""
     if assay_type == "all":
