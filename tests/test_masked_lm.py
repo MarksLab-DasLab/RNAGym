@@ -588,6 +588,8 @@ def test_window_guard_uses_the_declared_special_token_count():
         ("RNAGenesis", "score_rnagenesis_single_dms", {"cls": "RNAGenesisAdapter", "bases": "ACGU",
          "column": "rnagenesis_score", "special": 0, "batch": 256, "tokens": 32768,
          "dtype": "bfloat16"}),
+        ("Orthrus", "score_orthrus_single_dms", {"cls": "OrthrusAdapter", "bases": "ACGT",
+         "column": "orthrus_score", "special": 0, "batch": 64, "tokens": 65536, "dtype": None}),
     ],
 )
 def test_adapters_keep_their_historical_defaults(module_dir, module_name, expect):
@@ -696,3 +698,53 @@ def test_every_leaderboard_row_is_a_registered_model():
     assert not unregistered, f"on the leaderboard but not in SCORE_COLS: {unregistered}"
     macros = [float(r["macro_3ncRNA"]) for r in rows]
     assert macros == sorted(macros, reverse=True), "the leaderboard is not sorted by macro"
+
+
+def test_orthrus_expands_base_codes_into_six_tracks():
+    """
+    Orthrus has no token vocabulary, so it is given integer base codes and
+    expands them into its 6-track input. A masked position must become an
+    all-zero column, which is the masking convention the checkpoint documents:
+    "Positions to score should be masked (nucleotide channels set to zero)".
+    The CDS and splice channels stay zero because DMS constructs carry no
+    transcript annotation.
+    """
+    import importlib.util
+
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "fitness" / "baselines" / "Orthrus" / "score_orthrus_single_dms.py"
+    )
+    spec = importlib.util.spec_from_file_location("score_orthrus_single_dms", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    adapter = module.OrthrusAdapter()
+
+    # what load() would set, without needing the checkpoint or a GPU
+    adapter.base_ids = {b: i for i, b in enumerate(adapter.bases)}
+    adapter.mask_id = adapter.MASK_CODE
+    adapter.pad_id = adapter.PAD_CODE
+
+    captured = {}
+
+    class Recorder:
+        sequence_head = object()
+
+        def predict_tokens(self, x, lengths, channel_last=True):
+            captured["x"] = x.clone()
+            captured["lengths"] = lengths.clone()
+            return torch.zeros(x.shape[0], x.shape[1], 4)
+
+    adapter.model = Recorder()
+    input_ids = torch.tensor([[0, 1, adapter.MASK_CODE, 3, adapter.PAD_CODE]])
+    attention_mask = torch.tensor([[1, 1, 1, 1, 0]])
+    adapter.logits_at(input_ids, attention_mask, torch.tensor([0]), torch.tensor([2]))
+
+    x = captured["x"][0]
+    assert x[0].tolist() == [1, 0, 0, 0, 0, 0]  # A
+    assert x[1].tolist() == [0, 1, 0, 0, 0, 0]  # C
+    assert x[2].tolist() == [0, 0, 0, 0, 0, 0]  # masked: every channel zero
+    assert x[3].tolist() == [0, 0, 0, 1, 0, 0]  # T
+    assert x[4].tolist() == [0, 0, 0, 0, 0, 0]  # padding
+    assert (captured["x"][..., 4:] == 0).all()  # CDS and splice never set
+    assert captured["lengths"].tolist() == [4]  # padding excluded
