@@ -91,8 +91,15 @@ class OrthrusAdapter(MaskedLMAdapter):
         Expand base codes into Orthrus's 6-track input and read the MLM head.
 
         A masked position is left as an all-zero column, which is the masking
-        convention the checkpoint documents. Padding is zero as well, and the
-        real lengths are passed through so the backbone ignores it.
+        convention the checkpoint documents. Padding is zero as well.
+
+        ``lengths`` is passed for interface parity, not for safety: this
+        checkpoint's ``forward`` discards it, and it affects pooled
+        representations only. What actually keeps padding out of the scored
+        positions is ``allows_mixed_length_batches`` staying False, so the
+        engine refuses to put contexts of different lengths in one batch, and
+        the wild-type-background strategies additionally require every variant
+        to have the wild type's length.
         """
         batch, length = input_ids.shape
         x = torch.zeros(batch, length, 6, dtype=torch.float32, device=input_ids.device)
