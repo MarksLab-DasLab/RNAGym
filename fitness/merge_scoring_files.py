@@ -187,6 +187,9 @@ for _name, _folder, _stem in [
     SCORE_COLS.update(_entries)
     FOUR_FILL_MODELS.extend(_entries)
 
+# EVmutation is deliberately absent: it only scores assays with MSAs and is
+# merged on its own with --assays_with_MSAs_only. It has never been part of a
+# prediction release, so listing it here only ever produced a warning per assay.
 ALL_MODELS = [
     "evo1",
     "evo1.5",
@@ -204,7 +207,6 @@ ALL_MODELS = [
     "aido_rna_25m",
     "aido_rna_300m",
     "aido_rna_650m",
-    "EVmutation",
 ]
 
 
