@@ -677,6 +677,7 @@ def test_registry_resolves_the_leaderboard_models_to_the_published_fill():
         "aido_rna_300m": ("aido_rna_300m_4fill", "aido_rna_score_wt_fill"),
         "aido_rna_25m": ("aido_rna_25m_4fill", "aido_rna_score_wt_fill"),
         "aido_rna_1m": ("aido_rna_1m_4fill", "aido_rna_score_wt_fill"),
+        "orthrus": ("orthrus_4fill", "orthrus_score_wt_fill"),
     }
     for model, want in expected.items():
         assert model in ALL_MODELS, f"{model} is on the leaderboard but not in ALL_MODELS"

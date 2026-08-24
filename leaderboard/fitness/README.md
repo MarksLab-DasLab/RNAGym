@@ -26,7 +26,7 @@ Two changes from before:
 | 11 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
 | 12 | Nucleotide Transformer | 0.1329 | 0.3166 | -0.0886 | 0.1203 |
 | 13 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
-| 14 | Orthrus | -0.0276 | -0.0068 | 0.1495 | 0.0384 |
+| 14 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
 | 15 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
 | 16 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
 
@@ -50,9 +50,12 @@ RNA-ERNIE's scorer runs a single forward pass over the UNMASKED wild type, appli
 than a log-softmax, and sums raw probability differences `p(mutant) - p(wild type)` at the mutated
 positions. That is neither a masked marginal nor a log-likelihood ratio, and for multi-mutants no
 rank-preserving transformation relates the two, so its 0.1937 is not comparable with the masked
-checkpoints above; it cannot be rescored here because it needs a paddlepaddle environment. Orthrus
-masks one position at a time in the variant's OWN sequence, which is `mut-fill` rather than
-`wt-fill`. Read both ranks with those caveats.
+checkpoints above; it cannot be rescored here because it needs a paddlepaddle environment. Orthrus is now on `wt-fill`
+like the rest: its MLM checkpoint documents zeroed nucleotide channels as its masking operation, so
+the fill strategies apply to it, and its score nearly doubled from the 0.0384 it had under
+`mut-fill`. Its two annotation channels stay zero throughout, because DMS constructs carry no
+transcript structure, which is a limit of applying the model to this data rather than of the masking.
+Read RNA-ERNIE's rank with that caveat.
 
 ## Scoring convention
 
@@ -110,15 +113,18 @@ values and the bootstrap intervals with `fitness/analyze_fill_strategies.py`.
 | AIDO.RNA-25M-MARS | 0.1540 | 0.1380 | 0.1026 | 0.1393 |
 | RNA-FM | 0.1293 | 0.1155 | 0.1014 | 0.1267 |
 | AIDO.RNA-1M-MARS | 0.0806 | 0.0904 | 0.0800 | 0.0855 |
+| Orthrus | 0.0717 | 0.0589 | 0.0384 | 0.0356 |
 
 What this does and does not support:
 
-- **`mut-fill` is the weakest of the four on every checkpoint.** A paired assay bootstrap, resampled
-  within each category, puts the `wt-fill` minus `mut-fill` interval above zero on 5 of the 8.
+- **`mut-fill` is the weakest or second weakest on every checkpoint**, lowest on 8 of the 9; for
+  Orthrus `match-fill` edges below it by 0.0028. A paired assay bootstrap, resampled within each
+  category, puts the `wt-fill` minus `mut-fill` interval above zero on 5 of the 9.
 - **`wt-fill` is not separable from `mask-fill` or `match-fill`** at this sample size: those
-  intervals exclude zero on only 2 and 1 of the 8 checkpoints. `wt-fill` has the highest observed
-  macro on 7 of 8, but the convention is chosen on provenance and should not be defended on these
-  numbers.
+  intervals exclude zero on only 2 and 1 of the 9 checkpoints. `wt-fill` has the highest observed
+  macro on 8 of 9, but the convention is chosen on provenance and should not be defended on these
+  numbers. Orthrus is a case in point: its macro nearly doubles under `wt-fill`, yet none of its own
+  intervals excludes zero.
 - **The differences are concentrated in tRNA.** Mean spread across the four strategies is 0.094 in
   tRNA against 0.021 in ribozyme and 0.007 in aptamer, because the conventions are identical on
   single mutants and the tRNA assays are the deepest (4.07 mutations per variant against 2.91 and
@@ -126,6 +132,10 @@ What this does and does not support:
   amplified: under an unweighted mean over all 31 assays `wt-fill` leads on only 3 of 8 checkpoints.
 - **Model ranking is far more stable than the absolute numbers.** Across the eight checkpoints the
   only ordering change between strategies is that AIDO.RNA-650M and AIDO.RNA-1.6B trade places.
+- **Orthrus is included from 2026-08-24.** It was previously left out on the grounds that it has no
+  mask token, but its MLM checkpoint's own documentation specifies the masking convention, "positions
+  to score should be masked (nucleotide channels set to zero) before calling", and the score it
+  already published relied on exactly that operation at one position.
 
 ## Why we now exclude the mRNA assays
 

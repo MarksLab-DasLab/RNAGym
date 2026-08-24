@@ -155,7 +155,7 @@ SCORE_COLS = {
     "RNA-FM": {"folder": "rna_fm_4fill", "column": "RNA_FM_scores_wt_fill"},
     "rinalmo": {"folder": "rinalmo_4fill", "column": "logit_scores_wt_fill"},
     "RNAErnie": "Mutation_Scores",
-    "orthrus": "orthrus_score",
+    "orthrus": {"folder": "orthrus_4fill", "column": "orthrus_score_wt_fill"},
     "aido_rna": {"folder": "aido_rna_4fill", "column": "aido_rna_score_wt_fill"},
     "rnagenesis": {"folder": "rnagenesis_4fill", "column": "rnagenesis_score_wt_fill"},
     # AIDO.RNA size series. Every checkpoint writes the same column, so they
@@ -181,6 +181,7 @@ for _name, _folder, _stem in [
     ("aido_rna_25m", "aido_rna_25m_4fill", "aido_rna_score"),
     ("aido_rna_300m", "aido_rna_300m_4fill", "aido_rna_score"),
     ("aido_rna_650m", "aido_rna_650m_4fill", "aido_rna_score"),
+    ("orthrus", "orthrus_4fill", "orthrus_score"),
 ]:
     _entries = four_fill_entries(_name, _folder, _stem)
     SCORE_COLS.update(_entries)
