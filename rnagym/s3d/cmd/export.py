@@ -62,8 +62,7 @@ def main():
                 if success_file.exists() and out_pdb.exists():
                     if is_multimer:
                         if baseline.name == "rf2na":
-                            rf2na_launch_sh = Path(out_dir / "launch.sh")
-                            rf2na_chain_ids = get_rf2na_chain_ids(rf2na_launch_sh)
+                            rf2na_chain_ids = get_rf2na_chain_ids(pdb_id)
                             target_chain_id = rf2na_chain_ids[target_chain_id]
 
                         out_pdb = write_chain_minimal_pdb(

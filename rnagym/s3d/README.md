@@ -91,11 +91,8 @@ To launch the predictions, you can:
    nt on both strands using four GPUs. The combined hits seed a covariance
    model that realigns them before MSA construction. Alignments are stored
    under each benchmark's directory in `data/`.
-3. Launch your predictions using `pixi run predict <baseline>`.
-    - Valid baselines are currently `af3`, `nu`, `rho`, `rf2na`, and `trRNA`.
-    - Before running, configure `./scripts/<baseline>.sh` for your Slurm
-      cluster and point it to a valid installation of the respective
-      baseline.
+3. Launch your predictions using `pixi run -e <env> predict`. Run RF2NA after
+   AF3 because it reuses the partner-chain MSAs prepared by AF3.
 
 ## Analysis
 

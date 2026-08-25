@@ -116,10 +116,22 @@ class Config3D(_Config):
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
     RFAM_VERSION = "15.0"
     RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
-    AF3_DIR = DIR / ".pixi" / "model-sources" / "alphafold3"
+    MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
+    AF3_DIR = MODEL_SOURCE_DIR / "alphafold3"
     AF3_DATABASE_DIR = _DATABASE_DIR / "AlphaFold3" / "latest"
     AF3_PARAM_DIR = _CHECKPOINT_DIR / "alphafold3" / "latest"
-    MC_ANNOTATE = DIR / ".pixi" / "model-sources" / "RNA_assessment" / "MC-Annotate"
+    NUFOLD_DIR = MODEL_SOURCE_DIR / "nufold"
+    NUFOLD_PARAM_FILE = _CHECKPOINT_DIR / "nufold" / "latest" / "global_step145245.pt"
+    RHOFOLD_DIR = MODEL_SOURCE_DIR / "rhofold"
+    RHOFOLD_PARAM_FILE = (
+        _CHECKPOINT_DIR / "rhofold" / "latest" / "rhofold_pretrained_params.pt"
+    )
+    RF2NA_DIR = MODEL_SOURCE_DIR / "RoseTTAFold2NA"
+    RF2NA_DATABASE = _DATABASE_DIR / "PDB100" / "latest" / "pdb100_2021Mar03"
+    RF2NA_PARAM_FILE = _CHECKPOINT_DIR / "rosettafold2na" / "latest" / "RF2NA_apr23.pt"
+    TRRNA_DIR = MODEL_SOURCE_DIR / "trRosettaRNA_v1.1"
+    IPKNOT = MODEL_SOURCE_DIR / "ipknot" / "ipknot-1.1.0-x86_64-linux" / "ipknot"
+    MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 
     MAX_RESOLUTION = 5.0
     MAX_MISSING = 0.25

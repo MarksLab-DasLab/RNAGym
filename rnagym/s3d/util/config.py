@@ -182,9 +182,6 @@ class Baseline:
     """
 
     name: str
-    install_dir: Path
-    out_dir: Path
-    job_sh: Path
     training_cutoff: str  # Date as YYYY-MM-DD
 
     # Output files relative to output_dir
@@ -196,9 +193,6 @@ class Baseline:
 PREDICTIONS_DIR = Config3D.PREDICTION_DIR
 AF3 = Baseline(
     name="af3",
-    install_dir=Path("/path/to/alphafold3"),
-    out_dir=PREDICTIONS_DIR / "af3",
-    job_sh=Path("./scripts/af3.sh").resolve(),
     out_pdb="{name_lower}/{name_lower}_model.cif",
     afa_file="sequence.a3m",
     mul_afa_file="sequence_{asym_id}.a3m",
@@ -207,9 +201,6 @@ AF3 = Baseline(
 
 NUFOLD = Baseline(
     name="nu",
-    install_dir=Path("/path/to/nufold"),
-    out_dir=PREDICTIONS_DIR / "nu",
-    job_sh=Path("./scripts/nufold.sh").resolve(),
     out_pdb="output/{name_upper}/{name_upper}_rank_1.pdb",
     afa_file="input/{chain_key_upper}/{chain_key_upper}.a3m",
     mul_afa_file=None,
@@ -218,22 +209,14 @@ NUFOLD = Baseline(
 
 RF2NA = Baseline(
     name="rf2na",
-    install_dir=Path("/path/to/RoseTTAFold2NA"),
-    out_dir=PREDICTIONS_DIR / "rf2na",
-    job_sh=Path("./scripts/rf2na.sh").resolve(),
     out_pdb="models/model_00.pdb",
     afa_file="{asym_id}.afa",
     mul_afa_file="{asym_id}.afa",
     training_cutoff="2020-04-30",  # doi.org/10.1038/s41592-023-02086-5 (Methods)
 )
 
-RF2NA_LAUNCH_SH = RF2NA.install_dir / "run_RF2NA.sh"
-
 RHOFOLD = Baseline(
     name="rho",
-    install_dir=Path("/path/to/RhoFold"),
-    out_dir=PREDICTIONS_DIR / "rho",
-    job_sh=Path("./scripts/rhofold.sh").resolve(),
     out_pdb="output/unrelaxed_model.pdb",
     afa_file="sequence.a3m",
     mul_afa_file=None,
@@ -242,9 +225,6 @@ RHOFOLD = Baseline(
 
 TRRNA = Baseline(
     name="trRNA",
-    install_dir=Path("/path/to/trRosettaRNA_v1.1"),
-    out_dir=PREDICTIONS_DIR / "trRNA",
-    job_sh=Path("./scripts/trRNA.sh").resolve(),
     out_pdb="model_1.pdb",
     afa_file="sequence.a3m",
     mul_afa_file=None,
