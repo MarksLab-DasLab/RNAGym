@@ -370,8 +370,6 @@ def main() -> None:
     efold_challenging = get_efold_challenging_structures()
     pseudobase = get_pseudobase_structures()
     pdb = get_pdb_structures()
-    structures = pl.concat([bprna, efold_challenging, pseudobase, pdb])
-
     datasets = {
         "mapping": filtered,
         "bprna": bprna,
@@ -379,6 +377,16 @@ def main() -> None:
         "pseudobase": pseudobase,
         "pdb": pdb,
     }
+    datasets = {
+        name: data.filter(
+            pl.col("sequence").str.len_chars() <= Config2D.MAX_SEQUENCE_LENGTH
+        )
+        for name, data in datasets.items()
+    }
+    filtered = datasets["mapping"]
+    structures = pl.concat(
+        data for name, data in datasets.items() if name != "mapping"
+    )
     modalities = pl.concat(
         [
             *(
