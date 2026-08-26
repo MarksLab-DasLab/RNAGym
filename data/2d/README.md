@@ -94,7 +94,7 @@ See [`raw_data/README.md`](raw_data/README.md) for sources and schemas.
 
 To process the dataset with Rfam/Infernal and (re)generate
 `rnagym_rfams.parquet`, set `RNAGYM_DATABASE_DIR` to the directory containing
-`Rfam-15.1/` and run:
+`Rfam/15.1/` and run:
 
 ```bash
 RNAGYM_DATABASE_DIR=/path/to/databases pixi run annotate-rfam

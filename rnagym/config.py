@@ -60,7 +60,7 @@ class Config2D(_Config):
         "pdb": {"ribonanzanet", "rna-fm", "ufold"},
     }
     RFAM_VERSION = "15.1"
-    RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
+    RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION
     RFAM_SHARDS = 16
 
 
@@ -115,7 +115,7 @@ class Config3D(_Config):
     LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
     RFAM_VERSION = "15.0"
-    RFAM_DIR = _DATABASE_DIR / f"Rfam-{RFAM_VERSION}"
+    RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION
     MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
     AF3_DIR = MODEL_SOURCE_DIR / "alphafold3"
     AF3_DATABASE_DIR = _DATABASE_DIR / "AlphaFold3" / "latest"

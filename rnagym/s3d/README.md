@@ -41,10 +41,10 @@ To run the RNAGym dataset curation pipeline:
 
 1. Modify [`rnagym/config.py`](../config.py) to suit your system
 2. Run `pixi install`
-3. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam-15.0/` and run
+3. Set `RNAGYM_DATABASE_DIR` to the directory containing `Rfam/15.0/` and run
    `pixi run pipeline` to generate the processed files under `data/3d/`
 
-`Rfam-15.0/` must contain a pressed `Rfam.cm` and the release's
+`Rfam/15.0/` must contain a pressed `Rfam.cm` and the release's
 `database_files/family.txt.gz` as `family.txt.gz`.
 
 ```bash
