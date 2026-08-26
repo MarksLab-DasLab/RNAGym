@@ -1,0 +1,12 @@
+# --- Root stuff ---
+/.pixi/
+/tmp/
+/todo
+/secondary_structure_audit.md
+
+# --- Root wildcards ---
+/*.pdf
+
+# --- Anywhere stuff ---
+# Slurm prediction logs
+.rg_predict_out/

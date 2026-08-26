@@ -11,6 +11,8 @@ requires-python = ">=3.9"
 packages = [
   "rnagym",
   "rnagym.s2d",
+  "rnagym.s2d.models",
+  "rnagym.s2d.tasks",
   "rnagym.s3d",
   "rnagym.s3d.cmd",
   "rnagym.s3d.jobs",
@@ -18,4 +20,4 @@ packages = [
 ]
 
 [tool.distutils.egg_info]
-egg-base = ".egg"
+egg-base = "rnagym/.egg"

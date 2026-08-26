@@ -1,0 +1,239 @@
+[workspace]
+name = "rnagym-2d"
+description = "RNAGym secondary structure baseline environments"
+channels = ["pytorch", "nvidia", "conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+go-shfmt = "==3.13.1"
+infernal = "==1.1.5"
+mmseqs2 = "==15.6f452"
+numpy = "2.*"
+polars = "==1.43.0"
+python = "3.14.*"
+ruff = "==0.15.21"
+scipy = "1.*"
+shellcheck = "==0.11.0"
+taplo = "==0.10.0"
+tqdm = "==4.69.0"
+
+[feature.shared.pypi-dependencies]
+arnie = "==0.2.7"
+pytest = "==8.4.2"
+rnagym = { path = "../..", editable = true }
+
+[feature.shared.tasks]
+test-model = "CUDA_VISIBLE_DEVICES='' pytest -q ../../tests/test_s2d.py"
+
+[tasks]
+fmt = "bash sh/format.sh"
+lint = "bash sh/lint.sh"
+rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
+collate-2d = { cmd = "python -m rnagym.s2d.tasks.collate_2d", depends-on = [
+  "rna-assessment-source",
+] }
+annotate-rfam = "python -m rnagym.s2d.tasks.annotate_rfam"
+leaderboard = "python -m rnagym.s2d.tasks.score"
+test = { depends-on = ["test-model"] }
+
+# Classical model prediction dependencies
+[feature.classical.dependencies]
+python = "3.12.*"
+numpy = "1.*"
+polars = "==1.43.0"
+tqdm = "==4.69.0"
+
+[feature.vienna.dependencies]
+viennarna = "==2.6.4"
+
+[feature.vienna.tasks]
+test = { depends-on = ["test-model"] }
+predict = "bash sh/predict.sh vienna"
+
+[feature.contrafold.dependencies]
+contrafold = "==2.02"
+
+[feature.contrafold.tasks]
+test = { depends-on = ["test-model"] }
+predict = "bash sh/predict.sh contrafold"
+
+[feature.eternafold.dependencies]
+cxx-compiler = "1.*"
+git = "2.*"
+make = "4.*"
+
+[feature.eternafold.tasks]
+source = "bash sh/fetch-source.sh eternafold"
+
+[feature.eternafold.tasks.build]
+cmd = "make -C .pixi/model-sources/EternaFold/src contrafold CXX=\"$CXX\""
+depends-on = ["source"]
+
+[feature.eternafold.tasks.test]
+depends-on = ["build", "test-model"]
+
+[feature.eternafold.tasks.predict]
+cmd = "bash sh/predict.sh eternafold"
+depends-on = ["build"]
+
+[feature.rnastructure.dependencies]
+rnastructure = "==6.4"
+
+[feature.rnastructure.activation.env]
+DATAPATH = "$CONDA_PREFIX/share/rnastructure/data_tables"
+
+[feature.rnastructure.tasks]
+test = { depends-on = ["test-model"] }
+predict = "bash sh/predict.sh rnastructure"
+
+[feature.ribonanzanet.dependencies]
+python = "3.11.*"
+git = "2.*"
+pytorch = "==2.1.2"
+pytorch-cuda = "==12.1"
+torchvision = "==0.16.2"
+accelerate = "==0.25.0"
+einops = "==0.7.0"
+matplotlib = "==3.8.2"
+numpy = "==1.26.2"
+pandas = "2.*"
+polars = "==1.43.0"
+pyyaml = "==6.0.1"
+scikit-learn = "==1.3.2"
+scipy = "==1.13.1"
+tqdm = "==4.69.0"
+
+[feature.ribonanzanet.pypi-dependencies.ranger]
+git = "https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer.git"
+rev = "c82a30460684c7301086d84185a1927b1c256afa"
+
+[feature.ribonanzanet.tasks]
+source = "bash sh/fetch-source.sh ribonanzanet"
+
+[feature.ribonanzanet.tasks.test]
+depends-on = ["source", "test-model"]
+
+[feature.ribonanzanet.tasks.predict]
+cmd = "bash sh/predict.sh ribonanzanet"
+depends-on = ["source"]
+
+[feature.rinalmo.dependencies]
+python = "3.11.*"
+git = "2.*"
+pytorch = "==2.1.0"
+pytorch-cuda = "==11.8"
+einops = "==0.7.0"
+ml-collections = "==0.1.1"
+numpy = "==1.26.0"
+polars = "==1.43.0"
+setuptools = "<81"
+tqdm = "==4.69.0"
+
+[feature.rinalmo.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.2/flash_attn-2.3.2%2Bcu118torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+
+[feature.rinalmo.tasks]
+source = "bash sh/fetch-source.sh rinalmo"
+weights = "bash sh/fetch-weight.sh rinalmo"
+
+[feature.rinalmo.tasks.test]
+cmd = "pytest -q ../../tests/test_s2d.py"
+depends-on = ["source", "weights"]
+
+[feature.rinalmo.tasks.predict]
+cmd = "bash sh/predict.sh rinalmo"
+depends-on = ["source", "weights"]
+
+[feature.ufold.dependencies]
+python = "3.11.*"
+git = "2.*"
+pytorch = "==2.0.1"
+pytorch-cuda = "==11.8"
+mkl = "==2023.1.0"
+numpy = "==1.24.3"
+pandas = "==2.1.1"
+polars = "==1.43.0"
+scipy = "==1.11.3"
+scikit-learn = "==1.3.0"
+matplotlib = "==3.8.0"
+munch = "==4.0.0"
+tqdm = "==4.69.0"
+
+[feature.ufold.tasks]
+source = "bash sh/fetch-source.sh ufold"
+weights = "bash sh/fetch-weight.sh ufold"
+
+[feature.ufold.tasks.test]
+depends-on = ["source", "weights", "test-model"]
+
+[feature.ufold.tasks.predict]
+cmd = "bash sh/predict.sh ufold"
+depends-on = ["source", "weights"]
+
+[feature.rna-fm.dependencies]
+python = "3.11.*"
+pytorch = "==2.2.0"
+pytorch-cuda = "==11.8"
+numpy = "==1.26.4"
+polars = "==1.43.0"
+tqdm = "==4.69.0"
+
+[feature.rna-fm.pypi-dependencies]
+rna-fm = "==0.2.2"
+scipy = "==1.13.1"
+
+[feature.rna-fm.tasks]
+weights = "bash sh/fetch-weight.sh rna-fm"
+
+[feature.rna-fm.tasks.test]
+depends-on = ["weights", "test-model"]
+
+[feature.rna-fm.tasks.predict]
+cmd = "bash sh/predict.sh rna-fm"
+depends-on = ["weights"]
+
+[feature.mxfold2.dependencies]
+python = "3.10.*"
+pytorch = "==1.13.1"
+torchvision = "==0.14.1"
+mkl = "==2023.1.0"
+numpy = "==1.22.4"
+polars = "==1.43.0"
+
+[feature.mxfold2.pypi-dependencies]
+mxfold2 = { url = "https://github.com/mxfold/mxfold2/releases/download/v0.1.2/mxfold2-0.1.2-cp310-cp310-manylinux_2_17_x86_64.whl" }
+
+[feature.mxfold2.tasks]
+test = { depends-on = ["test-model"] }
+predict = "bash sh/predict.sh mxfold2"
+
+[environments]
+default = { features = ["shared"] }
+vienna = { features = [
+  "shared",
+  "classical",
+  "vienna",
+], no-default-feature = true }
+contrafold = { features = [
+  "shared",
+  "classical",
+  "contrafold",
+], no-default-feature = true }
+eternafold = { features = [
+  "shared",
+  "classical",
+  "eternafold",
+], no-default-feature = true }
+rnastructure = { features = [
+  "shared",
+  "classical",
+  "rnastructure",
+], no-default-feature = true }
+rinalmo = { features = ["shared", "rinalmo"], no-default-feature = true }
+ribonanzanet = { features = [
+  "shared",
+  "ribonanzanet",
+], no-default-feature = true }
+ufold = { features = ["shared", "ufold"], no-default-feature = true }
+rna-fm = { features = ["shared", "rna-fm"], no-default-feature = true }
+mxfold2 = { features = ["shared", "mxfold2"], no-default-feature = true }
