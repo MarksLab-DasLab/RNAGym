@@ -2,8 +2,9 @@
 set -euo pipefail
 
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ACCOUNT="marks_dsm1"
 CPU_PARTITION="short"
-GPU_PARTITION="gpu"
+GPU_PARTITIONS="gpu,gpu_advanced"
 
 environment="$1"
 
@@ -19,12 +20,14 @@ vienna | contrafold | eternafold | rnastructure | mxfold2)
 	;;
 ribonanzanet | ufold | rna-fm)
 	shards=8
+	gpu=l40s
+	[[ $environment == ribonanzanet ]] && gpu=h100
 	resources=(
 		--time=08:00:00
 		--cpus-per-task=1
 		--mem=8G
-		--gpus=1
-		--partition="$GPU_PARTITION"
+		--gpus="$gpu:1"
+		--partition="$GPU_PARTITIONS"
 	)
 	;;
 *)
@@ -48,6 +51,6 @@ for dataset in mapping 2d; do
 		echo "Skipping $environment $dataset: all shards complete"
 		continue
 	fi
-	sbatch "${resources[@]}" --array="0-$((shards - 1))" \
+	sbatch "${resources[@]}" --account="$ACCOUNT" --array="0-$((shards - 1))%32" \
 		-- tasks/predict.slurm "$environment" "$dataset"
 done
