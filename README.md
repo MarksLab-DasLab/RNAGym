@@ -40,7 +40,7 @@ Orthrus | RNA Language Model | Fradkin et al. "Orthrus: Towards Evolutionary and
 
 ### Secondary structure prediction
 
-We have currently implemented the following baselines (see `./2d`).
+We have currently implemented the following baselines (see `./rnagym/s2d`).
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -56,7 +56,8 @@ Mxfold2 | Structure prediction | Sato et al. "RNA secondary structure prediction
 ### Tertiary structure prediction
 
 We have also developed a data curation pipeline, structure datasets, and
-implemented several baselines for RNA tertiary structure (see [`./3d`][1]).
+implemented several baselines for RNA tertiary structure (see
+[`./rnagym/s3d`][1]).
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -72,6 +73,7 @@ The RNAGym environment may be created via conda and the provided rnagym_env.yml 
 ```
 conda env create -f rnagym_env.yml
 conda activate rnagym
+python -m pip install -e .
 ```
 For the fitness prediction task, we recommend the following folder structure:
 ```
@@ -83,16 +85,17 @@ fitness/
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
 ```
-2d/
+rnagym/s2d/
 ├── test_data/
 ├── raw_data/
 ├── model_predictions/
 └── models/
 ```
 The content for `models`, `model_predictions`, `raw_data` and `test_data` may all be downloaded via the links in the next section.
-The `data_folder` argument in the data and scoring scripts should be set to the location of the `2d` folder.
+The `data_folder` argument in the data and scoring scripts should be set to the location of the `rnagym/s2d` folder.
 
-For information on setting up the tertiary structure benchmark, see [`./3d`][1].
+For information on setting up the tertiary structure benchmark, see
+[`./rnagym/s3d`][1].
 
 ## Resources
 
@@ -130,9 +133,9 @@ Model files for 2D structure prediction task were prepared for a linux 64-bit sy
 
 | Data | Size (unzipped) | Link |
 | --- | --- | --- |
-| Train.csv | 3.6MB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/train.csv |
-| Test.csv (monomers) | 84KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/monomer.csv |
-| Test.csv (complexes) | 140KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/3d/complex.csv |
+| Train.csv | 3.6MB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/train.csv |
+| Test.csv (monomers) | 84KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/monomer.csv |
+| Test.csv (complexes) | 140KB | https://github.com/MarksLab-DasLab/RNAGym/blob/main/rnagym/s3d/complex.csv |
 | Alignments | 55.3MB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/3D_alignments.tar.xz |
 | Monomer scores | 7KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/monomer.csv |
 | Complex scores | 15KB | https://marks.hms.harvard.edu/rnagym/tertiary_structure_prediction/multimer.csv |
@@ -161,4 +164,4 @@ This project is available under the MIT license found in the LICENSE file in thi
 
 [rnagym]: https://rnagym.org/
 [0]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
-[1]: https://github.com/MarksLab-DasLab/RNAGym/tree/main/3d
+[1]: https://github.com/MarksLab-DasLab/RNAGym/tree/main/rnagym/s3d

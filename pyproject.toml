@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rnagym"
+version = "0.2.0"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = [
+  "rnagym",
+  "rnagym.s2d",
+  "rnagym.s3d",
+  "rnagym.s3d.cmd",
+  "rnagym.s3d.jobs",
+  "rnagym.s3d.util",
+]
+
+[tool.distutils.egg_info]
+egg-base = ".egg"

@@ -1,8 +1,8 @@
-import util.config as Config
-import util.residues as Residues
-from util.ba_conv import BA1_TO_BA2, BA2_TO_BA1
-from util.config import Baseline
-from util.fr3d import (
+import rnagym.s3d.util.config as Config
+import rnagym.s3d.util.residues as Residues
+from rnagym.s3d.util.ba_conv import BA1_TO_BA2, BA2_TO_BA1
+from rnagym.s3d.util.config import Baseline
+from rnagym.s3d.util.fr3d import (
     BASE_RIBOSE_LABELS,
     BASEPAIR_LABELS,
     CONTACT_LABELS,
@@ -12,7 +12,7 @@ from util.fr3d import (
     PHOSPHATE_LABELS,
     STACKING_LABELS,
 )
-from util.types import (
+from rnagym.s3d.util.types import (
     AccessionID,
     AltID,
     AtomName,

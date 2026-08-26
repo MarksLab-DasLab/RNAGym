@@ -8,12 +8,12 @@
 import itertools
 import shlex
 import subprocess
-from cmd.split import get_split_candidates
+from rnagym.s3d.cmd.split import get_split_candidates
 from pathlib import Path
 from typing import List
 
-from util import ChainID, Config
-from util.analysis import prep_usalign
+from rnagym.s3d.util import ChainID, Config
+from rnagym.s3d.util.analysis import prep_usalign
 
 
 def get_split_candidate_chain_ids(verbose=False) -> (List[ChainID], List[ChainID]):

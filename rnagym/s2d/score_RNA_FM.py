@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 #import fm
 from tqdm import tqdm
-from utils import (load_data, unpaired_probabilities, organize_data,
+from rnagym.s2d.utils import (load_data, unpaired_probabilities, organize_data,
                    compute_performance_metrics, save_predictions, save_performance_metrics)
 
 def setup_argparse() -> argparse.Namespace:

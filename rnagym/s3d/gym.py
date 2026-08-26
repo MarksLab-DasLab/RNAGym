@@ -4,7 +4,7 @@
 """
 
 import argparse
-from cmd import Analyze, Annotate, EVCouplings, Export, Merge, Split
+from rnagym.s3d.cmd import Analyze, Annotate, EVCouplings, Export, Merge, Split
 
 
 def main():

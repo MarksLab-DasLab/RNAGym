@@ -6,7 +6,7 @@
 
 import pandas as pd
 
-from util import Config
+from rnagym.s3d.util import Config
 
 mon_df = pd.read_csv(Config.MONOMER_CSV)
 mul_df = pd.read_csv(Config.MULTIMER_CSV)
