@@ -14,6 +14,11 @@ ufold)
 	revision=75bd9acc83826059682dfca9d3659df66b132cd1
 	destination="$PROJECT_ROOT/.pixi/model-sources/UFold"
 	;;
+rinalmo)
+	url=https://github.com/lbcb-sci/RiNALMo.git
+	revision=2c2c5c14a5ae609d8c560a5d9ca32e51e0288955
+	destination="$PROJECT_ROOT/.pixi/model-sources/RiNALMo"
+	;;
 eternafold)
 	url=https://github.com/eternagame/EternaFold.git
 	revision=702d3e485e768a6f2355d5d065e1241b04618e61

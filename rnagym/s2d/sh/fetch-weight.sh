@@ -13,6 +13,12 @@ download() {
 }
 
 case $1 in
+rinalmo)
+	download \
+		https://zenodo.org/api/records/15043668/files/rinalmo_giga_ss_bprna_ft.pt/content \
+		.pixi/model-weights/rinalmo/rinalmo_giga_ss_bprna_ft.pt \
+		44e377cb0c92f7b9cff8db8a38e33e5c0363d2f9a19831c6342346bb788a5e55
+	;;
 ufold)
 	download \
 		'https://drive.usercontent.google.com/download?id=1DJDkKwZNdt-cwKPkDxu3ErWqoTK2k7uy&export=download&confirm=t' \

@@ -18,14 +18,16 @@ vienna | contrafold | eternafold | rnastructure | mxfold2)
 		--partition="$CPU_PARTITION"
 	)
 	;;
-ribonanzanet | ufold | rna-fm)
+ribonanzanet | rinalmo | ufold | rna-fm)
 	shards=8
 	gpu=l40s
-	[[ $environment == ribonanzanet ]] && gpu=h100
+	memory=8G
+	[[ $environment == ribonanzanet || $environment == rinalmo ]] && gpu=h100
+	[[ $environment == rinalmo ]] && memory=12G
 	resources=(
 		--time=08:00:00
 		--cpus-per-task=1
-		--mem=8G
+		--mem="$memory"
 		--gpus="$gpu:1"
 		--partition="$GPU_PARTITIONS"
 	)

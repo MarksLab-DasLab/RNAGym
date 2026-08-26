@@ -15,6 +15,7 @@ secondary structure baselines in RNAGym:
 | --- | --- |
 | `(default)` | Default env for scripts and processing
 | `ribonanzanet` | RibonanzaNet
+| `rinalmo` | RiNALMo
 | `eternafold` | EternaFold
 | `contrafold` | CONTRAfold
 | `vienna` | ViennaRNA
@@ -29,7 +30,7 @@ with `pixi shell -e <name>`, or run a command directly with `pixi run -e <name>
 
 ### Note on source-only neural models
 
-RibonanzaNet and UFold are not packaged by their authors. Their `source` task
+RibonanzaNet, RiNALMo, and UFold use pinned upstream source. Their `source` task
 checks out a pinned upstream commit under `.pixi/model-sources/`; `test` runs
 this task automatically. For example:
 
@@ -38,8 +39,8 @@ pixi run -e ufold source
 pixi run -e ufold test
 ```
 
-Neural-model tests fetch verified public weights automatically and fold one
-short sequence on CPU. Use a GPU node for practical inference.
+Neural model tests fetch verified public weights automatically. RiNALMo requires
+a GPU. The other adapters test one short sequence on CPU.
 
 ## Reproducing the predictions
 

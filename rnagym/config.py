@@ -54,10 +54,10 @@ class Config2D(_Config):
     HEADLINE_MODIFIERS = ("1M7", "2A3", "DMS", "NMIA")
     TRAINING_OVERLAP = {
         "mapping": {"eternafold", "ribonanzanet"},
-        "bprna": set(),
+        "bprna": {"mxfold2", "ribonanzanet", "rinalmo", "rna-fm", "ufold"},
         "efold_challenging": set(),
         "pseudobase": set(),
-        "pdb": {"ribonanzanet", "rna-fm", "ufold"},
+        "pdb": {"ribonanzanet", "rinalmo", "rna-fm", "ufold"},
     }
     RFAM_VERSION = "15.1"
     RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION

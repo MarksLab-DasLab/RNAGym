@@ -24,6 +24,7 @@ CONTRAfold | Structure prediction | Do et al. "CONTRAfold: RNA secondary structu
 Vienna | Structure prediction | Gruber et al. "The vienna rna websuite." Nucleic Acids Research, 36:W70 – W74, 2008.
 RNAstructure | Structure prediction | Reuter et al. "Rnastructure: software for rna secondary structure prediction and analysis". BMC Bioinformatics, 11:129 – 129, 2010.
 RNA-FM | RNA Language Model | Chen et al. "Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions" arXiv, 2022.
+RiNALMo | RNA Language Model | Penić et al. "RiNALMo: General-Purpose RNA Language Models Can Generalize Well on Structure Prediction Tasks" Nature Communications, 2025.
 UFold | Structure prediction | Fu et al. "UFold: fast and accurate RNA secondary structure prediction with deep learning" Nucleic Acids Research, 2022.
 Mxfold2 | Structure prediction | Sato et al. "RNA secondary structure prediction using deep learning with thermodynamic integration" Nature Methods, 2021.
 

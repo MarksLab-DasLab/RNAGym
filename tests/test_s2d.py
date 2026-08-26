@@ -23,6 +23,7 @@ MODEL_METHODS = {
     "ufold": {"threshold_0.5"},
     "rna-fm": {"postprocess_0.5"},
     "mxfold2": {"mfe"},
+    "rinalmo": {"greedy"},
 }
 
 
@@ -54,6 +55,10 @@ def test_adapter() -> None:
     """Check one model adapter's output contract."""
     if MODEL not in MODEL_METHODS:
         pytest.skip("Run through a model environment")
+    if MODEL == "rinalmo":
+        torch = pytest.importorskip("torch")
+        if not torch.cuda.is_available():
+            pytest.skip("RiNALMo requires a GPU")
     adapter = importlib.import_module(f"rnagym.s2d.models.{MODEL.replace('-', '_')}")
     prediction = adapter.predict(SEQUENCE)
     probabilities = np.asarray(prediction["probabilities"])

@@ -38,5 +38,6 @@ running `pixi run leaderboard` to populate newly added benchmark columns.
 | 8 | RNA-FM‡ | 0.3053 | 0.6635 | 0.7948 | 0.5879 |
 <!-- END GENERATED TABLE -->
 
-\*, †, and ‡ indicate training data from the same source collection as the
-chemical mapping, PseudoBase, and PDB benchmarks, respectively.
+\*, †, and ‡ indicate training data from the chemical mapping, PseudoBase, and
+PDB source collections. § indicates training or pretraining on bpRNA-1m,
+RNAcentral, or Rfam because these collections overlap heavily.

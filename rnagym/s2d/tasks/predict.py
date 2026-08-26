@@ -5,6 +5,7 @@
 import argparse
 import importlib
 from enum import Enum
+from itertools import groupby
 
 import polars as pl
 from tqdm.auto import tqdm
@@ -57,6 +58,26 @@ def get_sequences(profiles: pl.DataFrame, num_shards: int) -> pl.DataFrame:
     )
 
 
+def predict_sequences(adapter: object, sequences: pl.Series, description: str) -> list:
+    """Predict sequences using equal-length batches when supported."""
+    predict_batch = getattr(adapter, "predict_batch", None)
+    if predict_batch is None:
+        return [
+            adapter.predict(sequence) for sequence in tqdm(sequences, desc=description)
+        ]
+
+    results = []
+    with tqdm(total=len(sequences), desc=description) as progress:
+        for length, group in groupby(sequences, key=len):
+            group = list(group)
+            size = adapter.batch_size(length)
+            for start in range(0, len(group), size):
+                batch = group[start : start + size]
+                results.extend(predict_batch(batch))
+                progress.update(len(batch))
+    return results
+
+
 def predict_dataset(
     adapter: object,
     environment: str,
@@ -73,13 +94,8 @@ def predict_dataset(
 
     profiles = load_profiles(dataset)
     sequences = get_sequences(profiles, num_shards).filter(pl.col("shard") == shard)
-    results = [
-        adapter.predict(sequence)
-        for sequence in tqdm(
-            sequences["sequence"],
-            desc=f"{environment} {dataset.value} shard {shard + 1}/{num_shards}",
-        )
-    ]
+    description = f"{environment} {dataset.value} shard {shard + 1}/{num_shards}"
+    results = predict_sequences(adapter, sequences["sequence"], description)
     predictions = sequences.select("sequence").with_columns(
         pl.Series(
             "probabilities",

@@ -305,6 +305,7 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         "contrafold": "CONTRAfold",
         "eternafold": "EternaFold",
         "mxfold2": "MXFold2",
+        "rinalmo": "RiNALMo",
         "ribonanzanet": "RibonanzaNet",
         "rna-fm": "RNA-FM",
         "rnastructure": "RNAstructure",
@@ -325,7 +326,9 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         model = row["model"]
         suffix = "".join(
             marker
-            for modality, marker in zip(("mapping", "pseudobase", "pdb"), "*†‡")
+            for modality, marker in zip(
+                ("mapping", "pseudobase", "pdb", "bprna"), "*†‡§"
+            )
             if model in Config2D.TRAINING_OVERLAP[modality]
         )
         lines.append(

@@ -116,6 +116,33 @@ depends-on = ["source", "test-model"]
 cmd = "bash sh/predict.sh ribonanzanet"
 depends-on = ["source"]
 
+[feature.rinalmo.dependencies]
+python = "3.11.*"
+git = "2.*"
+pytorch = "==2.1.0"
+pytorch-cuda = "==11.8"
+einops = "==0.7.0"
+ml-collections = "==0.1.1"
+numpy = "==1.26.0"
+polars = "==1.43.0"
+setuptools = "<81"
+tqdm = "==4.69.0"
+
+[feature.rinalmo.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.2/flash_attn-2.3.2%2Bcu118torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+
+[feature.rinalmo.tasks]
+source = "bash sh/fetch-source.sh rinalmo"
+weights = "bash sh/fetch-weight.sh rinalmo"
+
+[feature.rinalmo.tasks.test]
+cmd = "pytest -q ../../tests/test_s2d.py"
+depends-on = ["source", "weights"]
+
+[feature.rinalmo.tasks.predict]
+cmd = "bash sh/predict.sh rinalmo"
+depends-on = ["source", "weights"]
+
 [feature.ufold.dependencies]
 python = "3.11.*"
 git = "2.*"
@@ -201,6 +228,7 @@ rnastructure = { features = [
   "classical",
   "rnastructure",
 ], no-default-feature = true }
+rinalmo = { features = ["shared", "rinalmo"], no-default-feature = true }
 ribonanzanet = { features = [
   "shared",
   "ribonanzanet",
