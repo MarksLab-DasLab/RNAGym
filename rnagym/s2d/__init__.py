@@ -1,1 +1,1 @@
-"""RNAGym 2D structure benchmark."""
+"""RNAGym secondary structure benchmark."""
