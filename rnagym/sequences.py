@@ -17,17 +17,26 @@ REGISTRY_SCHEMA = pl.Schema(
 )
 
 
-def fitness_sequences() -> pl.DataFrame:
-    """Load the unique ncRNA fitness assay sequences."""
+def fitness_assays() -> pl.DataFrame:
+    """Load ncRNA fitness assay keys and sequences."""
     return (
         pl.read_csv(ConfigFitness.REFERENCE_FILE)
         .filter(pl.col("RNA_TYPE") != "mRNA-coding")
         .select(
+            "DMS_ID",
             pl.col("RAW_CONSTRUCT_SEQ")
             .str.to_uppercase()
             .str.replace_all("T", "U")
-            .alias("sequence")
+            .alias("sequence"),
         )
+    )
+
+
+def fitness_sequences() -> pl.DataFrame:
+    """Load the unique ncRNA fitness assay sequences."""
+    return (
+        fitness_assays()
+        .select("sequence")
         .unique()
         .with_columns(pl.lit("fitness").alias("modality"))
     )

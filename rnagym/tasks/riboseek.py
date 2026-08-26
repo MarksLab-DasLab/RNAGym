@@ -11,7 +11,7 @@ from shlex import split
 import pandas as pd
 
 from rnagym.config import Config2D, Config3D, ConfigFitness, ConfigRiboseek
-from rnagym.sequences import fitness_sequences, load_registry
+from rnagym.sequences import fitness_assays, fitness_sequences, load_registry
 
 MSA_DESCRIPTION = "Riboseek CM 30k x3"
 
@@ -57,6 +57,20 @@ def is_complete(path: Path, sequence_id: str, sequence: str) -> bool:
         and fasta.is_file()
         and fasta.read_text() == f">{sequence_id}\n{sequence}\n"
     )
+
+
+def _link_fitness_alignments(sequence_ids: set[str]) -> None:
+    """Link assay keys to their shared sequence alignments."""
+    alias_dir = ConfigFitness.MSA_DIR / "by_assay"
+    alias_dir.mkdir(parents=True, exist_ok=True)
+    assays = fitness_assays().join(load_registry(Config2D.SEQUENCE_FILE), on="sequence")
+    for assay, sequence_id in assays.select("DMS_ID", "sequence_id").iter_rows():
+        if sequence_id not in sequence_ids:
+            continue
+        for suffix in (".a3m", ".afa", ".fa"):
+            link = alias_dir / f"{assay}{suffix}"
+            link.unlink(missing_ok=True)
+            link.symlink_to(Path("..") / f"{sequence_id}{suffix}")
 
 
 def remove_db(path: Path) -> None:
@@ -176,6 +190,7 @@ def main() -> None:
     if stage == "check":
         raise SystemExit(not missing.empty)
     if missing.empty:
+        _link_fitness_alignments(set(sequences["sequence_id"]))
         print(f"Riboseek shard {task_id + 1}/{task_count} is complete")
         return
 
@@ -332,6 +347,7 @@ def main() -> None:
         f"Wrote {len(missing):,} A3Ms and {converted:,} aligned FASTAs "
         f"for {len(sequences):,} unique sequences"
     )
+    _link_fitness_alignments(set(sequences["sequence_id"]))
     if not missing.empty:
         shutil.rmtree(work_dir)
 
