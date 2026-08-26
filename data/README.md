@@ -1,4 +1,4 @@
-# Shared RNAGym data
+# RNAGym data
 
 | File or directory | Contents |
 | --- | --- |
