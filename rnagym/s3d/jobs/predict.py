@@ -11,8 +11,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from util import Config
-from util.analysis import prep_af3, prep_nufold, prep_rf2na, prep_rhofold, prep_trRNA
+from rnagym.s3d.util import Config
+from rnagym.s3d.util.analysis import (
+    prep_af3,
+    prep_nufold,
+    prep_rf2na,
+    prep_rhofold,
+    prep_trRNA,
+)
 
 
 def parse_args():

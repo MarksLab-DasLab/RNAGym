@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 
-from util import Config
-from util.analysis import get_rf2na_chain_ids, write_chain_minimal_pdb
+from rnagym.s3d.util import Config
+from rnagym.s3d.util.analysis import get_rf2na_chain_ids, write_chain_minimal_pdb
 
 
 def main():

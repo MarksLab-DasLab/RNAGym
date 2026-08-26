@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 import numpy as np
 from arnie.bpps import bpps
-from utils import (load_data, unpaired_probabilities, process_predictions, organize_data,
+from rnagym.s2d.utils import (load_data, unpaired_probabilities, process_predictions, organize_data,
                    compute_performance_metrics, save_predictions, save_performance_metrics,
                    array_to_string, string_to_array)
 from tqdm.contrib.concurrent import process_map

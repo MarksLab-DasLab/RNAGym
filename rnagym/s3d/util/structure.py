@@ -33,8 +33,8 @@ from evcouplings.utils.system import ResourceError
 from gemmi import Residue, ResidueSpan, Structure
 from gemmi.cif import Document
 
-from util import BA1_TO_BA2, ChainID, Config, ContactMap, EqClassID, Residues
-from util.sequence import FamHits
+from rnagym.s3d.util import BA1_TO_BA2, ChainID, Config, ContactMap, EqClassID, Residues
+from rnagym.s3d.util.sequence import FamHits
 
 
 class ResidueType(Enum):

@@ -19,7 +19,7 @@ import evcouplings.align.alignment as Alignment
 import pandas as pd
 from rna3db.tabular import TabularOutput
 
-from util import AccessionID, ChainID, Config, PdbID, Sequence
+from rnagym.s3d.util import AccessionID, ChainID, Config, PdbID, Sequence
 
 
 @dataclass

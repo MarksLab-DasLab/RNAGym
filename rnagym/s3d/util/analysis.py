@@ -32,7 +32,7 @@ from Bio.PDB import PDBIO, MMCIFParser
 from evcouplings.compare import PDB, Chain, DistanceMap, add_distances
 from evcouplings.utils.pipeline import execute
 
-from util import (
+from rnagym.s3d.util import (
     AltID,
     AtomName,
     Baseline,
@@ -48,7 +48,7 @@ from util import (
     ResName,
     SymmetryOp,
 )
-from util.structure import ChainType, StructureInfo, get_structure
+from rnagym.s3d.util.structure import ChainType, StructureInfo, get_structure
 
 
 @dataclass
