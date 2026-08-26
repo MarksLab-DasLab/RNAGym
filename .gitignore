@@ -4,6 +4,7 @@ __pycache__/
 .vibe/
 
 # Anywhere files
+AGENTS.md
 slurm
 archives
 todo
