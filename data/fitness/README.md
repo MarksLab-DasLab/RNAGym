@@ -7,6 +7,7 @@
 
 ## Assay lookup
 
+<!--TODO(MCA/TLC): Address the 2 duplicates -->
 Use the `DMS_ID` from
 [`fitness/reference_sheet_final.csv`](../../fitness/reference_sheet_final.csv)
 directly, for example `msa/by_assay/Kobori_2018_ribozyme.a3m`. The canonical
