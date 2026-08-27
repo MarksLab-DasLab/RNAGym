@@ -1,20 +1,6 @@
-/out/
-/predictions/
-/filter.out
-/merge.out
-/split.csv
+/.pixi/
+/.rg_jobs/
 /*.tmp
 /RNAGym_Export*
-
-# Datasets (must be downloaded directly)
-/datasets/rna3db-cmscans
-
-# Merged/annotated output
-# NOTE(MCA): Made merged/annotated visible on 2025/11/24 for reference purposes
-# /merged_pdb_ids.csv
-# /annotated_chain_ids.csv
-/scripts/annotated_chain_ids.csv
-/scripts/msa_stats.csv
-
-# Output figures
-/figures
+/todo
+/figures/

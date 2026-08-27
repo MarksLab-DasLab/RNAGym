@@ -1,6 +1,5 @@
 import rnagym.s3d.util.config as Config
 import rnagym.s3d.util.residues as Residues
-from rnagym.s3d.util.ba_conv import BA1_TO_BA2, BA2_TO_BA1
 from rnagym.s3d.util.config import Baseline
 from rnagym.s3d.util.fr3d import (
     BASE_RIBOSE_LABELS,
@@ -20,7 +19,6 @@ from rnagym.s3d.util.types import (
     ChainID,
     ContactMap,
     EntityID,
-    EqClassID,
     Fr3dContactID,
     Fr3dResID,
     InsertionCode,
@@ -37,8 +35,6 @@ __all__ = [
     "AtomName",
     "AccessionID",
     "AltID",
-    "BA2_TO_BA1",
-    "BA1_TO_BA2",
     "BASEPAIR_LABELS",
     "BASE_RIBOSE_LABELS",
     "Baseline",
@@ -50,7 +46,6 @@ __all__ = [
     "Config",
     "ContactMap",
     "EntityID",
-    "EqClassID",
     "Fr3dResID",
     "Fr3dContactID",
     "InsertionCode",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# `structure.py`: Helper classes for working with structures.
+# `structure.py`: Helper classes for working with structures
 ###############################################################################
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from evcouplings.utils.system import ResourceError
 from gemmi import Residue, ResidueSpan, Structure
 from gemmi.cif import Document
 
-from rnagym.s3d.util import BA1_TO_BA2, ChainID, Config, ContactMap, EqClassID, Residues
+from rnagym.s3d.util import ChainID, Config, ContactMap, Residues
 from rnagym.s3d.util.sequence import FamHits
 
 
@@ -66,7 +66,7 @@ class ResidueType(Enum):
 
         # NOTE(MCA): Gemmi has its own implementation of residue/polymer
         #   typing, but it has limited awareness of modified protein/nucleic
-        #   acid residues.
+        #   acid residues
         if is_polymer and residue in Residues.RNA:
             residue_type = ResidueType.RNA
         elif is_polymer and residue in Residues.DNA:
@@ -293,13 +293,6 @@ def get_cif_key(cif: Document, key: str, default="") -> str:
     return strip_cif_value(value) if not is_none(value) else default
 
 
-def escape_quotes(string: str):
-    """
-    Escapes the quotation marks in an input string for CSV.
-    """
-    return string.replace('"', '""').replace("'", "''")
-
-
 def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
     """
     Returns the selected PDB from RCSB as an EVCouplings PDB object.  PDB
@@ -447,7 +440,7 @@ def get_chain_coverages(
 
         # interxtal contacts are contacts with a symmetry expanded copy of
         # itself.  These subchains come in the form "<ChainID>-<2,3,...,N>"
-        # where N indicates the which symmetry copy the subchain belongs to.
+        # where N indicates the which symmetry copy the subchain belongs to
         res_sc = residue.subchain.split("-")
         hit_sc = hit.residue.subchain.split("-")
         is_interchain = res_sc[0] != hit_sc[0]
@@ -544,9 +537,6 @@ class StructureInfo:
           the input structure to its respective type.
         chains_of_type (DefaultDict[ChainType, List[Chain]]):  Mapping from
           ChainType to a list of chains of that ChainType.
-        eq_classes (Dict[ChainID, Tuple[EqClassID, int]]):  Mapping from auth.
-          chain IDs to equivalence class IDs and the no. of chains each
-          contains.
         fam_hits (Optional[Dict[ChainID, FamHits]]):  Mapping from ChainIDs to
           FamHits objects representing matching Pfam/Rfam families.
         keywords (List[str]):  Keywords for this structure.
@@ -567,8 +557,6 @@ class StructureInfo:
         sequences_unmod (Dict[ChainID, Seq]):  Same as `sequences` but
           with modified residues converted to their standard counterparts
           (e.g., 6MA -> A).
-        sources (Set[str]): A list of strings describing the sources this
-          structure info's PDB ID came from.
     """
 
     __slots__ = (
@@ -582,7 +570,6 @@ class StructureInfo:
         "chain_types",
         "chains_of_type",
         "cif",
-        "eq_classes",
         "fam_hits",
         "keywords",
         "method",
@@ -594,7 +581,6 @@ class StructureInfo:
         "self_contacts",
         "sequences",
         "sequences_unmod",
-        "sources",
     )
 
     HEADERS = [
@@ -603,7 +589,6 @@ class StructureInfo:
         "Auth. Chain ID",
         "Sequence Cluster",
         "Rfam Cluster",
-        "Source(s)",
         "Name",
         "Published",
         "Keywords",
@@ -611,10 +596,6 @@ class StructureInfo:
         "Resolution",
         "Organism",
         "Synthetic organism",
-        # equivalence class ID from RNA 3D Hub (R3DH)
-        "EC ID",
-        # no. of chains in R3DH integrated functional element (IFE)
-        "IFE chains",
         "Self Structured",
         "% covered (any polymer)",
         "% covered (only NA)",
@@ -670,17 +651,9 @@ class StructureInfo:
     # Regex for identifying modified residues in annotated sequences
     __mod_residue_re = re.compile(r"-\(([A-Za-z0-9_-]*)\)-")
 
-    def __init__(
-        self,
-        cif: Document,
-        assembly: Structure,
-        eq_classes: Dict[ChainID, Tuple[EqClassID, int]],
-        sources: Set[str],
-    ):
+    def __init__(self, cif: Document, assembly: Structure):
         self.cif = cif
         self.assembly = assembly
-        self.eq_classes = eq_classes
-        self.sources = sources
 
         # Identify which chain IDs to process
         model = self.assembly[0]
@@ -768,7 +741,7 @@ class StructureInfo:
         # --- Map from auth ID to asym. ID and vice versa ---
         # NOTE(MCA):  The relationship of asym. ID to auth. ID is either
         #   one-to-one or many-to-one.  There may be multiple asym. IDs for any
-        #   given auth ID.
+        #   given auth ID
         self.auth_id_to_asym_ids = defaultdict(set)
         self.asym_id_to_auth_id = {}
         auth_ids = atom_site.find_column("auth_asym_id")
@@ -803,7 +776,7 @@ class StructureInfo:
             self.cif, "_pdbx_audit_revision_history.revision_date"
         )
         self.published_date = self.revision_dates.split(", ")[0]
-        self.keywords = escape_quotes(get_cif_key(self.cif, "_struct_keywords.text"))
+        self.keywords = get_cif_key(self.cif, "_struct_keywords.text")
         self.method = get_cif_key(self.cif, "_exptl.method")
         if "X-RAY DIFFRACTION" in self.method:
             self.resolution = get_cif_key(
@@ -818,7 +791,7 @@ class StructureInfo:
 
         # --- Organism details ---
         # NOTE(MCA): RCSB guarantees that the entity IDs in the biological
-        #   assembly will match those in the full PDB.
+        #   assembly will match those in the full PDB
         src_gen = block.find_mmcif_category("_entity_src_gen")
         if len(src_gen) > 0:
             gen_entity_ids = list(src_gen.find_column("entity_id"))
@@ -859,7 +832,7 @@ class StructureInfo:
         for chain in rna_chains:
             chain_id = chain.subchain_id()
             # Chains of the form '<id>-<#>' may appear for identical copies
-            # of a chain in the biological assembly.
+            # of a chain in the biological assembly
             chain_id = chain_id.split("-")[0]
             entity_id = self.asym_id_to_entity_id[chain_id]
             self.chain_infos[chain_id] = ChainInfo(
@@ -926,7 +899,7 @@ class StructureInfo:
                 new_chain = gemmi.Chain("A")
 
                 # Add residues, using seqids as resids to preserve information
-                # about each residue's relative location in the sequence.
+                # about each residue's relative location in the sequence
                 for residue in chain:
                     new_chain.add_residue(residue)
                     new_chain[-1].seqid = gemmi.SeqId(f"{residue.label_seq}")
@@ -957,26 +930,17 @@ class StructureInfo:
         }
 
     @staticmethod
-    def from_pdb_id(
-        pdb_id: str,
-        sources: Set[str],
-        eq_classes: Dict[ChainID, Tuple[EqClassID, int]] = None,
-    ) -> StructureInfo:
+    def from_pdb_id(pdb_id: str) -> Optional[StructureInfo]:
         """
         Factory function for initializing a StructureInfo from a PDB ID.
 
         Parameters:
             pdb_id (str): The 4-letter PDB ID to check on RCSB.
-            sources (List[str]): A list of strings describing the sources this
-              PDB ID belongs to.
-            eq_classes (Dict[ChainID, Tuple[EqClassID, int]]):
-              Mapping from chain IDs to equivalence class IDs and the no. of
-              chains each contains.
         """
         print(f"Processing {pdb_id}...")
 
         # Retrieve the full structure to identify resolution and keywords, as
-        # well as the assembly for annotation.
+        # well as the assembly for annotation
         try:
             cif, assembly = get_structure(pdb_id)
         except (
@@ -991,9 +955,7 @@ class StructureInfo:
             print("Try resetting the cache and trying again?")
             raise e
 
-        return StructureInfo(
-            cif, assembly=assembly, eq_classes=eq_classes, sources=sources
-        )
+        return StructureInfo(cif, assembly=assembly)
 
     @staticmethod
     def __unmodify_res(match: re.Match[str]):
@@ -1081,38 +1043,21 @@ class StructureInfo:
         # Structure information
         auth_id = self.asym_id_to_auth_id[chain_id]
         chain_key = f"{self.pdb_id.lower()}_{auth_id}"
-        ba2_id = (
-            auth_id
-            if self.pdb_id.upper() not in BA1_TO_BA2
-            else BA1_TO_BA2.get(auth_id, auth_id)
-        )
-        ba2_key = f"{self.pdb_id.lower()}_{ba2_id}"
-
-        data.append(f'"{self.pdb_id.upper()}"')
+        data.append(self.pdb_id.upper())
         data.append(chain_id)
         data.append(auth_id)
         data.append(Config.SEQ_CLUST_REPR_CHAINS.get(chain_key, ""))
         data.append(str(Config.STRUCT_CLUST_COMPONENTS.get(chain_key, "")))
-        if ba2_key in Config.RNA3DBENCH_DS3_CHAINS:
-            self.sources.add("3D Bench DS3")
-        if ba2_key in Config.RNA3DBENCH_DS4_CHAINS:
-            self.sources.add("3D Bench DS4")
-        data.append(f'"{", ".join(self.sources)}"')
-        data.append(f'"{escape_quotes(self.pdb_name)}"')
-        data.append(f'"{self.published_date}"')
-        data.append(f'"{self.keywords}"')
-        data.append(f'"{self.method}"')
-        data.append(f'"{self.resolution}"')
+        data.append(self.pdb_name)
+        data.append(self.published_date)
+        data.append(self.keywords)
+        data.append(self.method)
+        data.append(self.resolution)
 
         # Chain-specific structure information
         chain_info = self.chain_infos[chain_id]
-        data.append(f'"{escape_quotes(chain_info.src_organism)}"')
-        data.append(f'"{escape_quotes(chain_info.syn_organism)}"')
-
-        # Equivalence class info
-        eq_class, ife_size = self.eq_classes.get(auth_id, ("", ""))
-        data.append(eq_class)
-        data.append(ife_size)
+        data.append(chain_info.src_organism)
+        data.append(chain_info.syn_organism)
 
         # Whether the RNA has structure (monomer or multimer)
         data.append(
@@ -1147,14 +1092,14 @@ class StructureInfo:
 
         # Residue types
         for residue_type in self.__tracked_residue_types:
-            data.append(f'"{", ".join(sorted(self.residues[residue_type]))}"')
+            data.append(", ".join(sorted(self.residues[residue_type])))
 
         # Cofactors
-        data.append(f'"{", ".join(sorted(self.cofactors[chain_id]))}"')
+        data.append(", ".join(sorted(self.cofactors[chain_id])))
 
         # Sequence information
         if chain_id not in self.sequences:
-            raise ValueError("Chain {chain_id} has no sequence information")
+            raise ValueError(f"Chain {chain_id} has no sequence information")
 
         seq = str(self.sequences[chain_id])
         seq_unmod = str(self.sequences_unmod[chain_id])
@@ -1172,7 +1117,7 @@ class StructureInfo:
             or not self.fam_hits[chain_id]
             or not self.fam_hits[chain_id][0]
         ):
-            data += ["", "", "", "", ""]
+            data += [""] * 6
         else:
             best_fam_hit = self.fam_hits[chain_id][0]
             data.append(best_fam_hit.name)
@@ -1184,4 +1129,8 @@ class StructureInfo:
             data.append(f"{best_fam_hit.score:.3f}")
             data.append(f"{best_fam_hit.e_value:.3e}")
 
+        if len(data) != len(self.HEADERS):
+            raise RuntimeError(
+                f"Expected {len(self.HEADERS)} fields, found {len(data)}"
+            )
         return data

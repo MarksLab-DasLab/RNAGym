@@ -1,28 +1,21 @@
-#!/usr/bin/env python3
-
-###############################################################################
-# `split.py`: Splits `annotated_chain_ids.csv` into the test split.
-###############################################################################
+"""Select the post-cutoff 3D benchmark targets."""
 
 import pandas as pd
+import polars as pl
 
-from rnagym.s3d.util import Config
-from rnagym.s3d.util.analysis import add_seq_id, add_tm_id, prep_usalign
-
-
-NMR_SENTINEL = 1.23456789
+from rnagym.config import Config2D, Config3D
+from rnagym.s3d.util import Config as Pipeline
+from rnagym.sequences import fitness_sequences, update_registry
 
 
 def debug_df(df: pd.DataFrame) -> None:
-    """
-    Prints debug information about the input DataFrame.
-    """
+    """Print a concise target summary."""
+    df["Rfam E-value"] = pd.to_numeric(df["Rfam E-value"], errors="coerce")
     # Count Rfam hits (E-value < 1)
     rfam_hits = df.query("`Rfam E-value` < 1")["Rfam"].nunique()
     print(f"{rfam_hits} unique Rfam hits (E-value < 1)")
 
     # Count unique Rfam signatures (any detected Rfam)
-    df["Rfam E-value"] = pd.to_numeric(df["Rfam E-value"], errors="coerce")
     count = len(df.query('Rfam == "" or `Rfam E-value` > 10'))
     print(f"RNAs with Rfam E-value >10.0: {count}")
 
@@ -30,259 +23,165 @@ def debug_df(df: pd.DataFrame) -> None:
     avg_length = df["L"].mean()
     print(f"Average length: {avg_length:.0f} nt")
 
-    # Average resolution (excluding NMR and N/A)
-    res_numeric = df[(df["Resolution"] != NMR_SENTINEL) & (df["Resolution"] != "N/A")][
-        "Resolution"
-    ]
-    avg_res = res_numeric.mean()
+    # Average resolution among structures measured by diffraction or cryo-EM
+    avg_res = df["Resolution"].mean()
     print(f"Average resolution: {avg_res:.2f} Å")
 
 
-def get_split_candidates() -> (pd.DataFrame, pd.DataFrame, list):
-    """
-    Retrives all candidate monomer and multimer chains based on the criteria in
-    `util/config.py`.  Note that TM_train and %ID_train are not yet processed.
-    """
+def get_split_candidates() -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """Select candidate monomer and multimer chains."""
     df = pd.read_csv(
-        "./annotated_chain_ids.csv",
+        Config3D.ANNOTATED_CHAINS_FILE,
         keep_default_na=False,
         na_values=[""],
         low_memory=False,
     )
     print(f"All RNAs: {len(df)}")
     og_cols = df.columns.tolist()
+    quality = df.apply(Config3D.passes_quality, axis=1)
+    monomers = df.apply(Config3D.is_monomer, axis=1)
 
-    # Drop rows that failed to download
-    df = df[df["Asym. Chain ID"] != "ERROR: Failed to download"]
-
-    # Clean up resolution column
+    # Use the worst comma-separated resolution while leaving NMR null
     df["Resolution"] = (
         df["Resolution"]
         .str.split(",")
         .explode()
-        .replace("N/A", NMR_SENTINEL)  # NMR structures
-        .replace(".", None)
-        .replace("n.s.", None)
-        .astype(float)
+        .pipe(pd.to_numeric, errors="coerce")
         .groupby(level=0)
         .max()
     )
 
-    # --- Filter RNAs ---
-    # Structured
-    df.columns = df.columns.str.replace("#", "no.")
-
-    # Quality + Date cutoff
-    df = df.query(
-        f"Resolution <= {Config.MAX_RESOLUTION} "
-        f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING}"
-    )
+    df = df.loc[quality].copy()
     print(f"Quality RNAs: {len(df)}")
 
-    df = df.query(f'Published >= "{Config.TRAINING_CUTOFF}"')
+    df = df[df["Published"] > Config3D.TARGET_CUTOFF]
     print(f"After cutoff RNAs: {len(df)}")
 
-    # Rfam
     df.loc[:, "Rfam"] = df["Rfam"].fillna("")
-    # df = df.query(
-    #    f"`Rfam fraction observed` >= {Config.MIN_RFAM_OBSERVED} " f'or Rfam == ""'
-    # )
-
-    # Structured
-    df = df.query(f"{Config.MIN_L} <= L")
-    is_monomer = (
-        f"`% covered (any polymer)` <= {Config.MAX_PCT_COVER_MONOMER} "
-        f"and `Self Structured` == True "
-        # NOTE(MCA): We use L here to avoid including the lengths of other
-        #   polymers that will not be part of the prediction.
-        f"and L <= {Config.MAX_N}"
-    )
-    mon_df = df.query(is_monomer)
+    df = df[df["L"].between(Config3D.MIN_LENGTH, Config3D.MAX_SEQUENCE_LENGTH)]
+    mon_df = df[monomers.loc[df.index]]
     print(f"Monomers: {len(mon_df)}")
-    is_multimer = (
-        f"`% covered (any polymer)` > {Config.MAX_PCT_COVER_MONOMER} "
-        # NOTE(MCA): Here, we use N because the other polymer chains will be
-        #   included as part of the prediction.
-        f"and N <= {Config.MAX_N}"
+    # Bound the annotated asymmetric-unit polymer length
+    is_multimer = (df["% covered (any polymer)"] > Config3D.MAX_POLYMER_COVERAGE) & (
+        df["N"] <= Config3D.MAX_COMPLEX_LENGTH
     )
-    mul_df = df.query(is_multimer)
+    mul_df = df[is_multimer]
     print(f"Multimers: {len(mul_df)}")
 
-    # --- Add TM ID scores to the best resolution structures of each cluster ---
-    # Sort by both PDB ID and asym. chain ID to ensure strict ordering of the
-    # entire dataset
-    df = df.sort_values(
+    # Keep every experimental structure, including repeated exact sequences
+    mon_df = mon_df.sort_values(
+        by=["Resolution", "L", "PDB ID", "Asym. Chain ID"],
+        ascending=[True, False, True, True],
+    )
+    mul_df = mul_df.sort_values(
         by=["Resolution", "L", "PDB ID", "Asym. Chain ID"],
         ascending=[True, False, True, True],
     )
 
-    def get_best_seqs(df):
-        return df.groupby("Sequence (unmod.)").first().reset_index()
-
-    mon_df = get_best_seqs(mon_df)
-    mul_df = get_best_seqs(mul_df)
-    print("After best seqs")
-    print(f"{len(mon_df)=}")
-    print(f"{len(mul_df)=}")
-    print(f"{mul_df['PDB ID'].nunique()=}")
-
     return mon_df, mul_df, og_cols
 
 
-def main():
+def main() -> None:
+    """Write the selected targets and updated shared sequence registry."""
     mon_df, mul_df, og_cols = get_split_candidates()
-    prep_usalign()
 
-    # --- Select up to two sequences clusters per Rfam ---
-    def get_best_rfams(df):
-        filtered_rows = []
-        add_seq_id(df)
-        add_tm_id(df)
-        df = df.sort_values(
-            by=[
-                "AF3 TM Homolog Score",
-                "AF3 Sequence Homolog %id",
-                "Resolution",
-                "L",
-                "PDB ID",
-                "Asym. Chain ID",
-            ],
-            ascending=[True, True, True, False, True, True],
-        )
-        for rfam, fam_group in df.groupby("Rfam"):
-            # Keep top N sequence clusters per Rfam, or all sequence clusters
-            # with no Rfam
-            n = len(fam_group) if rfam == "" else Config.TOP_N
-            top_n = fam_group.groupby("Sequence Cluster").first().reset_index().head(n)
-            filtered_rows.append(top_n)
+    def prepare_targets(df: pd.DataFrame, target_type: str) -> pd.DataFrame:
+        """Restore published columns and label one target type."""
+        df = df.copy()
+        target_cols = og_cols.copy()
+        for bl_name in Pipeline.BASELINES.keys():
+            prefix = bl_name.upper()
+            target_cols.extend(
+                [
+                    f"{prefix} TM Homolog",
+                    f"{prefix} TM Homolog Date",
+                    f"{prefix} TM Homolog Rfam",
+                    f"{prefix} TM Homolog Score",
+                ]
+            )
+        df = df.reindex(columns=target_cols)
+        df.insert(0, "type", target_type)
+        df["Resolution"] = pd.to_numeric(df["Resolution"])
+        integer_columns = [
+            "Rfam Cluster",
+            "N_nt",
+            "N_aa",
+            "N",
+            "L",
+            "Rfam L",
+            *[column for column in df if column.startswith("# of ")],
+        ]
+        df[integer_columns] = df[integer_columns].apply(pd.to_numeric).astype("Int64")
+        return df
 
-        return pd.concat(filtered_rows).reset_index()
+    targets = pd.concat(
+        [prepare_targets(mon_df, "monomer"), prepare_targets(mul_df, "multimer")],
+        ignore_index=True,
+    ).sort_values(by=["type", "PDB ID", "Auth. Chain ID"])
 
-    # Rank rows (lower is better)
-    mon_df = get_best_rfams(mon_df)
-    mul_df = get_best_rfams(mul_df)
-    print("After best rfams")
-    print(f"{len(mon_df)=}")
-    print(f"{len(mul_df)=}")
-    print(f"{mul_df['PDB ID'].nunique()=}")
+    def update_homology(data: pd.DataFrame, cached: pd.DataFrame) -> pd.DataFrame:
+        """Merge cached homology columns by PDB chain."""
+        index = ["PDB ID", "Asym. Chain ID"]
+        data = data.set_index(index)
+        cached = cached.set_index(index)
+        if data.index.has_duplicates or cached.index.has_duplicates:
+            raise RuntimeError("PDB chain identifiers must be unique")
+        for column in cached:
+            if " TM Homolog" in column:
+                values = cached[column].reindex(data.index)
+                data[column] = values.combine_first(data[column])
+        return data.reset_index()
 
-    # --- Create training set ---
-    print("\n--- Creating training set ---")
-    test_df = pd.concat([mon_df, mul_df])
-    test_ids = set(zip(test_df["PDB ID"], test_df["Asym. Chain ID"]))
+    # Preserve cached training-homology annotations for previously released targets
+    if Config3D.TARGET_FILE.is_file():
+        targets = update_homology(targets, pd.read_parquet(Config3D.TARGET_FILE))
+    if Config3D.USALIGN_ANNOTATION_DIR.is_dir():
+        annotations = sorted(Config3D.USALIGN_ANNOTATION_DIR.glob("*.parquet"))
+        if annotations:
+            targets = update_homology(
+                targets, pd.concat(map(pd.read_parquet, annotations))
+            )
 
-    # Reload and apply quality filters (but not date filter)
-    all_chains_df = pd.read_csv(
-        "./annotated_chain_ids.csv",
-        keep_default_na=False,
-        na_values=[""],
-        low_memory=False,
+    structures = pl.read_parquet(Config2D.STRUCTURE_FILE).select("uid", "sequence")
+    modalities = pl.concat(
+        [
+            pl.read_parquet(Config2D.MAPPING_FILE)
+            .select("sequence")
+            .with_columns(pl.lit("mapping").alias("modality")),
+            structures.select(
+                "sequence",
+                pl.col("uid").str.split(":").list.first().alias("modality"),
+            ),
+            pl.from_pandas(targets[["Sequence (unmod.)"]])
+            .rename({"Sequence (unmod.)": "sequence"})
+            .with_columns(pl.lit("3d").alias("modality")),
+            fitness_sequences(),
+        ]
     )
-    all_chains_df = all_chains_df[
-        all_chains_df["Asym. Chain ID"] != "ERROR: Failed to download"
+    registry = update_registry(modalities)
+    identifiers = pd.DataFrame(
+        registry.select(
+            pl.col("sequence").alias("Sequence (unmod.)"),
+            "sequence_id",
+            "cluster_rep",
+        ).to_dict(as_series=False)
+    )
+    targets = targets.merge(identifiers, on="Sequence (unmod.)", validate="many_to_one")
+    numeric_homology = [
+        column for column in targets if column.endswith(" Homolog Score")
     ]
-    all_chains_df["Resolution"] = (
-        all_chains_df["Resolution"]
-        .str.split(",")
-        .explode()
-        .replace("N/A", NMR_SENTINEL)
-        .replace(".", None)
-        .replace("n.s.", None)
-        .astype(float)
-        .groupby(level=0)
-        .max()
-    )
+    targets[numeric_homology] = targets[numeric_homology].apply(pd.to_numeric)
 
-    # Apply quality filters and date filter for TRAINING (before cutoff)
-    train_df = all_chains_df.query(
-        f"Resolution <= {Config.MAX_RESOLUTION} "
-        f"and `Fraction missing` <= {Config.MAX_FRAC_MISSING} "
-        f"and L >= {Config.MIN_L} "
-        f'and Published < "{Config.TRAINING_CUTOFF}"'
-    )
-
-    # Remove test set chains and deduplicate by sequence
-    id_tuples = zip(train_df["PDB ID"], train_df["Asym. Chain ID"])
-    train_df = train_df[[i not in test_ids for i in id_tuples]].copy()
-    train_df = (
-        train_df.sort_values(
-            by=["Resolution", "L", "PDB ID", "Asym. Chain ID"],
-            ascending=[True, False, True, True],
-        )
-        .groupby("Sequence (unmod.)")
-        .first()
-        .reset_index()
-    )
-
-    # Count monomers and multimers
-    train_mon = train_df[
-        train_df["% covered (any polymer)"] <= Config.MAX_PCT_COVER_MONOMER
-    ]
-    train_mul = train_df[
-        train_df["% covered (any polymer)"] > Config.MAX_PCT_COVER_MONOMER
-    ]
-    print(f"Training set: {len(train_mon)} monomers, {len(train_mul)} multimers")
-
-    # Write to CSV
-    train_df["Resolution"] = train_df["Resolution"].replace(NMR_SENTINEL, "N/A")
-    train_df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(
-        "train.csv", index=False
-    )
-    print(f"{len(train_df)} training chains written to train.csv")
-    debug_df(train_df)
-    print("")
-
-    # Debug the RNAGym test dataset
-    print("--- Debug info for test dataset ---")
-    debug_df(test_df)
-    print("")
-
-    # Debug the full RNAGym dataset
-    print("--- Debug info for full dataset ---")
-    all_data = pd.concat([train_df, test_df])
-    debug_df(all_data)
-    print("")
-
-    # Calculate TM_train between test and train using AF3 TM_train, since it is
-    # the most recent model and therefore sets the training set date cutoff.
-    # Note this is slightly approximate, as our train set was filtered for high
-    # quality structures only.
-    print("\n--- Approximate test-to-train homology ---")
-    test_tm = pd.to_numeric(test_df["AF3 TM Homolog Score"], errors="coerce").dropna()
-    print(
-        f"min={test_tm.min():.3f}, max={test_tm.max():.3f}, "
-        f"avg={test_tm.mean():.3f}, median={test_tm.median():.3f}"
-    )
-    print("")
-
-    # --- Write to CSV ---
-    def write_to_csv(df, fname):
-        print(f"--- Writing {fname}... ---")
-        debug_df(df)
-        df.columns = df.columns.str.replace("no.", "#")
-        target_cols = og_cols
-        for bl_name in Config.BASELINES.keys():
-            new_col = f"{bl_name.upper()} Sequence Homolog"
-            target_cols += [
-                new_col,
-                f"{new_col} Date",
-                f"{new_col} %id",
-            ]
-        for bl_name in Config.BASELINES.keys():
-            new_col = f"{bl_name.upper()} TM Homolog"
-            target_cols += [
-                new_col,
-                f"{new_col} Date",
-                f"{new_col} Rfam",
-                f"{new_col} Score",
-            ]
-        df = df[target_cols]
-        df["Resolution"] = df["Resolution"].replace(NMR_SENTINEL, "N/A")
-        df.sort_values(by=["PDB ID", "Auth. Chain ID"]).to_csv(fname, index=False)
-        print("")
-
-    write_to_csv(mon_df, Config.MONOMER_CSV)
-    write_to_csv(mul_df, Config.MULTIMER_CSV)
+    debug_df(targets)
+    Config3D.SEQUENCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    registry_tmp = Config3D.SEQUENCE_FILE.with_suffix(".parquet.tmp")
+    targets_tmp = Config3D.TARGET_FILE.with_suffix(".parquet.tmp")
+    registry.write_parquet(registry_tmp, compression="zstd", statistics=True)
+    targets.to_parquet(targets_tmp, compression="zstd", index=False)
+    registry_tmp.replace(Config3D.SEQUENCE_FILE)
+    targets_tmp.replace(Config3D.TARGET_FILE)
+    print(f"Wrote {registry.height:,} sequences to {Config3D.SEQUENCE_FILE}")
+    print(f"Wrote {len(targets)} targets to {Config3D.TARGET_FILE}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-# RNA3DB datasets for RNA Gym
+# RNA3DB datasets for RNAGym
 
-These files were generated using the 2024-12-04 edition of [RNA3DB][1].
+These files were generated using the 2025-10-01 edition of [RNA3DB][1].
 
 ## Files
 
@@ -10,6 +10,7 @@ These files were generated using the 2024-12-04 edition of [RNA3DB][1].
 | filter.json           | Custom RNAGym filtering (>= 16 nt)           |
 | cluster.seq.json      | Sequence-based clustering                    |
 | cluster.struct.json   | Structure-based clustering                   |
+| cmscans/              | Rfam 15.0 hits supplied by RNA3DB            |
 
 ## RNAGym Clustering
 
@@ -26,7 +27,7 @@ See [here][0] for full documentation and default settings.
 ```
 2. Cluster (sequence only: 90% similarity, 90% identity)
 ```bash
-> python -m rna3db cluster filter.json cluster.seq.json \
+> PYTHONHASHSEED=0 python -m rna3db cluster filter.json cluster.seq.json \
       --mmseqs_binary_path "$(which mmseqs)" \
       --min_seq_id 0.9 \
       --min_seq_coverage 0.9 \
@@ -36,7 +37,7 @@ See [here][0] for full documentation and default settings.
 3. Cluster (structure only):
 ```bash
 > # E-value cutoff of 1.00 to detect loose homology
-> python -m rna3db cluster filter.json cluster.struct.json \
+> PYTHONHASHSEED=0 python -m rna3db cluster filter.json cluster.struct.json \
     --tbl_dir cmscans/ \
     --structural_e_value_cutoff 1.00 \
     --only_structure
@@ -51,4 +52,4 @@ prediction, Journal of Molecular Biology, Volume 436, Issue 17, 2024
 
 <!--Links-->
 [0]: https://github.com/marcellszi/rna3db/wiki/Documentation
-[1]: https://github.com/marcellszi/rna3db/releases/tag/2024-12-04-full-release
+[1]: https://github.com/marcellszi/rna3db/releases/tag/2025-10-01-incremental-release

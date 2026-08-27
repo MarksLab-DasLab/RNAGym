@@ -8,6 +8,9 @@ _DATA_DIR = _REPO_DIR / "data"
 _DATABASE_DIR = Path(
     os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
 )
+_CHECKPOINT_DIR = Path(
+    os.environ.get("RNAGYM_CHECKPOINT_DIR", "/n/lw_groups/marks/ckpt")
+)
 
 
 class _Config:
@@ -16,6 +19,7 @@ class _Config:
     REPO_DIR = _REPO_DIR
     DATA_DIR = _DATA_DIR
     DATABASE_DIR = _DATABASE_DIR
+    CHECKPOINT_DIR = _CHECKPOINT_DIR
     MAX_SEQUENCE_LENGTH = 1_022
     RFAM_FILE = DATA_DIR / "rnagym_rfams.parquet"
     SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
@@ -66,30 +70,92 @@ class ConfigFitness(_Config):
     """Fitness benchmark configuration."""
 
     DIR = _REPO_DIR / "fitness"
+    DATA_DIR = _DATA_DIR / "fitness"
+    MSA_DIR = DATA_DIR / "msa"
     REFERENCE_FILE = DIR / "reference_sheet_final.csv"
 
 
-class Config3D(_Config):
-    """3D inputs shared with the 2D benchmark."""
+class ConfigRiboseek(_Config):
+    """Shared Riboseek configuration."""
 
+    CACHE_DIR = _DATA_DIR / "riboseek" / "cache"
+    RNACENTRAL_VERSION = "27.0"
+    RNACENTRAL_DIR = _DATABASE_DIR / "RNAcentral" / RNACENTRAL_VERSION
+    NT_VERSION = "2026-08-04"
+    NT_DIR = _DATABASE_DIR / "NCBI-nt" / NT_VERSION
+    DATABASE_RNACENTRAL = RNACENTRAL_DIR / "riboseek_gpu"
+    DATABASE_NT = NT_DIR / "chunks" / "riboseek_gpu"
+    MAX_TARGET_LENGTH = 10_000
+    # Preserve complete matches to any benchmark query across chunk boundaries
+    TARGET_OVERLAP = 2_000
+    NT_PARTITION_DIR = NT_DIR / "partitions"
+    DATABASE_NT_PARTS = tuple(
+        sorted(
+            path
+            for path in NT_PARTITION_DIR.glob("riboseek_gpu_*")
+            if path.is_file() and not path.suffix and not path.name.endswith("_h")
+        )
+    )
+
+
+class Config3D(_Config):
+    """3D benchmark configuration."""
+
+    DIR = _REPO_DIR / "rnagym" / "s3d"
+    RNA3DB_DIR = DIR / "datasets" / "rna3db"
+    RNA3DB_PARSE_FILE = RNA3DB_DIR / "parse.json"
     DATA_DIR = _DATA_DIR / "3d"
     CURATION_DIR = DATA_DIR / "curation"
     ANNOTATED_CHAINS_FILE = CURATION_DIR / "annotated_chains.csv"
     TARGET_FILE = DATA_DIR / "rnagym_3d.parquet"
+    SCORE_FILE = DATA_DIR / "rnagym_3d_scores.parquet"
+    MSA_DIR = DATA_DIR / "msa"
+    PREDICTION_DIR = DATA_DIR / "predictions"
     CACHE_DIR = DATA_DIR / "cache"
+    USALIGN_DIR = DATA_DIR / "usalign"
+    USALIGN_ANNOTATION_DIR = USALIGN_DIR / "annotations"
+    USALIGN_BINARY = "USalign"
+    LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "3d"
+    LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
+    LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
+    RFAM_VERSION = "15.0"  # Matches the bundled RNA3DB annotations
+    RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION
+    MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
+    AF3_DIR = MODEL_SOURCE_DIR / "alphafold3"
+    AF3_DATABASE_DIR = _DATABASE_DIR / "AlphaFold3" / "latest"
+    AF3_PARAM_DIR = _CHECKPOINT_DIR / "alphafold3" / "latest"
+    NUFOLD_DIR = MODEL_SOURCE_DIR / "nufold"
+    NUFOLD_PARAM_FILE = _CHECKPOINT_DIR / "nufold" / "latest" / "global_step145245.pt"
+    RHOFOLD_DIR = MODEL_SOURCE_DIR / "rhofold"
+    RHOFOLD_PARAM_FILE = (
+        _CHECKPOINT_DIR / "rhofold" / "latest" / "rhofold_pretrained_params.pt"
+    )
+    RF2NA_DIR = MODEL_SOURCE_DIR / "RoseTTAFold2NA"
+    RF2NA_DATABASE = _DATABASE_DIR / "PDB100" / "latest" / "pdb100_2021Mar03"
+    RF2NA_PARAM_FILE = _CHECKPOINT_DIR / "rosettafold2na" / "latest" / "RF2NA_apr23.pt"
+    TRRNA_DIR = MODEL_SOURCE_DIR / "trRosettaRNA_v1.1"
+    IPKNOT = MODEL_SOURCE_DIR / "ipknot" / "ipknot-1.1.0-x86_64-linux" / "ipknot"
+    MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 
     MAX_RESOLUTION = 5.0
     MAX_MISSING = 0.25
     MAX_UNKNOWN_RATIO = 0.10
     MAX_POLYMER_COVERAGE = 0.33
     MIN_LENGTH = 16
+    MAX_COMPLEX_LENGTH = 2_000
+    TARGET_CUTOFF = "2023-01-12"
 
     @classmethod
     def passes_quality(cls, chain):
         """Apply the shared PDB quality filters."""
         resolution = chain["Resolution"]
         sequence = chain["Sequence (unmod.)"]
-        if not isinstance(resolution, str) or resolution in {".", "n.s."}:
+        if (
+            not isinstance(resolution, str)
+            or resolution in {".", "n.s."}
+            or not isinstance(sequence, str)
+            or not sequence
+        ):
             return False
         if resolution != "N/A":
             resolutions = [
@@ -100,7 +166,8 @@ class Config3D(_Config):
         return (
             chain["Asym. Chain ID"] != "ERROR: Failed to download"
             and chain["Fraction missing"] <= cls.MAX_MISSING
-            and sequence.count("N") / len(sequence) <= cls.MAX_UNKNOWN_RATIO
+            and sum(base not in "ACGU" for base in sequence) / len(sequence)
+            <= cls.MAX_UNKNOWN_RATIO
         )
 
     @classmethod
@@ -109,7 +176,6 @@ class Config3D(_Config):
         if not cls.passes_quality(chain):
             return False
         return (
-            cls.MIN_LENGTH <= chain["L"] <= cls.MAX_SEQUENCE_LENGTH
-            and chain["% covered (any polymer)"] <= cls.MAX_POLYMER_COVERAGE
+            chain["% covered (any polymer)"] <= cls.MAX_POLYMER_COVERAGE
             and chain["Self Structured"]
         )
