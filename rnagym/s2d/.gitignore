@@ -6,7 +6,3 @@
 
 # --- Root wildcards ---
 /*.pdf
-
-# --- Anywhere stuff ---
-# Slurm prediction logs
-.rg_predict_out/

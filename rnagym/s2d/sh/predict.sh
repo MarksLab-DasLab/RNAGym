@@ -39,7 +39,7 @@ ribonanzanet | rinalmo | ufold | rna-fm)
 esac
 
 cd "$PROJECT_ROOT"
-mkdir -p .rg_predict_out
+mkdir -p .rg_jobs
 
 check_complete() {
 	local output_dir="$PROJECT_ROOT/../../data/2d/predictions/$environment/$1"

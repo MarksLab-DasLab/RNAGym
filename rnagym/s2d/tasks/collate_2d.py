@@ -15,6 +15,7 @@ import polars as pl
 from tqdm.auto import tqdm
 
 from rnagym.config import Config2D, Config3D
+from rnagym.s3d.util.curation import monomer_filter
 from rnagym.sequences import fitness_sequences, update_registry
 
 from ..models.utils import dot_bracket, pairs_to_dot_bracket, parse_pairs
@@ -251,35 +252,29 @@ def get_efold_challenging_structures(
     return consolidate_structures(rows, "efold_challenging", source_count)
 
 
-def is_pdb_candidate(row: dict[str, str]) -> bool:
-    """Apply the 3D monomer and quality filters to one PDB chain."""
-    return Config3D.is_monomer(row) and all(
-        base in "ACGU" for base in row["Sequence (unmod.)"]
-    )
-
-
 def get_pdb_candidates() -> list[tuple[str, Path, str]]:
     """Select self-structured RNA monomers from the annotated PDB chains."""
-    source = pl.read_csv(
-        Config3D.ANNOTATED_CHAINS_FILE, infer_schema_length=None
-    ).to_dicts()
-    candidates = []
-    for row in source:
-        if not is_pdb_candidate(row):
-            continue
-        pdb_id = row["PDB ID"].lower()
-        asym_id = row["Asym. Chain ID"]
-        candidates.append(
-            (
-                f"pdb:{pdb_id}_{asym_id}",
-                Config3D.CACHE_DIR / pdb_id / asym_id / f"{asym_id}.pdb",
-                row["Sequence (unmod.)"],
-            )
+    source = pl.read_parquet(Config3D.ANNOTATED_CHAINS_FILE)
+    candidates = (
+        source.filter(
+            monomer_filter()
+            & pl.col("sequence").str.contains("^[ACGU]+$")
+            & (pl.col("sequence").str.len_chars() <= Config2D.MAX_SEQUENCE_LENGTH)
         )
-    candidates.sort()
+        .select("pdb_id", "asym_id", "sequence")
+        .sort("pdb_id", "asym_id")
+    )
+    candidates = [
+        (
+            f"pdb:{pdb_id}_{asym_id}",
+            Config3D.chain_file(pdb_id, asym_id),
+            sequence,
+        )
+        for pdb_id, asym_id, sequence in candidates.iter_rows()
+    ]
     if len({uid for uid, _, _ in candidates}) != len(candidates):
         raise RuntimeError("PDB chain identifiers must be unique")
-    print(f"PDB: {len(source):,} source chains -> {len(candidates):,} monomers")
+    print(f"PDB: {source.height:,} source chains -> {len(candidates):,} monomers")
     return candidates
 
 
@@ -396,7 +391,7 @@ def main() -> None:
             [
                 modalities,
                 pl.read_parquet(Config3D.TARGET_FILE)
-                .select(pl.col("Sequence (unmod.)").alias("sequence"))
+                .select("sequence")
                 .with_columns(pl.lit("3d").alias("modality")),
             ]
         )

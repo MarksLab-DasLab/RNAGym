@@ -1,97 +1,55 @@
-#!/usr/bin/env python3
+"""Annotate candidate PDB RNA chains for filtering."""
 
-###############################################################################
-# `annotate.py`: Annotates the merged PDBs with additional criteria that can be
-# used for filtering.  Output is written to `annotated_chain_ids.csv`.
-###############################################################################
-
-from __future__ import annotations
-
+import json
+import os
 from concurrent.futures import ProcessPoolExecutor
-from typing import List
 
-import pandas as pd
+import polars as pl
+from tqdm import tqdm
 
-from rnagym.s3d.util.analysis import assign_cluster_0
+from rnagym.config import Config3D
+from rnagym.s3d.util.sequence import rfam_families, rna3db_hits
 from rnagym.s3d.util.structure import StructureInfo
 
 
-def process_row(row) -> List[str]:
-    """
-    Helper function for processing the input RNA 3D Hub CSV in parallel.
-    """
-    pdb_id, sources, eq_classes = row.iloc[0:3]
-
-    if pd.isna(eq_classes):
-        eq_classes = {}
-    else:
-        eq_classes = [eq_class.split("|") for eq_class in eq_classes.split(", ")]
-        eq_classes = {
-            chain_id: (eq_class, ife_size)
-            for chain_id, eq_class, ife_size in eq_classes
-        }
-
-    sources = set(sources.split(", "))
-    structure_info = StructureInfo.from_pdb_id(
-        pdb_id, sources=sources, eq_classes=eq_classes
-    )
-
-    if structure_info is None:
-        return [[pdb_id, "ERROR: Failed to download"]]
-
-    return structure_info.get_data()
+def process_pdb(pdb_id: str) -> list[dict[str, object]]:
+    """Annotate every RNA chain in one PDB entry."""
+    structure = StructureInfo.from_pdb_id(pdb_id)
+    return [] if structure is None else structure.get_data()
 
 
-def main():
-    # Write the headers
-    out_fname = "annotated_chain_ids.csv"
-    headers = StructureInfo.HEADERS
-    with open(out_fname, "w") as file:
-        file.write(f"{','.join(headers)}\n")
-
-    # Load the data
-    data_path = "./merged_pdb_ids.csv"
-    data = pd.read_csv(data_path)
-
-    # Write the data in 50 splits (limits total memory utilization)
-    data = list(data.iterrows())
-    for split in [data[i::10] for i in range(10)]:
-        # Single-threaded for debugging
-        # data = [process_row(row) for _, row in split if row.iloc[0] == "8TOC"]
-
-        # Multi-threaded for speed
-        with ProcessPoolExecutor() as executor:
-            data = list(executor.map(process_row, (row for _, row in split)))
-
-        data = list(filter(None, data))
-
-        with open(out_fname, "a") as file:
-            file.writelines(
-                f"{','.join(chain_datum)}\n"
-                for chain_data in data
-                for chain_datum in chain_data
+def main() -> None:
+    """Write native typed annotations for every RNA3DB chain."""
+    chains = json.loads(Config3D.RNA3DB_PARSE_FILE.read_text())
+    pdb_ids = sorted({chain.partition("_")[0] for chain in chains})
+    # Load immutable lookups before forking so workers share the same pages
+    rfam_families()
+    rna3db_hits()
+    workers = len(os.sched_getaffinity(0))
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        rows = [
+            row
+            for annotations in tqdm(
+                executor.map(process_pdb, pdb_ids, chunksize=1),
+                total=len(pdb_ids),
+                desc="Annotating RNA3DB",
             )
+            for row in annotations
+        ]
 
-    # --- Add information about leakage ---
-    df = pd.read_csv(out_fname, keep_default_na=False, na_values=[], low_memory=False)
-    df = df.dropna(subset="Auth. Chain ID")  # failed to download
-    assign_cluster_0(df)
-    rfam_to_min_pub = df.groupby("Rfam Cluster")["Published"].min().to_dict()
-    seq_to_min_pub = df.groupby("Sequence Cluster")["Published"].min().to_dict()
-    df.loc[:, "Earliest Rfam homolog"] = df["Rfam Cluster"].map(rfam_to_min_pub)
-    df.loc[:, "Earliest sequence homolog"] = df["Sequence Cluster"].map(seq_to_min_pub)
-    df = df.sort_values(by=["PDB ID", "Auth. Chain ID"])
-
-    print(
-        "%d novel structures post-2023/01/01 (excluding component 0)"
-        % (df["Earliest Rfam homolog"] >= "2023-01-01").sum()
+    data = pl.from_dicts(rows, infer_schema_length=None)
+    list_columns = [
+        name for name, dtype in data.schema.items() if isinstance(dtype, pl.List)
+    ]
+    data = data.with_columns(pl.col(list_columns).cast(pl.List(pl.String))).sort(
+        "pdb_id", "auth_id"
     )
-    print(
-        "%d novel sequences post-2023/01/01"
-        % (df["Earliest sequence homolog"] >= "2023-01-01").sum()
-    )
-
-    df.to_csv(out_fname, index=False)
+    output = Config3D.ANNOTATED_CHAINS_FILE
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.tmp")
+    data.write_parquet(temporary, compression="zstd", statistics=True)
+    temporary.replace(output)
+    print(f"Wrote {data.height:,} chains to {output}")
 
 
 if __name__ == "__main__":

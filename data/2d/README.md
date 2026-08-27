@@ -5,7 +5,7 @@
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
 | `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
-| `rnagym_2d.parquet` | 57,120 bpRNA-1m, 45 eFold Challenging, 358 PseudoBase, and 2,404 PDB structures | `uid` |
+| `rnagym_2d.parquet` | 57,120 bpRNA-1m, 45 eFold Challenging, 358 PseudoBase, and 2,566 PDB structures | `uid` |
 
 ## Schemas
 
@@ -43,7 +43,7 @@ the highest-SNR measurement is the representative.
 | `resolved` | Positions resolved in the source structure and included in scoring. |
 
 PDB entries are canonical RNA monomers selected from
-`data/3d/curation/annotated_chains.csv` using
+`data/3d/curation/annotated_chains.parquet` using
 [`Config3D`](../../rnagym/config.py). Structures contain cis
 Watson-Crick/Watson-Crick pairs assigned by the pinned RNA-Puzzles MC-Annotate.
 Contacts involving residues with multiple such partners are excluded because

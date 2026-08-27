@@ -1,18 +1,18 @@
-"""Test secondary structure scoring, decoders, and model adapters."""
+"""Reproduce the 2D benchmark and model adapters on real RNA sequences."""
 
 import importlib
 import os
+from pathlib import Path
 
 import numpy as np
 import polars as pl
 import pytest
-from rnagym.s2d.models.utils import (
-    decode_pair_probabilities,
-    pairs_to_dot_bracket,
-    parse_pairs,
-)
+from polars.testing import assert_frame_equal
+from rnagym.config import Config2D
+from rnagym.s2d.models.utils import parse_pairs
 
 DECODERS = {"hungarian", "threshknot"}
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "s2d"
 MODEL = os.environ.get("PIXI_ENVIRONMENT_NAME")
 MODEL_METHODS = {
     "contrafold": {"viterbi", "mea_gamma_1"},
@@ -25,91 +25,62 @@ MODEL_METHODS = {
     "ufold": {"threshold_0.5"},
     "vienna": {"mfe", "mea_gamma_1", "rnapkplex"},
 }
-SEQUENCE = "GGGGAAAACCCC"
 
 
-def test_adapter() -> None:
-    """Check one model adapter's output contract."""
+def test_2d_workflow(tmp_path, monkeypatch) -> None:
+    """Reproduce scoring and leaderboard output from released predictions."""
+    if MODEL not in {None, "default"}:
+        pytest.skip("Run the shared workflow in the default environment")
+    from rnagym.s2d.tasks import score
+
+    monkeypatch.setattr(Config2D, "MAPPING_FILE", FIXTURE_DIR / "mapping.parquet")
+    monkeypatch.setattr(Config2D, "PREDICTION_DIR", FIXTURE_DIR / "predictions")
+    monkeypatch.setattr(Config2D, "SEQUENCE_FILE", FIXTURE_DIR / "sequences.parquet")
+    monkeypatch.setattr(Config2D, "STRUCTURE_FILE", FIXTURE_DIR / "structures.parquet")
+    monkeypatch.setattr(Config2D, "LEADERBOARD_DIR", tmp_path)
+    monkeypatch.setattr(Config2D, "LEADERBOARD_FILE", tmp_path / "leaderboard.csv")
+    monkeypatch.setattr(Config2D, "LEADERBOARD_README", tmp_path / "README.md")
+    Config2D.LEADERBOARD_README.write_text(
+        "# Test leaderboard\n\n"
+        "<!-- BEGIN GENERATED TABLE -->\n"
+        "<!-- END GENERATED TABLE -->\n"
+    )
+
+    score.main()
+
+    assert_frame_equal(
+        pl.read_csv(Config2D.LEADERBOARD_FILE),
+        pl.read_csv(FIXTURE_DIR / "leaderboard.csv"),
+        check_exact=True,
+    )
+    assert (
+        Config2D.LEADERBOARD_README.read_text()
+        == (FIXTURE_DIR / "leaderboard.md").read_text()
+    )
+
+
+def test_model_adapter() -> None:
+    """Check one model environment's prediction contract on a real RNA."""
     if MODEL not in MODEL_METHODS:
         pytest.skip("Run through a model environment")
     if MODEL == "rinalmo":
-        torch = pytest.importorskip("torch")
+        torch = importlib.import_module("torch")
         if not torch.cuda.is_available():
             pytest.skip("RiNALMo requires a GPU")
+
+    sequence = (
+        pl.read_parquet(FIXTURE_DIR / "sequences.parquet", columns="sequence")
+        .sort(pl.col("sequence").str.len_chars())
+        .item(0, 0)
+    )
     adapter = importlib.import_module(f"rnagym.s2d.models.{MODEL.replace('-', '_')}")
-    prediction = adapter.predict(SEQUENCE)
+    prediction = adapter.predict(sequence)
     probabilities = np.asarray(prediction["probabilities"])
-    assert probabilities.shape == (len(SEQUENCE),)
+    assert probabilities.shape == (len(sequence),)
     assert np.all((0 <= probabilities) & (probabilities <= 1))
-    methods = {structure["method"] for structure in prediction["structures"]}
-    assert methods == DECODERS | MODEL_METHODS[MODEL]
+    assert {structure["method"] for structure in prediction["structures"]} == (
+        DECODERS | MODEL_METHODS[MODEL]
+    )
     for structure in prediction["structures"]:
-        assert len(structure["dot_bracket"]) == len(SEQUENCE)
+        assert len(structure["dot_bracket"]) == len(sequence)
         parse_pairs(structure["dot_bracket"])
-
-    if MODEL == "vienna":
-        structures = {
-            structure["method"]: structure["dot_bracket"]
-            for structure in adapter.predict("G")["structures"]
-        }
-        assert structures["rnapkplex"] == "."
-
-
-def test_decoders() -> None:
-    """Decode crossing helices and extended dot-bracket notation."""
-    probabilities = np.zeros((12, 12))
-    expected = {(0, 5), (1, 4), (2, 9), (3, 8)}
-    for i, j in expected:
-        probabilities[i, j] = probabilities[j, i] = 0.9
-    for structure in decode_pair_probabilities(probabilities):
-        assert parse_pairs(structure["dot_bracket"]) == expected
-
-    expected = {(0, 5), (1, 6), (2, 7), (3, 8), (4, 9)}
-    assert parse_pairs("([{<A)]}>a") == expected
-    assert parse_pairs("([{<a)]}>A") == expected
-
-    expected = {(0, 5), (1, 4), (2, 7), (3, 6)}
-    assert parse_pairs(pairs_to_dot_bracket(8, expected)) == expected
-
-
-def test_scoring() -> None:
-    """Check modifier masks, resolution masks, and cluster macro-averaging."""
-    pytest.importorskip("scipy")
-    from rnagym.s2d.tasks.score import (
-        score_mapping_batch,
-        structure_f1,
-        summarize,
-    )
-
-    scores = pl.DataFrame(
-        {
-            "model": ["model"] * 6,
-            "dataset": ["2d"] * 3 + ["mapping"] * 3,
-            "modality": ["pdb"] * 3 + ["DMS"] * 3,
-            "method": ["method"] * 6,
-            "metric": ["f1"] * 3 + ["spearman"] * 3,
-            "cluster_rep": ["cluster"] * 6,
-            "sequence_id": ["a", "a", "b"] * 2,
-            "score": [0.2, 0.8, 0.4] * 2,
-        }
-    )
-    summary = summarize(scores)
-    structures = summary.filter(pl.col("dataset") == "2d").row(0, named=True)
-    mapping = summary.filter(pl.col("dataset") == "mapping").row(0, named=True)
-    assert structures["score"] == pytest.approx(0.6)
-    assert structures["samples"] == 2
-    assert mapping["score"] == pytest.approx(1.4 / 3)
-    assert mapping["samples"] == 3
-
-    batch = pl.DataFrame(
-        {
-            "sequence": ["ACGU"],
-            "reactivity": [[0.1, 0.2, 100.0, -100.0]],
-            "probabilities": [[0.9, 0.8, 0.0, 1.0]],
-        }
-    )
-    assert score_mapping_batch(batch, "DMS", 4)[0] == pytest.approx(1.0)
-    assert score_mapping_batch(batch, "CMCT", 4)[0] == pytest.approx(1.0)
-    assert structure_f1("....", "....") == 1.0
-    assert structure_f1("(())", "....") == 0.0
-    assert structure_f1("(())", ".().", [False, True, True, False]) == 1.0

@@ -2,24 +2,51 @@
 
 ###############################################################################
 # `sequence.py`:  Helper classes for working with sequences and sequence
-#   alignments.
+#   alignments
 ###############################################################################
 from __future__ import annotations
 
-import os
-import re
+import json
 import shlex
 import subprocess
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import cache
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional
 
 import evcouplings.align.alignment as Alignment
 import pandas as pd
-from rna3db.tabular import TabularOutput
+from rna3db.tabular import TabularOutput, read_tbls_from_dir
 
-from rnagym.s3d.util import AccessionID, ChainID, Config, PdbID, Sequence
+from rnagym.config import Config3D
+from rnagym.s3d.util import AccessionID, ChainID, PdbID, Sequence
+
+
+@cache
+def rfam_families() -> pd.DataFrame:
+    """Load family sizes and covariance-model lengths from Rfam."""
+    # Columns follow Rfam's official family table schema
+    return pd.read_csv(
+        Config3D.RFAM_FAMILY_TABLE,
+        sep="\t",
+        header=None,
+        encoding="latin-1",
+        usecols=[0, 15, 29],
+        names=["accession", "num_full", "model_length"],
+        index_col="accession",
+    )
+
+
+@cache
+def rna3db_hits() -> dict[str, TabularOutput]:
+    """Load the released RNA3DB Rfam hits on first use."""
+    hits = defaultdict(list)
+    for hit in read_tbls_from_dir(Config3D.RNA3DB_CMSCAN_DIR):
+        hits[hit.query_name].append(hit)
+    queries = json.loads(Config3D.RNA3DB_PARSE_FILE.read_text())
+    return {query: TabularOutput(hits=hits[query]) for query in queries}
 
 
 @dataclass
@@ -74,11 +101,6 @@ class FamHits:
     data_frame: Optional[pd.DataFrame]
     __fam_hits: List[FamHit]
 
-    # Regex for grabbing the alignment length from an alignment statistics file
-    # generated using `esl-alistat`
-    __n_sequences_re = re.compile(r"Number of sequences:\s+(\d+)", re.MULTILINE)
-    __alignment_length_re = re.compile(r"Alignment length:\s+(\d+)", re.MULTILINE)
-
     def __init__(self, data_frame: pd.DataFrame, source: Source):
         """
         Initializes a FamHits object using the input data frame based on
@@ -114,11 +136,7 @@ class FamHits:
         fasta_file: NamedTemporaryFile,
         fam_source: FamHits.Source,
     ) -> FamHits:
-        """
-        Constructs a Pfam FamHits for the input sequence as a pandas DataFrame.
-        Returns the FamHits, and writes outputs to
-        `./out/{pdb_id}/{chain_id}/`.
-        """
+        """Return cached or newly computed family hits for one sequence."""
         # Extract the sequence
         sequence_lines = fasta_file.read().splitlines()[1:]
         fasta_file.seek(0)
@@ -145,12 +163,8 @@ class FamHits:
         asym_chain_id: ChainID,
         auth_chain_id: ChainID,
         fasta_file: NamedTemporaryFile,
-    ) -> Optional[pd.DataFrame]:
-        """
-        Constructs an Rfam FamHits for the input sequence as a pandas
-        DataFrame. Returns the hits, and writes outputs to
-        `./out/{pdb_id}/{chain_id}/`.
-        """
+    ) -> FamHits:
+        """Load released RNA3DB hits or scan one sequence against Rfam."""
         # Get the sequence
         _, sequence = next(Alignment.read_fasta(fasta_file))
         seq_len = len(sequence)
@@ -158,29 +172,25 @@ class FamHits:
         # Conduct the cmscan
         query_id = f"{pdb_id.lower()}_{auth_chain_id}"
         tbl = None
-        if query_id in Config.RNA3DB_HITS:
+        cached_hits = rna3db_hits()
+        if query_id in cached_hits:
             # Use the RNA3DB cached hit
-            tbl = Config.RNA3DB_HITS[query_id]
+            tbl = cached_hits[query_id]
         else:
             # Conduct our own Rfam search
-            out_prefix = Config.get_out_prefix(pdb_id=pdb_id, chain_id=asym_chain_id)
-            out_table = f"{out_prefix}/rfam_table.txt"
+            out_prefix = Config3D.chain_dir(pdb_id, asym_chain_id)
+            out_table = out_prefix / "rfam_table.txt"
             cmscan_cmd = shlex.split(
                 f"cmscan --mid --cpu 1 --fmt 1 -o {out_prefix}/cmscan.out "
-                f"--tblout {out_table} {Config.RFAM_CM} {fasta_file.name}"
+                f"--tblout {out_table} {Config3D.RFAM_CM} {fasta_file.name}"
             )
 
             try:
-                os.makedirs(out_prefix, exist_ok=True)
-                result = subprocess.run(cmscan_cmd, text=True, check=True)
-
-                if result.stderr:
-                    raise subprocess.CalledProcessError(result.stderr)
-
+                out_prefix.mkdir(parents=True, exist_ok=True)
+                subprocess.run(cmscan_cmd, check=True)
                 tbl = TabularOutput(out_table)
             except subprocess.CalledProcessError as e:
                 print(f"Unable to retrieve rfam hits for {pdb_id}_{asym_chain_id}: {e}")
-                print(f"{e.stderr=}")
                 fasta_file.seek(0)
                 contents = fasta_file.read()
                 fasta_file.seek(0)
@@ -200,37 +210,13 @@ class FamHits:
 
     @staticmethod
     def get_rfam_length(accession: AccessionID) -> int:
-        """
-        Returns the # of sequences in the Stockholm alignment for the input
-        accession ID.
-        """
-        # NOTE(MCA): Special cases for Rfams without provided alignments (too
-        #   large/computationally intensive).
-        if accession == "RF02541":
-            return 51934
-        if accession == "RF02543":
-            return 107465
-
-        # Initialize the Rfam seed if necessary
-        alistat_file = Config.RFAM_ALIGNMENT_STATS.format(accession=accession)
-        with open(alistat_file, "r") as f:
-            match = FamHits.__n_sequences_re.search(f.read())
-        return int(match.group(1))
+        """Return the number of full Rfam family members."""
+        return int(rfam_families().loc[accession, "num_full"])
 
     @staticmethod
     def get_rfam_model_length(accession: AccessionID) -> int:
-        # NOTE(MCA): Special cases for Rfams without provided alignments (too
-        #   large/computationally intensive).
-        if accession == "RF02541":
-            return 2950
-        if accession == "RF02543":
-            return 3350
-
-        # Initialize the Rfam seed if necessary
-        alistat_file = Config.RFAM_ALIGNMENT_STATS.format(accession=accession)
-        with open(alistat_file, "r") as f:
-            match = FamHits.__alignment_length_re.search(f.read())
-        return int(match.group(1))
+        """Return the covariance-model length for one Rfam family."""
+        return int(rfam_families().loc[accession, "model_length"])
 
     def __getitem__(self, index) -> Optional[FamHit]:
         """

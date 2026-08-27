@@ -1,5 +1,5 @@
 ###############################################################################
-# `fr3d.py`: Data required/useful for interfacing with FR3D Python.
+# `fr3d.py`: Data required/useful for interfacing with FR3D Python
 ###############################################################################
 
 from itertools import product
@@ -86,7 +86,7 @@ STACKING_LABELS = {
 # See: https://rna.bgsu.edu/FR3D/BasePhosphates/
 # NOTE(MCA): I have not found a matching resource for Base-Ribose interactions
 #   but assume that, much like the Base-Phosphate interactions, they are just
-#   defined by similarity scores to some arbitrary Base-Ribose motifs.
+#   defined by similarity scores to some arbitrary Base-Ribose motifs
 BASE_RIBOSE_LABELS = {f"{i}BR" for i in range(10)}
 PHOSPHATE_LABELS = {f"{i}BPh" for i in range(10)}
 
@@ -101,7 +101,7 @@ UNKNOWN_LABELS = {
 
 # NOTE(MCA): The prefix "n" means "near". This means that the interaction did
 #   not meet the cutoffs for any interaction, but was closest to whatever
-#   interaction is described by the suffix.
+#   interaction is described by the suffix
 CONTACT_LABELS = (
     BASEPAIR_LABELS
     | BASE_RIBOSE_LABELS
@@ -112,14 +112,14 @@ CONTACT_LABELS = (
 CONTACT_LABELS.update([f"n{label}" for label in CONTACT_LABELS])
 
 # Define "2D" labels as any traditional, Watson-Crick basepairs.  "3D"
-# interactions include all other types of interactions.
+# interactions include all other types of interactions
 CONTACT_LABELS_2D = set()
 CONTACT_LABELS_2D.update(get_basepair_labels("W", "W"))
 CONTACT_LABELS_3D = CONTACT_LABELS - CONTACT_LABELS_2D
 
 # Dictionary used by `annotate_nt_nt_in_structure`.  The keys are a
 # comprehensive list of all possible interaction types.  The empty list values
-# indicate that all NT-NT interactions of each category should be considered.
+# indicate that all NT-NT interactions of each category should be considered
 NT_NT_CATEGORIES = {
     "backbone": [],
     "basepair": [],

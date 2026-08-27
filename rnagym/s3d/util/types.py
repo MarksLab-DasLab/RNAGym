@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# `types.py`:  Useful types for RNA Gym 3D.
+# `types.py`:  Useful types for RNA Gym 3D
 ###############################################################################
 from typing import Dict, Set, Tuple
 
@@ -11,7 +11,6 @@ import gemmi
 AccessionID = str
 ChainID = str
 EntityID = int
-EqClassID = str
 MonomerID = str
 PdbID = str
 ResName = str
@@ -30,5 +29,5 @@ ResID = int
 SymmetryOp = str
 
 # int := # interactions crossed by the contact, i.e. the degree of
-# non-nestedness.  0 for nested base pairs.
+# non-nestedness.  0 for nested base pairs
 Fr3dContactID = Tuple[Fr3dResID, Fr3dResID, int]

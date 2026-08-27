@@ -1,0 +1,209 @@
+[workspace]
+name = "rnagym-3d"
+description = "RNAGym 3D structure benchmark environment"
+channels = [
+  "pytorch",
+  "nvidia",
+  "dglteam/label/cu118",
+  "https://conda.rosettacommons.org",
+  "conda-forge",
+  "bioconda",
+]
+platforms = ["linux-64"]
+channel-priority = "disabled"
+
+[dependencies]
+biopython = "1.*"
+curl = "8.*"
+gemmi = "0.*"
+go-shfmt = "==3.13.1"
+hhsuite = "3.*"
+hmmer = "3.*"
+infernal = "1.*"
+numpy = "1.*"
+pandas = "2.*"
+fastparquet = "*"
+mmseqs2 = "==15.6f452"
+polars = "1.*"
+pytest = "==8.4.2"
+python = "3.11.*"
+requests = "2.*"
+ruff = "==0.15.21"
+setuptools = "<81"
+shellcheck = "==0.11.0"
+taplo = "==0.10.0"
+tqdm = "4.*"
+usalign = "==2024.07.30"
+
+[pypi-dependencies]
+evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
+rna-normalizer = { git = "https://github.com/RNA-Puzzles/RNA_assessment.git", rev = "d46f0472e7d52629283bb046a9c8f5d36b35f685" }
+rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "4188517c48b1ad2610484f7d359cb77d87bd8957" }
+rnagym = { path = "../..", editable = true }
+
+[tasks]
+fmt = "bash sh/format.sh"
+lint = "bash sh/lint.sh"
+rna3db = "bash sh/fetch-rna3db.sh"
+pipeline = { cmd = "python -m rnagym.s3d.gym", depends-on = ["rna3db"] }
+annotate = { cmd = "python -m rnagym.s3d.gym annotate", depends-on = [
+  "rna3db",
+] }
+split = "python -m rnagym.s3d.gym split"
+leaderboard = "python -m rnagym.s3d.tasks.score"
+test = "cd ../.. && python -m pytest tests/test_s3d.py"
+rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
+score = { cmd = "python -m rnagym.s3d.tasks.score_predictions", depends-on = [
+  "rna-assessment-source",
+] }
+# TODO(MCA): Replace this installer once Riboseek is available through Bioconda
+install-riboseek = "bash sh/fetch-riboseek.sh"
+riboseek-db = { cmd = "bash sh/riboseek-db.sh", depends-on = [
+  "install-riboseek",
+] }
+riboseek = { cmd = "bash sh/riboseek.sh", depends-on = ["install-riboseek"] }
+usalign = "bash sh/usalign.sh"
+
+[feature.model.dependencies]
+curl = "8.*"
+gemmi = "0.*"
+git = "2.*"
+polars = "1.*"
+unzip = "6.*"
+
+[feature.model.pypi-dependencies]
+rnagym = { path = "../..", editable = true }
+
+[feature.af3.dependencies]
+c-compiler = "1.*"
+cmake = ">=3.28"
+hmmer = "3.*"
+ninja = "1.*"
+pip = "*"
+pybind11 = "*"
+python = "3.11.*"
+scikit-build-core = "*"
+
+[feature.af3.pypi-dependencies]
+absl-py = "*"
+chex = "==0.1.90"
+dm-haiku = "==0.0.13"
+dm-tree = "*"
+jax = { version = "==0.4.34", extras = ["cuda12"] }
+jax-triton = "==0.2.0"
+jaxtyping = "==0.2.34"
+numpy = "==1.26.4"
+rdkit = "==2024.3.5"
+triton = "==3.1.0"
+tqdm = "*"
+typeguard = "==2.13.3"
+zstandard = "*"
+
+[feature.af3.tasks]
+source = "bash sh/fetch-source.sh"
+build = { cmd = "bash sh/build-af3.sh", depends-on = ["source"] }
+predict = { cmd = "bash sh/predict.sh af3", depends-on = ["build"] }
+
+[feature.nufold.dependencies]
+biopython = "1.81.*"
+gmpy2 = "==2.3.0"
+matplotlib-base = "3.7.*"
+mkl = "==2023.1.0"
+numpy = "1.24.*"
+protobuf = "4.*"
+python = "3.10.*"
+pytorch = "==2.0.1"
+pytorch-cuda = "==11.8"
+scipy = "1.10.*"
+torchvision = "==0.15.2"
+
+[feature.nufold.pypi-dependencies]
+deepspeed = "==0.10.3"
+dm-tree = "==0.1.8"
+ml-collections = "==0.1.1"
+
+[feature.nufold.tasks]
+source = "bash sh/fetch-source.sh nufold"
+assets = "bash sh/fetch-assets.sh nufold"
+predict = { cmd = "bash sh/predict.sh nufold", depends-on = [
+  "source",
+  "assets",
+] }
+
+[feature.rhofold.dependencies]
+biopython = "==1.79"
+gmpy2 = "==2.3.0"
+huggingface_hub = "==0.16.4"
+matplotlib-base = "==3.5.3"
+mkl = "==2023.1.0"
+numpy = "==1.23.5"
+openmm = "==7.7.0"
+pandas = "==1.5.3"
+python = "3.10.*"
+pytorch = "==2.0.1"
+pytorch-cuda = "==11.8"
+scipy = "1.10.*"
+torchvision = "==0.15.2"
+
+[feature.rhofold.pypi-dependencies]
+dm-tree = "==0.1.7"
+einops = "==0.5.0"
+ml-collections = "==0.1.1"
+python-box = "==6.0.2"
+
+[feature.rhofold.tasks]
+source = "bash sh/fetch-source.sh rhofold"
+assets = "bash sh/fetch-assets.sh rhofold"
+predict = { cmd = "bash sh/predict.sh rhofold", depends-on = [
+  "source",
+  "assets",
+] }
+
+[feature.rf2na.dependencies]
+dgl = { version = "==1.1.2.cu118", channel = "dglteam/label/cu118" }
+gmpy2 = "==2.3.0"
+hhsuite = "3.*"
+mkl = "<2024.1"
+numpy = "<2"
+python = "3.10.*"
+python-dateutil = "2.*"
+pytorch = { version = "==2.0.1", channel = "pytorch" }
+pytorch-cuda = { version = "==11.8", channel = "pytorch" }
+requests = "2.*"
+
+[feature.rf2na.pypi-dependencies]
+e3nn = "==0.3.3"
+opt-einsum-fx = "*"
+
+[feature.rf2na.tasks]
+source = "bash sh/fetch-source.sh rf2na"
+assets = "bash sh/fetch-assets.sh rf2na"
+predict = { cmd = "bash sh/predict.sh rf2na", depends-on = [
+  "source",
+  "assets",
+] }
+
+[feature.trrna.dependencies]
+gmpy2 = "==2.3.0"
+mkl = "==2023.1.0"
+numpy = "1.24.*"
+pyrosetta = "2023.49.*"
+python = "3.10.*"
+pytorch = "==2.0.1"
+pytorch-cuda = "==11.8"
+tqdm = "4.*"
+
+[feature.trrna.pypi-dependencies]
+einops = "==0.6.1"
+
+[feature.trrna.tasks]
+assets = "bash sh/fetch-assets.sh trrna"
+predict = { cmd = "bash sh/predict.sh trrna", depends-on = ["assets"] }
+
+[environments]
+default = { solve-group = "default" }
+af3 = { features = ["model", "af3"], no-default-feature = true }
+nufold = { features = ["model", "nufold"], no-default-feature = true }
+rhofold = { features = ["model", "rhofold"], no-default-feature = true }
+rf2na = { features = ["model", "rf2na"], no-default-feature = true }
+trrna = { features = ["model", "trrna"], no-default-feature = true }
