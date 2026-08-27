@@ -5,8 +5,8 @@ from pathlib import Path
 import polars as pl
 
 from rnagym.config import Config2D, Config3D
-from rnagym.s3d.curation import monomer_filter, quality_filter
 from rnagym.s3d.models import BASELINES, homology_columns
+from rnagym.s3d.util.curation import monomer_filter, quality_filter
 from rnagym.sequences import fitness_sequences, update_registry
 
 IDENTIFIERS = ["pdb_id", "asym_id"]

@@ -15,7 +15,7 @@ import polars as pl
 from tqdm.auto import tqdm
 
 from rnagym.config import Config2D, Config3D
-from rnagym.s3d.curation import monomer_filter
+from rnagym.s3d.util.curation import monomer_filter
 from rnagym.sequences import fitness_sequences, update_registry
 
 from ..models.utils import dot_bracket, pairs_to_dot_bracket, parse_pairs
