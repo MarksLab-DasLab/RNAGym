@@ -2,6 +2,7 @@
 slurm
 archives
 .vibe/
+.rg_jobs/
 
 # Fitness data (downloadable or generated)
 fitness/assays/

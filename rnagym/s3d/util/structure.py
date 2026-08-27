@@ -527,13 +527,13 @@ class StructureInfo:
     )
 
     __tracked_chain_types = {
-        "num_dna_chains": ChainType.DNA,
-        "num_hetatm_chains": ChainType.HETATM,
-        "num_hybrid_chains": ChainType.NA_HYBRID,
-        "num_protein_chains": ChainType.PROTEIN,
-        "num_rna_chains": ChainType.RNA,
-        "num_solvent_chains": ChainType.SOLVENT,
-        "num_unknown_chains": ChainType.UNKNOWN,
+        "n_dna_chains": ChainType.DNA,
+        "n_hetatm_chains": ChainType.HETATM,
+        "n_hybrid_chains": ChainType.NA_HYBRID,
+        "n_protein_chains": ChainType.PROTEIN,
+        "n_rna_chains": ChainType.RNA,
+        "n_solvent_chains": ChainType.SOLVENT,
+        "n_unknown_chains": ChainType.UNKNOWN,
     }
 
     __tracked_residue_types = {
@@ -883,12 +883,12 @@ class StructureInfo:
 
         sequence = str(self.sequences_unmod[chain_id])
         chain_info = self.chain_infos[chain_id]
-        num_nucleotides = sum(
+        n_nucleotides = sum(
             len(self.sequences_unmod[chain.subchain_id().split("-")[0]])
             for chain_type in ChainType.ALL_NAS
             for chain in self.chains_of_type[chain_type]
         )
-        num_amino_acids = sum(
+        n_amino_acids = sum(
             len(self.sequences_unmod[chain.subchain_id().split("-")[0]])
             for chain in self.chains_of_type[ChainType.PROTEIN]
         )
@@ -907,14 +907,14 @@ class StructureInfo:
             > Config3D.MIN_STRUCTURED_CONTACTS,
             "polymer_coverage": self.chain_coverages[ChainType.ANY][chain_id],
             "nucleic_acid_coverage": self.chain_coverages[ChainType.NA][chain_id],
-            "num_neighbor_na_chains": len(self.neighbors[chain_id]),
+            "n_neighbor_na_chains": len(self.neighbors[chain_id]),
             **{
                 name: len(self.chains_of_type[chain_type])
                 for name, chain_type in self.__tracked_chain_types.items()
             },
-            "num_nucleotides": num_nucleotides,
-            "num_amino_acids": num_amino_acids,
-            "num_polymer_residues": num_nucleotides + num_amino_acids,
+            "n_nucleotides": n_nucleotides,
+            "n_amino_acids": n_amino_acids,
+            "n_polymer_residues": n_nucleotides + n_amino_acids,
             **{
                 name: sorted(self.residues[residue_type])
                 for name, residue_type in self.__tracked_residue_types.items()

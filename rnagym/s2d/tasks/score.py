@@ -252,6 +252,8 @@ def summarize(scores: pl.DataFrame) -> pl.DataFrame:
             pl.len().alias("clusters"),
             pl.col("samples").sum(),
         )
+        # Remove floating reduction noise so exact ties receive the same rank
+        .with_columns(pl.col("score").round(12))
         .sort(["dataset", "score"], descending=[False, True])
     )
 

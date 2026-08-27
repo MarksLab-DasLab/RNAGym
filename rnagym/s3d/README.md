@@ -41,14 +41,6 @@ the precomputed 3D US-align outputs under `data/3d/usalign/`.
 
 ## Launching RNA predictions
 
-RNAGym currently evaluates the following baselines:
-
-1. AlphaFold 3
-2. NuFold
-3. RhoFold+
-4. RoseTTAFold2NA
-5. trRosettaRNA
-
 To launch predictions:
 
 1. Run `pixi run riboseek-db` once to prepare [Riboseek][21], RNAcentral, and

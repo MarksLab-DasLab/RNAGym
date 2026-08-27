@@ -77,7 +77,7 @@ def get_split_candidates() -> pl.DataFrame:
     )
     multimers = candidates.filter(
         (pl.col("polymer_coverage") > Config3D.MAX_POLYMER_COVERAGE)
-        & (pl.col("num_polymer_residues") <= Config3D.MAX_COMPLEX_LENGTH)
+        & (pl.col("n_polymer_residues") <= Config3D.MAX_COMPLEX_LENGTH)
     ).with_columns(pl.lit("multimer").alias("type"))
     print(f"All RNAs: {annotated.height:,}")
     print(f"Quality RNAs: {quality.height:,}")

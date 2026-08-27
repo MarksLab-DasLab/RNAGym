@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #SBATCH --job-name=rg-predict
-#SBATCH --output=.rg_predict_out/%x-%A_%a.out
+#SBATCH --output=.rg_jobs/%x-%A_%a.out
 
 set -euo pipefail
 

@@ -113,9 +113,8 @@ def write_readme(scores: pd.DataFrame) -> None:
     sections = []
     for dataset, title in (("monomer", "Monomers"), ("multimer", "Multimers")):
         subset = scores[scores["dataset"] == dataset]
-        sections.append(
-            f"### {title} (n={subset['samples'].iloc[0]})\n\n{markdown_table(subset)}"
-        )
+        n = subset["samples"].iloc[0]
+        sections.append(f"### {title} (n={n} structures)\n\n{markdown_table(subset)}")
 
     start = "<!-- BEGIN GENERATED TABLES -->"
     end = "<!-- END GENERATED TABLES -->"

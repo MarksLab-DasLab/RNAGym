@@ -3,6 +3,7 @@
 import sys
 
 import pandas as pd
+import polars as pl
 
 from rnagym.config import Config3D
 from rnagym.s3d.models import BASELINES, homology_columns
@@ -10,6 +11,12 @@ from rnagym.s3d.util.analysis import add_tm_id, prep_usalign
 
 IDENTIFIERS = ["pdb_id", "asym_id"]
 HOMOLOGY_COLUMNS = [column for model in BASELINES for column in homology_columns(model)]
+ANNOTATION_SCHEMA = pl.Schema(
+    {
+        column: pl.Float64 if column.endswith("_score") else pl.String
+        for column in [*IDENTIFIERS, *HOMOLOGY_COLUMNS]
+    }
+)
 
 
 def main() -> None:
@@ -37,14 +44,15 @@ def main() -> None:
             and output.stat().st_mtime
             >= max(path.stat().st_mtime for path in dependencies)
         )
-        if fresh and set([*IDENTIFIERS, *HOMOLOGY_COLUMNS]).issubset(
-            pd.read_parquet(output).columns
-        ):
+        if fresh and pl.read_parquet_schema(output) == ANNOTATION_SCHEMA:
             continue
         result = target.to_frame().T
         add_tm_id(result)
         temporary = output.with_suffix(".parquet.tmp")
-        result[[*IDENTIFIERS, *HOMOLOGY_COLUMNS]].to_parquet(temporary, index=False)
+        pl.from_pandas(
+            result[[*IDENTIFIERS, *HOMOLOGY_COLUMNS]],
+            schema_overrides=ANNOTATION_SCHEMA,
+        ).write_parquet(temporary)
         temporary.replace(output)
         print(f"Wrote {output}")
 

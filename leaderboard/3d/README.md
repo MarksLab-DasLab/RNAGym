@@ -1,20 +1,20 @@
 # RNAGym 3D Leaderboard
 
-**Dataset:** [RNA3DB 2026-01-05 full release][1]
+Targets were sourced from the [RNA3DB 2026-01-05 full release][1].
 
-**Metrics:** TM score measures global fold similarity. ΔTM is the prediction TM
-score minus the best PDB-chain TM score from before the model's training
+**Metrics:** TM score measures global fold similarity. ΔTM is the prediction
+TM score minus the best PDB-chain TM score from before the model's training
 cutoff, while ρTM is their Spearman correlation. INF-WC and INF-NWC measure
-recovery of Watson-Crick and non-Watson-Crick interactions. INF is one when
-both structures lack that interaction class and zero when only one does.
-Monomer metrics take the best match across experimental structures with the
-same sequence. Monomer sequence
-scores and individual multimer target scores are then averaged within each 40%
-sequence identity cluster, then across clusters. Missing predictions score
-zero, and all metrics are better when higher. Models are ranked by TM score.
+recovery of Watson-Crick and non-Watson-Crick interactions. INF is one
+when both structures lack that interaction class and zero when only one
+does. Monomer metrics take the best match across experimental structures
+with the same sequence. Monomer sequence scores and individual multimer
+target scores are then averaged within each 40% sequence identity cluster,
+then across clusters. Missing predictions score zero, and all metrics are
+better when higher. Models are ranked by TM score.
 
 <!-- BEGIN GENERATED TABLES -->
-### Monomers (n=854)
+### Monomers (n=854 structures)
 
 | Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -24,7 +24,7 @@ zero, and all metrics are better when higher. Models are ranked by TM score.
 | 4 | RoseTTAFold2NA | 0.454 | -0.142 | 0.84 | 0.75 | 0.32 |
 | 5 | trRosettaRNA | 0.415 | -0.202 | 0.68 | 0.71 | 0.13 |
 
-### Multimers (n=404)
+### Multimers (n=404 structures)
 
 | Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: | ---: |

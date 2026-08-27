@@ -23,7 +23,7 @@ pytest = "==8.4.2"
 rnagym = { path = "../..", editable = true }
 
 [feature.shared.tasks]
-test-model = "CUDA_VISIBLE_DEVICES='' pytest -q ../../tests/test_s2d.py"
+test-model = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
 
 [tasks]
 fmt = "bash sh/format.sh"
@@ -137,7 +137,7 @@ source = "bash sh/fetch-source.sh rinalmo"
 weights = "bash sh/fetch-weight.sh rinalmo"
 
 [feature.rinalmo.tasks.test]
-cmd = "pytest -q ../../tests/test_s2d.py"
+cmd = "python -m pytest -q ../../tests/test_s2d.py"
 depends-on = ["source", "weights"]
 
 [feature.rinalmo.tasks.predict]
