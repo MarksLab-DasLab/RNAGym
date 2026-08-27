@@ -14,10 +14,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from functools import cache
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Optional
 
-import evcouplings.align.alignment as Alignment
-import pandas as pd
+import polars as pl
 from rna3db.tabular import TabularOutput, read_tbls_from_dir
 
 from rnagym.config import Config3D
@@ -25,18 +23,21 @@ from rnagym.s3d.util import AccessionID, ChainID, PdbID, Sequence
 
 
 @cache
-def rfam_families() -> pd.DataFrame:
+def rfam_families() -> dict[str, tuple[int, int]]:
     """Load family sizes and covariance-model lengths from Rfam."""
     # Columns follow Rfam's official family table schema
-    return pd.read_csv(
+    families = pl.read_csv(
         Config3D.RFAM_FAMILY_TABLE,
-        sep="\t",
-        header=None,
-        encoding="latin-1",
-        usecols=[0, 15, 29],
-        names=["accession", "num_full", "model_length"],
-        index_col="accession",
+        separator="\t",
+        has_header=False,
+        columns=[0, 15, 29],
+        new_columns=["accession", "n_full", "model_length"],
+        encoding="utf8-lossy",
     )
+    return {
+        accession: (n_full, model_length)
+        for accession, n_full, model_length in families.iter_rows()
+    }
 
 
 @cache
@@ -82,8 +83,7 @@ class FamHits:
     Class for creating and working with Pfam/Rfam hits from a given sequence.
     """
 
-    # Instance variables
-    __slots__ = ("data_frame", "__fam_hits")
+    __slots__ = ("__fam_hits",)
 
     class Source(Enum):
         """
@@ -95,38 +95,26 @@ class FamHits:
     # Static variables
     QueryID = str
 
-    __cache: Dict[Sequence, FamHits] = {}
+    __cache: dict[Sequence, FamHits] = {}
 
-    # Instance variables
-    data_frame: Optional[pd.DataFrame]
-    __fam_hits: List[FamHit]
+    __fam_hits: list[FamHit]
 
-    def __init__(self, data_frame: pd.DataFrame, source: Source):
-        """
-        Initializes a FamHits object using the input data frame based on
-        the data source.
-        """
-        self.data_frame = data_frame
-        self.__fam_hits = []
-
-        if data_frame is None:
-            return
-
-        for _, row in data_frame.iterrows():
-            if source == FamHits.Source.RFAM:
-                self.__fam_hits.append(
-                    FamHit(
-                        source=FamHits.Source.RFAM,
-                        name=str(row["target_name"]),
-                        accession=AccessionID(row["target_accession"]),
-                        score=float(row["score"]),
-                        model_len=int(row["mdl_len"]),
-                        seq_len=int(row["seq_len"]),
-                        e_value=float(row["e_value"]),
-                    )
-                )
-            else:
-                raise ValueError(f"Unknown source {source}")
+    def __init__(self, hits: list[TabularOutput.Hit], source: Source, seq_len: int):
+        """Create family hits from parsed Infernal output."""
+        if source != FamHits.Source.RFAM:
+            raise ValueError(f"Unknown source {source}")
+        self.__fam_hits = [
+            FamHit(
+                source=source,
+                name=hit.target_name,
+                accession=AccessionID(hit.target_accession),
+                score=hit.score,
+                model_len=FamHits.get_rfam_model_length(hit.target_accession),
+                seq_len=seq_len,
+                e_value=hit.e_value,
+            )
+            for hit in hits
+        ]
 
     @staticmethod
     def from_fam(
@@ -149,7 +137,7 @@ class FamHits:
         # Otherwise, calculate the fam hits, store it in cache, and return it
         if fam_source == FamHits.Source.RFAM:
             fam_hits = FamHits.__from_rfam(
-                pdb_id, asym_chain_id, auth_chain_id, fasta_file
+                pdb_id, asym_chain_id, auth_chain_id, fasta_file, len(sequence)
             )
         else:
             raise ValueError(f"Unknown source {fam_source}")
@@ -163,13 +151,9 @@ class FamHits:
         asym_chain_id: ChainID,
         auth_chain_id: ChainID,
         fasta_file: NamedTemporaryFile,
+        seq_len: int,
     ) -> FamHits:
         """Load released RNA3DB hits or scan one sequence against Rfam."""
-        # Get the sequence
-        _, sequence = next(Alignment.read_fasta(fasta_file))
-        seq_len = len(sequence)
-
-        # Conduct the cmscan
         query_id = f"{pdb_id.lower()}_{auth_chain_id}"
         tbl = None
         cached_hits = rna3db_hits()
@@ -195,30 +179,19 @@ class FamHits:
                 contents = fasta_file.read()
                 fasta_file.seek(0)
                 print(f"Fasta file contents are: {contents}")
-            except pd.errors.EmptyDataError:
-                print(f"Identified no Rfam hits for {pdb_id}_{asym_chain_id}")
-
-        hits = None
-        if tbl is not None:
-            hits = pd.DataFrame(tbl.hits, columns=TabularOutput.TBL_ROW_TYPES)
-            hits["mdl_len"] = hits["target_accession"].apply(
-                FamHits.get_rfam_model_length
-            )
-            hits["seq_len"] = seq_len
-
-        return FamHits(hits, FamHits.Source.RFAM)
+        return FamHits([] if tbl is None else tbl.hits, FamHits.Source.RFAM, seq_len)
 
     @staticmethod
     def get_rfam_length(accession: AccessionID) -> int:
         """Return the number of full Rfam family members."""
-        return int(rfam_families().loc[accession, "num_full"])
+        return rfam_families()[accession][0]
 
     @staticmethod
     def get_rfam_model_length(accession: AccessionID) -> int:
         """Return the covariance-model length for one Rfam family."""
-        return int(rfam_families().loc[accession, "model_length"])
+        return rfam_families()[accession][1]
 
-    def __getitem__(self, index) -> Optional[FamHit]:
+    def __getitem__(self, index) -> FamHit | None:
         """
         Retrieves a given hit by index. Indices are sorted by score, descending
         from 0.

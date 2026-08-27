@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from shlex import split
 
-import pandas as pd
+import polars as pl
 
 from rnagym.config import Config3D, ConfigFitness, ConfigRiboseek
 from rnagym.sequences import fitness_assays, fitness_sequences, load_registry
@@ -154,12 +154,27 @@ def run_cmsearch(cm: Path, output: Path, worker: int | None, workers: int) -> No
     print(f"CM worker {worker + 1}/{workers} finished")
 
 
-def load_queries(task_id: int, task_count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load one shard of unique sequences and their output directories."""
+def load_queries(task_id: int, task_count: int) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Load one shard of unique sequences and their output directories.
+
+    Parameters
+    ----------
+    task_id : int
+        Zero-based shard index.
+    task_count : int
+        Total number of shards.
+
+    Returns
+    -------
+    sequences : pl.DataFrame
+        Unique sequences assigned to the shard.
+    queries : pl.DataFrame
+        Dataset-specific output directories for those sequences.
+    """
     targets = (
-        pd.read_parquet(Config3D.TARGET_FILE)[["sequence_id", "sequence"]]
-        .drop_duplicates()
-        .assign(msa_dir=Config3D.MSA_DIR)
+        pl.read_parquet(Config3D.TARGET_FILE, columns=["sequence_id", "sequence"])
+        .unique(maintain_order=True)
+        .with_columns(pl.lit(str(Config3D.MSA_DIR)).alias("msa_dir"))
     )
     fitness_source = fitness_sequences()
     fitness = fitness_source.join(
@@ -167,15 +182,17 @@ def load_queries(task_id: int, task_count: int) -> tuple[pd.DataFrame, pd.DataFr
     )
     if fitness.height != fitness_source.height:
         raise RuntimeError("Run 'pixi run split' to register the fitness sequences")
-    fitness = pd.DataFrame(
-        fitness.select("sequence_id", "sequence").to_dict(as_series=False)
-    ).assign(msa_dir=ConfigFitness.MSA_DIR)
-    queries = pd.concat([targets, fitness]).drop_duplicates()
-    sequences = queries[["sequence_id", "sequence"]].drop_duplicates()
-    if sequences["sequence_id"].duplicated().any():
+    fitness = fitness.select("sequence_id", "sequence").with_columns(
+        pl.lit(str(ConfigFitness.MSA_DIR)).alias("msa_dir")
+    )
+    queries = pl.concat([targets, fitness]).unique(maintain_order=True)
+    sequences = queries.select("sequence_id", "sequence").unique(maintain_order=True)
+    if sequences["sequence_id"].is_duplicated().any():
         raise RuntimeError("Each sequence ID must identify exactly one sequence")
-    sequences = sequences.sort_values("sequence_id").iloc[task_id::task_count]
-    return sequences, queries[queries["sequence_id"].isin(sequences["sequence_id"])]
+    sequences = sequences.sort("sequence_id").gather_every(task_count, offset=task_id)
+    return sequences, queries.join(
+        sequences.select("sequence_id"), on="sequence_id", how="semi"
+    )
 
 
 def main() -> None:
@@ -186,18 +203,18 @@ def main() -> None:
     sequences, queries = load_queries(task_id, task_count)
 
     for directory in queries["msa_dir"].unique():
-        directory.mkdir(parents=True, exist_ok=True)
+        Path(directory).mkdir(parents=True, exist_ok=True)
     missing_ids = {
-        row.sequence_id
-        for row in queries.itertuples(index=False)
+        sequence_id
+        for sequence_id, sequence, directory in queries.iter_rows()
         if not is_complete(
-            row.msa_dir / f"{row.sequence_id}.a3m", row.sequence_id, row.sequence
+            Path(directory) / f"{sequence_id}.a3m", sequence_id, sequence
         )
     }
-    missing = sequences[sequences["sequence_id"].isin(missing_ids)]
+    missing = sequences.filter(pl.col("sequence_id").is_in(missing_ids))
     if stage == "check":
-        raise SystemExit(not missing.empty)
-    if missing.empty:
+        raise SystemExit(not missing.is_empty())
+    if missing.is_empty():
         _link_fitness_alignments(set(sequences["sequence_id"]))
         print(f"Riboseek shard {task_id + 1}/{task_count} is complete")
         return
@@ -210,7 +227,7 @@ def main() -> None:
                 MSA_DESCRIPTION,
                 ConfigRiboseek.RNACENTRAL_VERSION,
                 ConfigRiboseek.NT_VERSION,
-                *sequences["sequence_id"],
+                *sequences["sequence_id"].to_list(),
             ]
         ).encode()
     ).hexdigest()[:12]
@@ -239,12 +256,12 @@ def main() -> None:
     fasta.write_text(
         "".join(
             f">{sequence_id}\n{normalize_query(sequence)}\n"
-            for sequence_id, sequence in sequences.itertuples(index=False)
+            for sequence_id, sequence in sequences.iter_rows()
         )
     )
     query_db = work_dir / "queries"
 
-    if not missing.empty:
+    if not missing.is_empty():
         try:
             run_search(
                 f"riboseek createdb {fasta} {query_db} --threads {threads}", query_db
@@ -320,10 +337,10 @@ def main() -> None:
                 contents = "".join(
                     f"{header}\n{aligned}\n" for header, aligned in records
                 )
-                for directory in queries.loc[
-                    queries["sequence_id"] == sequence_id, "msa_dir"
+                for directory in queries.filter(pl.col("sequence_id") == sequence_id)[
+                    "msa_dir"
                 ]:
-                    output = directory / f"{sequence_id}.a3m"
+                    output = Path(directory) / f"{sequence_id}.a3m"
                     temporary_output = output.with_suffix(".a3m.tmp")
                     temporary_output.write_text(contents)
                     temporary_output.replace(output)
@@ -332,7 +349,8 @@ def main() -> None:
             raise
 
     converted = 0
-    for sequence_id, sequence, directory in queries.itertuples(index=False):
+    for sequence_id, sequence, directory in queries.iter_rows():
+        directory = Path(directory)
         a3m = directory / f"{sequence_id}.a3m"
         if not a3m.is_file():
             raise RuntimeError(f"Riboseek did not write {a3m}")
@@ -361,11 +379,11 @@ def main() -> None:
         temporary.replace(afa)
         converted += 1
     print(
-        f"Wrote {len(missing):,} A3Ms and {converted:,} aligned FASTAs "
-        f"for {len(sequences):,} unique sequences"
+        f"Wrote {missing.height:,} A3Ms and {converted:,} aligned FASTAs "
+        f"for {sequences.height:,} unique sequences"
     )
     _link_fitness_alignments(set(queries["sequence_id"]))
-    if not missing.empty:
+    if not missing.is_empty():
         shutil.rmtree(work_dir)
 
 

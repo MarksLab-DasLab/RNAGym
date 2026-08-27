@@ -18,7 +18,7 @@ from tempfile import NamedTemporaryFile
 from typing import Dict, Tuple
 
 import gemmi
-import pandas as pd
+import polars as pl
 import RNA_normalizer
 from Bio.PDB import PDBIO, MMCIFParser
 from RNA_normalizer import mcannotate
@@ -400,31 +400,27 @@ def _prepare_usalign_pdb(source: Path, output: Path) -> Path:
 
 
 def prep_usalign(
-    cutoff_col="published",
-    cutoff=Config3D.TARGET_CUTOFF,
-):
-    """
-    Prepares inputs for USAlign.
+    cutoff_col: str = "published", cutoff: str = Config3D.TARGET_CUTOFF
+) -> None:
+    """Prepare pre-cutoff RNA chains for US-align.
 
     Parameters
     ----------
-    cutoff_col (str):
-        The column that will be filtered for values >= cutoff.
-    cutoff (str):
-        The date cutoff to use, formatted as a string (YYYY-MM-DD).  Only rows
-        where cutoff_col is less than or equal to this cutoff will be
-        considered as possible homology targets.
+    cutoff_col : str
+        Column containing ISO publication dates.
+    cutoff : str
+        Latest publication date included as a reference.
     """
     references_file = Config3D.USALIGN_REFERENCES_FILE
-    rcsb_df = pd.read_parquet(Config3D.ANNOTATED_CHAINS_FILE)
-    rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
-
-    # Prepare all RNA chains prior to the cutoff for US-align
-    rna_chains = rcsb_df[["pdb_id", "asym_id", "published"]]
-    rna_chains = [
-        (pdb_id.lower(), asym_id)
-        for pdb_id, asym_id, _ in rna_chains.itertuples(index=False)
-    ]
+    rna_chains = (
+        pl.read_parquet(
+            Config3D.ANNOTATED_CHAINS_FILE,
+            columns=["pdb_id", "asym_id", cutoff_col],
+        )
+        .filter(pl.col(cutoff_col) <= cutoff)
+        .select("pdb_id", "asym_id")
+        .iter_rows()
+    )
     Config3D.USALIGN_DIR.mkdir(parents=True, exist_ok=True)
     missing = 0
     updated = False
@@ -456,47 +452,49 @@ def prep_usalign(
         temporary.replace(references_file)
     else:
         print(f"Reusing {references_file}")
-    print(f"Prepared {len(rna_chains) - missing:,} US-align references")
+    print(f"Prepared {len(names):,} US-align references")
     if missing:
         print(f"Skipped {missing:,} references without cached coordinates")
 
 
 def add_tm_id(
-    chains: pd.DataFrame,
-    cutoff_col="published",
-    cutoff=Config3D.TARGET_CUTOFF,
-):
-    """
-    Adds a column to the input DataFrame representing the maximum TM identity
-    of each row/chain to any RNA chain in RCSB published prior to the input
-    cutoff.  The input DataFrame is modified in place.  The target homologs and
-    their TM score are added to the model-specific homology columns.
+    chains: pl.DataFrame,
+    cutoff_col: str = "published",
+    cutoff: str = Config3D.TARGET_CUTOFF,
+) -> pl.DataFrame:
+    """Annotate chains with their closest pre-training structural homologs.
 
     Parameters
     ----------
-    chains (pd.DataFrame):
-        The chains that will be checked for homology to RCSB.
-    cutoff_col (str):
-        The column that will be filtered for values >= cutoff.
-    cutoff (str):
-        The date cutoff to use, formatted as a string (YYYY-MM-DD).  Only rows
-        where cutoff_col is less than or equal to this cutoff will be
-        considered as possible homology targets.
-    """
-    rcsb_df = pd.read_parquet(Config3D.ANNOTATED_CHAINS_FILE)
+    chains : pl.DataFrame
+        Chains identified by ``pdb_id`` and ``asym_id``.
+    cutoff_col : str
+        Column containing ISO publication dates.
+    cutoff : str
+        Latest publication date included as a reference.
 
-    rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
+    Returns
+    -------
+    pl.DataFrame
+        Input rows with model-specific homolog metadata and TM scores.
+    """
+    references = pl.read_parquet(Config3D.ANNOTATED_CHAINS_FILE).filter(
+        pl.col(cutoff_col) <= cutoff
+    )
     references_file = Config3D.USALIGN_REFERENCES_FILE
     if not references_file.exists():
         raise RuntimeError(
             "Attempted to call add_tm_id without first calling prep_usalign"
         )
 
-    pdb_id_to_date = rcsb_df.set_index("pdb_id")[cutoff_col].to_dict()
+    pdb_id_to_date = {
+        pdb_id: published
+        for pdb_id, published in references.select("pdb_id", cutoff_col).iter_rows()
+    }
     tasks = [
         (index, pdb_id, asym_id, pdb_id_to_date)
-        for index, pdb_id, asym_id in chains[["pdb_id", "asym_id"]].itertuples(
-            index=True, name=None
+        for index, (pdb_id, asym_id) in enumerate(
+            chains.select("pdb_id", "asym_id").iter_rows()
         )
     ]
     if len(tasks) == 1:
@@ -505,18 +503,27 @@ def add_tm_id(
         with ProcessPoolExecutor() as executor:
             results = list(executor.map(_get_max_tm_results, tasks))
 
-    # Add max TM homologs for each baseline
+    reference_by_id = {
+        (row["pdb_id"], row["asym_id"]): row
+        for row in references.select(
+            "pdb_id", "asym_id", "auth_id", "published", "rfam"
+        ).iter_rows(named=True)
+    }
+    rows = chains.to_dicts()
     for index, baseline_results in results:
         for bl, (_, max_tm_result) in baseline_results.items():
             homolog, date, rfam, score = homology_columns(bl.name)
+            rows[index].update({homolog: None, date: None, rfam: None, score: 0.0})
             if max_tm_result is None:
-                chains.loc[index, score] = 0.0
                 continue
-            pdb_id, asym_id = max_tm_result.target_name.split("_")
-            max_tm_chain = rcsb_df[
-                (rcsb_df["pdb_id"] == pdb_id.lower()) & (rcsb_df["asym_id"] == asym_id)
-            ].iloc[0]
-            chains.loc[index, homolog] = f"{pdb_id.lower()}_{max_tm_chain.auth_id}"
-            chains.loc[index, date] = max_tm_chain.published
-            chains.loc[index, rfam] = max_tm_chain.rfam
-            chains.loc[index, score] = max_tm_result.tm_score
+            pdb_id, asym_id = max_tm_result.target_name.split("_", 1)
+            match = reference_by_id[(pdb_id.lower(), asym_id)]
+            rows[index].update(
+                {
+                    homolog: f"{pdb_id.lower()}_{match['auth_id']}",
+                    date: match["published"],
+                    rfam: match["rfam"],
+                    score: max_tm_result.tm_score,
+                }
+            )
+    return pl.from_dicts(rows, infer_schema_length=None)
