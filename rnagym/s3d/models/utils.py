@@ -95,10 +95,10 @@ def is_fresh(path: Path, dependencies: Iterable[Path]) -> bool:
 def monomer_targets(_kind: str) -> list[str]:
     """Load unique monomer sequences from longest to shortest."""
     return (
-        pl.read_parquet(Config3D.TARGET_FILE, columns=["type", "sequence_id", "L"])
+        pl.read_parquet(Config3D.TARGET_FILE, columns=["type", "sequence_id", "length"])
         .filter(pl.col("type") == "monomer")
         .group_by("sequence_id")
-        .agg(pl.max("L").alias("length"))
+        .agg(pl.max("length"))
         .sort(["length", "sequence_id"], descending=[True, False])
         .get_column("sequence_id")
         .to_list()

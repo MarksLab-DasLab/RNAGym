@@ -1,6 +1,4 @@
-import rnagym.s3d.util.config as Config
 import rnagym.s3d.util.residues as Residues
-from rnagym.s3d.util.config import Baseline
 from rnagym.s3d.util.fr3d import (
     BASE_RIBOSE_LABELS,
     BASEPAIR_LABELS,
@@ -37,13 +35,11 @@ __all__ = [
     "AltID",
     "BASEPAIR_LABELS",
     "BASE_RIBOSE_LABELS",
-    "Baseline",
     "CONTACT_LABELS",
     "CONTACT_LABELS_2D",
     "CONTACT_LABELS_3D",
     "Category",
     "ChainID",
-    "Config",
     "ContactMap",
     "EntityID",
     "Fr3dResID",

@@ -38,17 +38,20 @@ usalign = "==2024.07.30"
 [pypi-dependencies]
 evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
 rna-normalizer = { git = "https://github.com/RNA-Puzzles/RNA_assessment.git", rev = "d46f0472e7d52629283bb046a9c8f5d36b35f685" }
-rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "a58c1557d43104bb290781eb2d4c8d4f9538baf8" }
+rna3db = { git = "https://github.com/marcellszi/rna3db.git", rev = "4188517c48b1ad2610484f7d359cb77d87bd8957" }
 rnagym = { path = "../..", editable = true }
 
 [tasks]
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
-pipeline = "python -m rnagym.s3d.gym"
-annotate = "python -m rnagym.s3d.gym annotate"
+rna3db = "bash sh/fetch-rna3db.sh"
+pipeline = { cmd = "python -m rnagym.s3d.gym", depends-on = ["rna3db"] }
+annotate = { cmd = "python -m rnagym.s3d.gym annotate", depends-on = [
+  "rna3db",
+] }
 split = "python -m rnagym.s3d.gym split"
 leaderboard = "python -m rnagym.s3d.tasks.score"
-test = "pytest ../../tests/test_s3d.py"
+test = "cd ../.. && python -m pytest tests/test_s3d.py"
 rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
 score = { cmd = "python -m rnagym.s3d.tasks.score_predictions", depends-on = [
   "rna-assessment-source",

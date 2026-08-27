@@ -24,8 +24,9 @@ from Bio.PDB import PDBIO, MMCIFParser
 from RNA_normalizer import mcannotate
 
 from rnagym.config import Config3D
+from rnagym.s3d.models import BASELINES, Baseline, homology_columns, prediction_path
 from rnagym.s3d.models.utils import valid_structure as valid_prediction
-from rnagym.s3d.util import Baseline, ChainID, Config
+from rnagym.s3d.util import ChainID
 
 # RNA_normalizer still assumes Python 2 and the import-time working directory
 RNA_normalizer.xrange = range
@@ -243,7 +244,7 @@ class Analysis:
     ) -> tuple[Path, Path | None]:
         """Locate a prediction and extract its target RNA chain when needed."""
         name = self.pdb_id if multimer else self.sequence_id
-        output_dir, prediction = Config.get_bl_out_pdb(baseline.name, name, multimer)
+        output_dir, prediction = prediction_path(baseline.name, name, multimer)
         if not prediction.is_file():
             return output_dir, None
 
@@ -259,11 +260,7 @@ class Analysis:
         _, prediction = self.baseline_results(baseline, multimer)
         if prediction is None:
             raise FileNotFoundError(f"Missing {baseline.name} prediction")
-        reference = Path(
-            Config.CHAIN_MINIMAL_PDB_FILE.format(
-                pdb_id=self.pdb_id, chain_id=self.asym_id
-            )
-        )
+        reference = Config3D.chain_file(self.pdb_id, self.asym_id)
         cache = (
             Config3D.CACHE_DIR
             / "scores"
@@ -293,11 +290,7 @@ class Analysis:
         _, prediction = self.baseline_results(baseline, multimer)
         if prediction is None:
             raise FileNotFoundError(f"Missing {baseline.name} prediction")
-        reference = Path(
-            Config.CHAIN_MINIMAL_PDB_FILE.format(
-                pdb_id=self.pdb_id, chain_id=self.asym_id
-            )
-        )
+        reference = Config3D.chain_file(self.pdb_id, self.asym_id)
 
         # Cache model interactions once across repeated experimental structures
         name = f"{self.pdb_id}_{self.asym_id}" if multimer else self.sequence_id
@@ -329,13 +322,13 @@ def _get_max_tm_results(args):
     """Find each model's closest pre-training structural homolog."""
     index, pdb_id, asym_id, pdb_id_to_date = args
     chain_id = f"{pdb_id.lower()}_{asym_id}"
-    source_pdb = Path(f"{Config.get_out_prefix(pdb_id.lower(), asym_id)}/{asym_id}.pdb")
+    source_pdb = Config3D.chain_file(pdb_id, asym_id)
     query_file = _prepare_usalign_pdb(
-        source_pdb, Path(Config.USALIGN_DIR) / "queries" / f"{chain_id}.pdb"
+        source_pdb, Config3D.USALIGN_DIR / "queries" / f"{chain_id}.pdb"
     )
-    cached_out_file = Path(f"{Config.USALIGN_DIR}/{chain_id}.out")
-    references_file = Path(Config.USALIGN_REFERENCES_FILE)
-    usalign_dir = Path(Config.USALIGN_DIR)
+    cached_out_file = Config3D.USALIGN_DIR / f"{chain_id}.out"
+    references_file = Config3D.USALIGN_REFERENCES_FILE
+    usalign_dir = Config3D.USALIGN_DIR
     usa_cmd = (
         f"{Config3D.USALIGN_BINARY} -dir1 {usalign_dir}/ {references_file} {query_file}"
     )
@@ -369,13 +362,13 @@ def _get_max_tm_results(args):
     # Identify the hit with the best TM score
     max_tm_results = {
         b: (0.0, None)  # max_tm, max_tm_result
-        for b in Config.BASELINES.values()
+        for b in BASELINES.values()
     }
 
     for usa_result in usa_results:
         for bl, (max_tm, max_tm_result) in max_tm_results.items():
             pdb_id, asym_id = usa_result.target_name.split("_")
-            published = pdb_id_to_date[pdb_id.upper()]
+            published = pdb_id_to_date[pdb_id.lower()]
             if published <= bl.training_cutoff:
                 if usa_result.tm_score > max_tm:
                     max_tm_results[bl] = (usa_result.tm_score, usa_result)
@@ -407,7 +400,7 @@ def _prepare_usalign_pdb(source: Path, output: Path) -> Path:
 
 
 def prep_usalign(
-    cutoff_col="Published",
+    cutoff_col="published",
     cutoff=Config3D.TARGET_CUTOFF,
 ):
     """
@@ -422,29 +415,24 @@ def prep_usalign(
         where cutoff_col is less than or equal to this cutoff will be
         considered as possible homology targets.
     """
-    references_file = Path(Config.USALIGN_REFERENCES_FILE)
-    rcsb_df = pd.read_csv(
-        Config3D.ANNOTATED_CHAINS_FILE,
-        keep_default_na=False,
-        na_values=[""],
-        low_memory=False,
-    )
+    references_file = Config3D.USALIGN_REFERENCES_FILE
+    rcsb_df = pd.read_parquet(Config3D.ANNOTATED_CHAINS_FILE)
     rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
 
     # Prepare all RNA chains prior to the cutoff for US-align
-    rna_chains = rcsb_df[["PDB ID", "Asym. Chain ID", "Published"]]
+    rna_chains = rcsb_df[["pdb_id", "asym_id", "published"]]
     rna_chains = [
         (pdb_id.lower(), asym_id)
         for pdb_id, asym_id, _ in rna_chains.itertuples(index=False)
     ]
-    os.makedirs(Config.USALIGN_DIR, exist_ok=True)
+    Config3D.USALIGN_DIR.mkdir(parents=True, exist_ok=True)
     missing = 0
     updated = False
     names = []
     for pdb_id, asym_id in rna_chains:
         chain_id = f"{pdb_id.lower()}_{asym_id}"
-        source_pdb = Path(Config.get_minimal_pdb_file(pdb_id, asym_id))
-        reference_pdb = Path(Config.USALIGN_DIR) / f"{chain_id}.pdb"
+        source_pdb = Config3D.chain_file(pdb_id, asym_id)
+        reference_pdb = Config3D.USALIGN_DIR / f"{chain_id}.pdb"
         if not source_pdb.is_file():
             missing += 1
             continue
@@ -475,15 +463,14 @@ def prep_usalign(
 
 def add_tm_id(
     chains: pd.DataFrame,
-    cutoff_col="Published",
+    cutoff_col="published",
     cutoff=Config3D.TARGET_CUTOFF,
 ):
     """
     Adds a column to the input DataFrame representing the maximum TM identity
     of each row/chain to any RNA chain in RCSB published prior to the input
     cutoff.  The input DataFrame is modified in place.  The target homologs and
-    their TM score are added to the columns "TM Homolog" and "TM Homolog
-    Score", respectively.
+    their TM score are added to the model-specific homology columns.
 
     Parameters
     ----------
@@ -496,24 +483,19 @@ def add_tm_id(
         where cutoff_col is less than or equal to this cutoff will be
         considered as possible homology targets.
     """
-    rcsb_df = pd.read_csv(
-        Config3D.ANNOTATED_CHAINS_FILE,
-        keep_default_na=False,
-        na_values=[""],
-        low_memory=False,
-    )
+    rcsb_df = pd.read_parquet(Config3D.ANNOTATED_CHAINS_FILE)
 
     rcsb_df = rcsb_df[rcsb_df[cutoff_col] <= cutoff]
-    references_file = Path(Config.USALIGN_REFERENCES_FILE)
+    references_file = Config3D.USALIGN_REFERENCES_FILE
     if not references_file.exists():
         raise RuntimeError(
             "Attempted to call add_tm_id without first calling prep_usalign"
         )
 
-    pdb_id_to_date = rcsb_df.set_index("PDB ID")[cutoff_col].to_dict()
+    pdb_id_to_date = rcsb_df.set_index("pdb_id")[cutoff_col].to_dict()
     tasks = [
         (index, pdb_id, asym_id, pdb_id_to_date)
-        for index, pdb_id, asym_id in chains[["PDB ID", "Asym. Chain ID"]].itertuples(
+        for index, pdb_id, asym_id in chains[["pdb_id", "asym_id"]].itertuples(
             index=True, name=None
         )
     ]
@@ -526,51 +508,15 @@ def add_tm_id(
     # Add max TM homologs for each baseline
     for index, baseline_results in results:
         for bl, (_, max_tm_result) in baseline_results.items():
-            new_col = f"{bl.name.upper()} TM Homolog"
+            homolog, date, rfam, score = homology_columns(bl.name)
             if max_tm_result is None:
-                chains.loc[index, f"{new_col} Score"] = 0.0
+                chains.loc[index, score] = 0.0
                 continue
             pdb_id, asym_id = max_tm_result.target_name.split("_")
-            max_tm_chain = rcsb_df.query(
-                f'`PDB ID` == "{pdb_id.upper()}" and `Asym. Chain ID` == "{asym_id}"'
-            )
-            chains.loc[index, new_col] = (
-                f"{pdb_id.lower()}_{max_tm_chain['Auth. Chain ID'].iloc[0]}"
-            )
-            chains.loc[index, f"{new_col} Date"] = max_tm_chain["Published"].iloc[0]
-            chains.loc[index, f"{new_col} Rfam"] = max_tm_chain["Rfam"].iloc[0]
-            chains.loc[index, f"{new_col} Score"] = f"{max_tm_result.tm_score:.5f}"
-
-
-def assign_cluster_0(chains: pd.DataFrame):
-    """
-    Assigns component 0 chains (those with no Rfam E-value <= 1.0) to their
-    most likely cluster (the Rfam with minimum E-value > 1.0, if it exists).
-    """
-    # NOTE(MCA): It is easier to do this now than at the clustering stage
-    #   because allowing Rfam hits with E-values >= 1.0 to form edges causes
-    #   the Rfam graph to be fully connected
-    mask = (
-        pd.to_numeric(chains["Rfam E-value"], errors="coerce").fillna(float("inf"))
-        >= Config.RFAM_BAD_CUTOFF
-    )
-    chains.loc[mask, "Rfam Cluster"] = chains.loc[mask, "Rfam"].map(
-        Config.RFAM_COMPONENTS
-    )
-
-    # Assign missing Rfams to new components
-    max_comp_id = max(Config.COMPONENT_RFAMS.keys())
-    mask = pd.isna(chains["Rfam Cluster"]) & pd.notna(chains["Rfam"])
-    missing_rfams = chains.loc[mask, "Rfam"].unique()
-    new_comp_ids = range(max_comp_id + 1, max_comp_id + 1 + len(missing_rfams))
-    new_rfam_components = dict(zip(missing_rfams, new_comp_ids))
-    new_component_rfams = {
-        comp_id: [rfam_name] for comp_id, rfam_name in zip(new_comp_ids, missing_rfams)
-    }
-    chains.loc[mask, "Rfam Cluster"] = (
-        chains.loc[mask, "Rfam"]
-        .map(Config.RFAM_COMPONENTS)
-        .fillna(chains.loc[mask, "Rfam"].map(new_rfam_components))
-        .astype(int)
-    )
-    Config.COMPONENT_RFAMS.update(new_component_rfams)
+            max_tm_chain = rcsb_df[
+                (rcsb_df["pdb_id"] == pdb_id.lower()) & (rcsb_df["asym_id"] == asym_id)
+            ].iloc[0]
+            chains.loc[index, homolog] = f"{pdb_id.lower()}_{max_tm_chain.auth_id}"
+            chains.loc[index, date] = max_tm_chain.published
+            chains.loc[index, rfam] = max_tm_chain.rfam
+            chains.loc[index, score] = max_tm_result.tm_score

@@ -273,7 +273,7 @@ environments:
       - pypi: ../..
       - pypi: git+https://github.com/RNA-Puzzles/RNA_assessment.git?rev=d46f0472e7d52629283bb046a9c8f5d36b35f685#d46f0472e7d52629283bb046a9c8f5d36b35f685
       - pypi: git+https://github.com/debbiemarkslab/EVcouplings.git?rev=14c83457c6cfca8156aabe0615067447a2169791#14c83457c6cfca8156aabe0615067447a2169791
-      - pypi: git+https://github.com/marcellszi/rna3db.git?rev=a58c1557d43104bb290781eb2d4c8d4f9538baf8#a58c1557d43104bb290781eb2d4c8d4f9538baf8
+      - pypi: git+https://github.com/marcellszi/rna3db.git?rev=4188517c48b1ad2610484f7d359cb77d87bd8957#4188517c48b1ad2610484f7d359cb77d87bd8957
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/8d/671d81534ea0e2b0e8a121be100020da09eb78861fe3aa8f3ef7dcd3bed1/msgpack-1.2.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/06/3a/7c448bc623fcdfa96672531beb5a616ea5e64f6975955254d7731ffb0ad9/black-26.5.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
@@ -5646,7 +5646,7 @@ packages:
   - scipy
   - seaborn
   - setuptools>=18.2
-- pypi: git+https://github.com/marcellszi/rna3db.git?rev=a58c1557d43104bb290781eb2d4c8d4f9538baf8#a58c1557d43104bb290781eb2d4c8d4f9538baf8
+- pypi: git+https://github.com/marcellszi/rna3db.git?rev=4188517c48b1ad2610484f7d359cb77d87bd8957#4188517c48b1ad2610484f7d359cb77d87bd8957
   name: rna3db
   version: '1.1'
   requires_dist:

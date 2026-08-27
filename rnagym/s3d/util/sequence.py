@@ -6,9 +6,10 @@
 ###############################################################################
 from __future__ import annotations
 
-import os
+import json
 import shlex
 import subprocess
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import cache
@@ -17,9 +18,10 @@ from typing import Dict, List, Optional
 
 import evcouplings.align.alignment as Alignment
 import pandas as pd
-from rna3db.tabular import TabularOutput
+from rna3db.tabular import TabularOutput, read_tbls_from_dir
 
-from rnagym.s3d.util import AccessionID, ChainID, Config, PdbID, Sequence
+from rnagym.config import Config3D
+from rnagym.s3d.util import AccessionID, ChainID, PdbID, Sequence
 
 
 @cache
@@ -27,7 +29,7 @@ def rfam_families() -> pd.DataFrame:
     """Load family sizes and covariance-model lengths from Rfam."""
     # Columns follow Rfam's official family table schema
     return pd.read_csv(
-        Config.RFAM_FAMILY_TABLE,
+        Config3D.RFAM_FAMILY_TABLE,
         sep="\t",
         header=None,
         encoding="latin-1",
@@ -35,6 +37,16 @@ def rfam_families() -> pd.DataFrame:
         names=["accession", "num_full", "model_length"],
         index_col="accession",
     )
+
+
+@cache
+def rna3db_hits() -> dict[str, TabularOutput]:
+    """Load the released RNA3DB Rfam hits on first use."""
+    hits = defaultdict(list)
+    for hit in read_tbls_from_dir(Config3D.RNA3DB_CMSCAN_DIR):
+        hits[hit.query_name].append(hit)
+    queries = json.loads(Config3D.RNA3DB_PARSE_FILE.read_text())
+    return {query: TabularOutput(hits=hits[query]) for query in queries}
 
 
 @dataclass
@@ -124,11 +136,7 @@ class FamHits:
         fasta_file: NamedTemporaryFile,
         fam_source: FamHits.Source,
     ) -> FamHits:
-        """
-        Constructs a Pfam FamHits for the input sequence as a pandas DataFrame.
-        Returns the FamHits, and writes outputs to
-        `data/3d/cache/{pdb_id}/{chain_id}/`.
-        """
+        """Return cached or newly computed family hits for one sequence."""
         # Extract the sequence
         sequence_lines = fasta_file.read().splitlines()[1:]
         fasta_file.seek(0)
@@ -155,12 +163,8 @@ class FamHits:
         asym_chain_id: ChainID,
         auth_chain_id: ChainID,
         fasta_file: NamedTemporaryFile,
-    ) -> Optional[pd.DataFrame]:
-        """
-        Constructs an Rfam FamHits for the input sequence as a pandas
-        DataFrame. Returns the hits, and writes outputs to
-        `data/3d/cache/{pdb_id}/{chain_id}/`.
-        """
+    ) -> FamHits:
+        """Load released RNA3DB hits or scan one sequence against Rfam."""
         # Get the sequence
         _, sequence = next(Alignment.read_fasta(fasta_file))
         seq_len = len(sequence)
@@ -168,29 +172,25 @@ class FamHits:
         # Conduct the cmscan
         query_id = f"{pdb_id.lower()}_{auth_chain_id}"
         tbl = None
-        if query_id in Config.RNA3DB_HITS:
+        cached_hits = rna3db_hits()
+        if query_id in cached_hits:
             # Use the RNA3DB cached hit
-            tbl = Config.RNA3DB_HITS[query_id]
+            tbl = cached_hits[query_id]
         else:
             # Conduct our own Rfam search
-            out_prefix = Config.get_out_prefix(pdb_id=pdb_id, chain_id=asym_chain_id)
-            out_table = f"{out_prefix}/rfam_table.txt"
+            out_prefix = Config3D.chain_dir(pdb_id, asym_chain_id)
+            out_table = out_prefix / "rfam_table.txt"
             cmscan_cmd = shlex.split(
                 f"cmscan --mid --cpu 1 --fmt 1 -o {out_prefix}/cmscan.out "
-                f"--tblout {out_table} {Config.RFAM_CM} {fasta_file.name}"
+                f"--tblout {out_table} {Config3D.RFAM_CM} {fasta_file.name}"
             )
 
             try:
-                os.makedirs(out_prefix, exist_ok=True)
-                result = subprocess.run(cmscan_cmd, text=True, check=True)
-
-                if result.stderr:
-                    raise subprocess.CalledProcessError(result.stderr)
-
+                out_prefix.mkdir(parents=True, exist_ok=True)
+                subprocess.run(cmscan_cmd, check=True)
                 tbl = TabularOutput(out_table)
             except subprocess.CalledProcessError as e:
                 print(f"Unable to retrieve rfam hits for {pdb_id}_{asym_chain_id}: {e}")
-                print(f"{e.stderr=}")
                 fasta_file.seek(0)
                 contents = fasta_file.read()
                 fasta_file.seek(0)

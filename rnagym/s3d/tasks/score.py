@@ -3,6 +3,7 @@
 import pandas as pd
 
 from rnagym.config import Config3D
+from rnagym.s3d.models import homology_columns
 
 MODELS = {
     "AF3": "AlphaFold 3",
@@ -12,13 +13,19 @@ MODELS = {
     "TRRNA": "trRosettaRNA",
 }
 DATASETS = ("monomer", "multimer")
-IDENTIFIERS = ["PDB ID", "Asym. Chain ID", "Auth. Chain ID"]
+IDENTIFIERS = ["pdb_id", "asym_id", "auth_id"]
 METRICS = ["tm_score", "inf_wc", "inf_nwc"]
 
 
 def score_dataset(dataset: str) -> pd.DataFrame:
     """Summarize every available model for one 3D dataset."""
     references = pd.read_parquet(Config3D.TARGET_FILE).query("type == @dataset")
+    registry = pd.read_parquet(
+        Config3D.SEQUENCE_FILE, columns=["sequence_id", "cluster_rep"]
+    )
+    references = references.merge(
+        registry, on="sequence_id", how="left", validate="many_to_one"
+    )
     scores = pd.read_parquet(Config3D.SCORE_FILE).query("type == @dataset")
     if scores.duplicated([*IDENTIFIERS, "model"]).any():
         raise ValueError(f"Duplicate {dataset} score rows")
@@ -33,7 +40,7 @@ def score_dataset(dataset: str) -> pd.DataFrame:
         )
         if (model_scores[["inf_wc", "inf_nwc"]] == -1).any().any():
             raise ValueError(f"Unresolved {dataset} INF score")
-        tm_train_column = f"{key} TM Homolog Score"
+        tm_train_column = homology_columns(key)[-1]
         if model_scores[tm_train_column].isna().any():
             raise RuntimeError("Run `pixi run usalign`, then `pixi run split`")
         observed = model_scores[[*METRICS, tm_train_column]].stack()

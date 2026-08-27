@@ -157,8 +157,7 @@ def run_cmsearch(cm: Path, output: Path, worker: int | None, workers: int) -> No
 def load_queries(task_id: int, task_count: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Load one shard of unique sequences and their output directories."""
     targets = (
-        pd.read_parquet(Config3D.TARGET_FILE)[["sequence_id", "Sequence (unmod.)"]]
-        .rename(columns={"Sequence (unmod.)": "sequence"})
+        pd.read_parquet(Config3D.TARGET_FILE)[["sequence_id", "sequence"]]
         .drop_duplicates()
         .assign(msa_dir=Config3D.MSA_DIR)
     )
@@ -202,6 +201,8 @@ def main() -> None:
         _link_fitness_alignments(set(sequences["sequence_id"]))
         print(f"Riboseek shard {task_id + 1}/{task_count} is complete")
         return
+    # Search only sequences without complete outputs
+    sequences = missing
 
     batch = hashlib.sha256(
         "\n".join(
@@ -363,7 +364,7 @@ def main() -> None:
         f"Wrote {len(missing):,} A3Ms and {converted:,} aligned FASTAs "
         f"for {len(sequences):,} unique sequences"
     )
-    _link_fitness_alignments(set(sequences["sequence_id"]))
+    _link_fitness_alignments(set(queries["sequence_id"]))
     if not missing.empty:
         shutil.rmtree(work_dir)
 

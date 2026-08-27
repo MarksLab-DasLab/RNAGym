@@ -139,16 +139,14 @@ def _multimer_configs(targets: pl.DataFrame) -> int:
     """Write one AF3 configuration per multimeric PDB assembly."""
     target_groups: dict[str, dict[str, str]] = {}
     multimer_targets = targets.filter(pl.col("type") == "multimer").select(
-        "PDB ID", "Asym. Chain ID", "sequence_id"
+        "pdb_id", "asym_id", "sequence_id"
     )
     for pdb_id, asym_id, sequence_id in multimer_targets.iter_rows():
         target_groups.setdefault(pdb_id.lower(), {})[asym_id] = sequence_id
 
     for pdb_id, rna_targets in sorted(target_groups.items()):
         run_dir = _PREDICTION_DIR / "multimers" / pdb_id
-        document = gemmi.cif.read(
-            str(Config3D.CACHE_DIR / pdb_id / f"{pdb_id}-assembly.cif")
-        )
+        document = gemmi.cif.read(str(Config3D.assembly_file(pdb_id)))
         block = document.sole_block()
         structure = gemmi.make_structure_from_block(block)
         chain_data = _chain_data(block, structure)
@@ -274,7 +272,7 @@ def setup() -> None:
     """Prepare AF3 configurations and recover interrupted output."""
     targets = pl.read_parquet(
         Config3D.TARGET_FILE,
-        columns=["PDB ID", "Asym. Chain ID", "type", "sequence_id"],
+        columns=["pdb_id", "asym_id", "type", "sequence_id"],
     )
     monomers = _monomer_configs(targets)
     multimers = _multimer_configs(targets)

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import gzip
-import os
 import re
 from collections import defaultdict
 from enum import Enum, auto
@@ -15,14 +14,11 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import (
     DefaultDict,
-    Dict,
     Generator,
-    Iterable,
     List,
+    NamedTuple,
     Optional,
-    Set,
     Tuple,
-    Union,
 )
 
 import evcouplings.align.alignment as alignment
@@ -33,7 +29,8 @@ from evcouplings.utils.system import ResourceError
 from gemmi import Residue, ResidueSpan, Structure
 from gemmi.cif import Document
 
-from rnagym.s3d.util import ChainID, Config, ContactMap, Residues
+from rnagym.config import Config3D
+from rnagym.s3d.util import ChainID, Residues
 from rnagym.s3d.util.sequence import FamHits
 
 
@@ -293,10 +290,29 @@ def get_cif_key(cif: Document, key: str, default="") -> str:
     return strip_cif_value(value) if not is_none(value) else default
 
 
+def parse_resolution(value: str) -> float | None:
+    """Return the worst reported numeric resolution, if available."""
+    resolutions = []
+    for item in value.split(","):
+        try:
+            resolutions.append(float(item))
+        except ValueError:
+            pass
+    return max(resolutions, default=None)
+
+
+def canonicalize_sequence(sequence: str, protein: bool) -> str:
+    """Replace unresolved polymer residues with the appropriate unknown token."""
+    if protein:
+        return sequence.replace("?", "X")
+    sequence = sequence.upper().replace("T", "U")
+    return "".join(base if base in "ACGU" else "N" for base in sequence)
+
+
 def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
     """
     Returns the selected PDB from RCSB as an EVCouplings PDB object.  PDB
-    download results are cached for reuse in Config.OUT_PREFIX.
+    download results are cached under the shared 3D curation cache.
 
     Parameters:
         pdb_id (str): The PDB ID of interest.
@@ -308,24 +324,32 @@ def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
     """
     # Download the full CIF and assembly CIFs
     pdb_id = pdb_id.lower()
-    out_prefix = Config.get_out_prefix(pdb_id)
-    assembly_url = Config.RCSB_ASSEMBLY_URL.format(pdb_id=pdb_id)
-    assembly_out = Config.RCSB_ASSEMBLY_FILE.format(pdb_id=pdb_id)
-    full_url = Config.RCSB_FULL_URL.format(pdb_id=pdb_id)
-    full_out = Config.RCSB_FULL_FILE.format(pdb_id=pdb_id)
+    out_prefix = Config3D.pdb_dir(pdb_id)
+    assembly_url = Config3D.RCSB_ASSEMBLY_URL.format(pdb_id=pdb_id)
+    assembly_out = Config3D.assembly_file(pdb_id)
+    full_url = Config3D.RCSB_FULL_URL.format(pdb_id=pdb_id)
+    full_out = Config3D.full_file(pdb_id)
 
-    def fetch_cif(source_url: str, out_file: str):
-        os.makedirs(out_prefix, exist_ok=True)
-        if not os.path.exists(out_file) or os.stat(out_file).st_size == 0:
-            with open(out_file, "w") as f:
-                r = requests.get(source_url)
-                f.write(gzip.decompress(r.content).decode("utf-8"))
+    def fetch_cif(source_url: str, out_file: Path):
+        out_prefix.mkdir(parents=True, exist_ok=True)
+        if not out_file.is_file() or not out_file.stat().st_size:
+            response = requests.get(source_url, timeout=60)
+            response.raise_for_status()
+            temporary = out_file.with_name(f".{out_file.name}.tmp")
+            temporary.write_bytes(gzip.decompress(response.content))
+            temporary.replace(out_file)
 
-    fetch_cif(assembly_url, assembly_out)
     fetch_cif(full_url, full_out)
+    try:
+        fetch_cif(assembly_url, assembly_out)
+    except requests.exceptions.HTTPError as error:
+        if error.response.status_code != 404:
+            raise
+        # Some entries have no deposited biological assembly
+        assembly_out = full_out
 
-    cif = gemmi.cif.read_file(full_out)
-    structure = gemmi.read_structure(assembly_out)
+    cif = gemmi.cif.read_file(str(full_out))
+    structure = gemmi.read_structure(str(assembly_out))
 
     # Clean up the input structure
     structure.remove_alternative_conformations()
@@ -336,177 +360,97 @@ def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
     return (cif, structure)
 
 
-def iterate_contacts(
+class ContactAnnotations(NamedTuple):
+    """Summarize contacts involving the selected RNA chains."""
+
+    cofactors: dict[ChainID, set[str]]
+    neighbors: dict[ChainID, set[ChainID]]
+    self_contacts: dict[ChainID, set[int]]
+    polymer_coverage: dict[ChainID, float]
+    nucleic_acid_coverage: dict[ChainID, float]
+
+
+def get_contact_annotations(
     grid: gemmi.NeighborSearch,
     model: gemmi.Model,
-    asym_ids: Set[ChainID] = {},
-    max_radius=5.0,
-) -> Generator[Tuple[Residue, gemmi.CRA], None, None]:
-    """
-    Generates all contacts for every chain in the input model.
+    asym_ids: set[ChainID],
+    max_radius: float = 5.0,
+    min_neighbor_distance: int = 6,
+) -> ContactAnnotations:
+    """Collect every RNA contact annotation in one neighbor traversal."""
+    chain_lengths = {}
+    cofactor_residues = defaultdict(set)
+    neighbors = defaultdict(set)
+    nucleic_acid_covered = defaultdict(set)
+    polymer_covered = defaultdict(set)
+    self_contacts = defaultdict(set)
 
-    Parameters
-    ----------
-    grid (gemmi.NeighborSearch):
-        A populated gemmi.NeighborSearch object to use for contact searching.
-    model (gemmi.Model):
-        The model to search.
-    asym_ids (Set[ChainID]):
-        Specific asym. IDs to search for cofactor contacts.
-    max_radius (float):
-        The maximum distance in Å to consider for contacts.
-    """
     for chain in model.subchains():
         chain_id = chain.subchain_id()
         if chain_id not in asym_ids:
             continue
+        chain_lengths.setdefault(chain_id, chain.length())
 
         for residue in chain:
             for atom in residue:
-                contacts = grid.find_neighbors(atom=atom, max_dist=max_radius)
-                for hit in contacts:
-                    yield (residue, hit.to_cra(model))
+                for hit in grid.find_neighbors(atom=atom, max_dist=max_radius):
+                    neighbor = hit.to_cra(model).residue
+                    if neighbor.entity_type != gemmi.EntityType.Polymer:
+                        cofactor_residues[neighbor].add(residue)
+                        continue
 
+                    is_nucleic = neighbor.name in Residues.NA
+                    if neighbor.subchain != residue.subchain and is_nucleic:
+                        neighbors[residue.subchain].add(neighbor.subchain)
+                    if neighbor.subchain == residue.subchain:
+                        if (
+                            abs(neighbor.label_seq - residue.label_seq)
+                            >= min_neighbor_distance
+                        ):
+                            self_contacts[residue.subchain].update(
+                                (residue.label_seq, neighbor.label_seq)
+                            )
+                        continue
 
-def get_self_contacts(
-    grid: gemmi.NeighborSearch,
-    model: gemmi.Model,
-    chain: gemmi.ResidueSpan,
-    max_radius=5.0,
-    min_neighbor_dist=6,
-) -> ContactMap:
-    """
-    Retrieves contacts between a chain and itself. The resulting dictionary maps
-    each input chain residue to its self-contacting residues.
+                    # Symmetry-expanded copies share the base chain ID
+                    source = residue.subchain.split("-")
+                    target = neighbor.subchain.split("-")
+                    is_interchain = source[0] != target[0]
+                    is_intercrystal = not is_interchain and (
+                        len(source) != len(target)
+                        or (len(source) == 2 and source[1] != target[1])
+                    )
+                    if is_interchain or is_intercrystal:
+                        polymer_covered[residue.subchain].add(residue.label_seq)
+                        if is_nucleic:
+                            nucleic_acid_covered[residue.subchain].add(
+                                residue.label_seq
+                            )
 
-    Parameters:
-        grid (gemmi.NeighborSearch):  A populated gemmi.NeighborSearch object
-          to use for contact searching.
-        model (gemmi.Model): The model to search.
-        chain (gemmi.ResidueSpan): The chain to check for self contacts.
-        max_radius (float):  The maximum distance in Å to consider for
-          contacts.
-    """
-    self_contacts = {}
-    for residue, hit in iterate_contacts(
-        grid, model, {chain.subchain_id()}, max_radius
-    ):
-        r1 = residue
-        r2 = hit.residue
-        if (
-            r2.subchain == r1.subchain
-            and abs(r2.label_seq - r1.label_seq) >= min_neighbor_dist
-        ):
-            self_contacts.setdefault(r1, set()).add(r2)
-            self_contacts.setdefault(r2, set()).add(r1)
+    cofactors = defaultdict(set)
+    for cofactor, residues in cofactor_residues.items():
+        for residue in residues:
+            # Cofactors bridge distinct segments of the same polymer entity
+            if any(
+                other.entity_id == residue.entity_id
+                and abs(other.seqid.num - residue.seqid.num) > 3
+                for other in residues
+            ):
+                cofactors[residue.subchain].add(cofactor.name)
 
-    return self_contacts
-
-
-def get_chain_coverages(
-    grid: gemmi.NeighborSearch,
-    model: gemmi.Model,
-    asym_ids: Set[ChainID] = {},
-    max_radius: float = 5.0,
-    only_nucleic: bool = False,
-) -> Dict[ChainID, float]:
-    """
-    Gets the % coverage of the specified RNA chains in the dataset.  Here %
-    coverage means the % of the input chain's residues that are in contact with
-    different polymer chain.
-
-    grid (gemmi.NeighborSearch):
-        A populated gemmi.NeighborSearch object to use for contact searching.
-    model (gemmi.Model):
-        The model to search.
-    asym_ids (Set[ChainID]):
-        Specific asym. IDs to search for cofactor contacts.
-    max_radius (float):
-        The maximum distance in Å to consider for contacts.
-    only_nucleic (bool):
-        If True, only looks for coverage by nucleic polymers.
-    """
-    residues_covered = {asym_id: set() for asym_id in asym_ids}
-    chain_lengths = {}
-
-    for chain in model.subchains():
-        chain_id = chain.subchain_id()
-        if chain_id in asym_ids and chain_id not in chain_lengths:
-            chain_lengths[chain_id] = chain.length()
-
-    for residue, hit in iterate_contacts(grid, model, asym_ids, max_radius):
-        is_polymer = hit.residue.entity_type == gemmi.EntityType.Polymer
-        is_nucleic = hit.residue.name in Residues.NA
-
-        # interxtal contacts are contacts with a symmetry expanded copy of
-        # itself.  These subchains come in the form "<ChainID>-<2,3,...,N>"
-        # where N indicates the which symmetry copy the subchain belongs to
-        res_sc = residue.subchain.split("-")
-        hit_sc = hit.residue.subchain.split("-")
-        is_interchain = res_sc[0] != hit_sc[0]
-        is_interxtal = not is_interchain and (
-            len(res_sc) != len(hit_sc) or (len(res_sc) == 2 and res_sc[1] != hit_sc[1])
-        )
-
-        if (
-            is_polymer
-            and (is_interchain or is_interxtal)
-            and (not only_nucleic or is_nucleic)
-        ):
-            residues_covered[residue.subchain].add(residue.label_seq)
-
-    chain_coverages = {
-        asym_id: len(residues_covered[asym_id]) / chain_lengths[asym_id]
-        for asym_id in asym_ids
-    }
-    return chain_coverages
-
-
-def get_interchain_contacts(
-    grid: gemmi.NeighborSearch,
-    model: gemmi.Model,
-    asym_ids: Iterable[ChainID],
-    max_radius=5.0,
-    only_nucleic=False,
-    only_cofactors=False,
-) -> ContactMap:
-    """
-    Retrieves the cofactor contacts in the given structure for the given entity
-    ID.  The resulting dictionary maps each polymer residue in the input
-    asym. ID chains to its non-polymer residue contacts, and vice versa.
-
-    Parameters:
-        model (gemmi.Model): The model to search.
-        asym_ids (Iterable[ChainID]): The asym. IDs to search for cofactor
-          contacts.
-        grid (gemmi.NeighborSearch):  A populated gemmi.NeighborSearch object
-          to use for contact searching.
-        max_radius (float):  The maximum distance in Å to consider for
-          contacts.
-        only_nucleic: If True, gets only NA interchain contacts.
-        only_cofactors: If True, gets only interchain cofactor contacts.
-    """
-    if (only_nucleic + only_cofactors) != 1:
-        raise ValueError("Must supply either only_nucleic or only_cofactors")
-    if not isinstance(asym_ids, set):
-        asym_ids = set(asym_id for asym_id in asym_ids)
-
-    # Identify contacts involving chains listed in asym_ids
-    neighbors: ContactMap = {}
-    for residue, hit in iterate_contacts(grid, model, asym_ids, max_radius):
-        is_polymer = hit.residue.entity_type == gemmi.EntityType.Polymer
-        is_nucleic = hit.residue.name in Residues.NA
-        is_interchain = hit.residue.subchain != residue.subchain
-
-        if (only_cofactors and not is_polymer) or (
-            only_nucleic and is_interchain and is_polymer and is_nucleic
-        ):
-            r1 = residue
-            r2 = hit.residue
-            neighbors.setdefault(r1, set()).add(r2)
-            neighbors.setdefault(r2, set()).add(r1)
-
-    return neighbors
+    return ContactAnnotations(
+        cofactors,
+        neighbors,
+        self_contacts,
+        {
+            chain_id: len(polymer_covered[chain_id]) / length
+            for chain_id, length in chain_lengths.items()
+        },
+        {
+            chain_id: len(nucleic_acid_covered[chain_id]) / length
+            for chain_id, length in chain_lengths.items()
+        },
+    )
 
 
 class StructureInfo:
@@ -514,7 +458,6 @@ class StructureInfo:
     Classifies information about an input structure.
 
     Members:
-        HEADERS:  Headers for the values output by `get_data()`.
         assembly (Structure):  The biological assembly as a Gemmi Structure.
         asym_id_to_auth_id (Dict[ChainID, ChainID]):  Mapping from each asym.
           ID to its respective auth. ID.
@@ -548,10 +491,10 @@ class StructureInfo:
         residues (Dict[ResidueType, Set[ResName]]):  Mapping from ResidueType
           to residues of that type in the structure.  Useful for tracking,
           e.g., modified residues.
-        resolution (str):  The reported resolution of this structure.
+        resolution (float | None):  The reported resolution of this structure.
         revision_dates (List[str]):  Dates this PDB was revised.
-        self_contacts (Dict[ChainID, ContactMap]):  Mapping from input chains
-          to ContactMap objects describing self contacts between residues.
+        self_contacts (Dict[ChainID, Set[int]]):  Residues in each chain with
+          nonlocal self contacts.
         sequences (Dict[ChainID, Seq]):  Mapping from each ChainID in the
           input structure to its respective sequence.
         sequences_unmod (Dict[ChainID, Seq]):  Same as `sequences` but
@@ -583,70 +526,23 @@ class StructureInfo:
         "sequences_unmod",
     )
 
-    HEADERS = [
-        "PDB ID",
-        "Asym. Chain ID",
-        "Auth. Chain ID",
-        "Sequence Cluster",
-        "Rfam Cluster",
-        "Name",
-        "Published",
-        "Keywords",
-        "Method",
-        "Resolution",
-        "Organism",
-        "Synthetic organism",
-        "Self Structured",
-        "% covered (any polymer)",
-        "% covered (only NA)",
-        "# of neighbor NA chains",
-        "# of RNA chains",
-        "# of protein chains",
-        "# of DNA chains",
-        "# of hybrid chains",
-        "# of HETATM chains",
-        "# of solvent chains",
-        "# of unknown chains",
-        "N_nt",  # number of nucleotids
-        "N_aa",  # number of amino acids
-        "N",  # N_nt + N_aa
-        "Solvent residues",
-        "Hetatm residues",
-        "Mod. RNA residues",
-        "Mod. DNA residues",
-        "Mod. protein residues",
-        "Cofactors",
-        "Sequence",
-        "Sequence (unmod.)",
-        "L",
-        "Fraction missing",
-        "Rfam",
-        "Rfam N/L",
-        "Rfam L",
-        "Rfam fraction observed",
-        "Rfam bitscore",
-        "Rfam E-value",
-    ]
+    __tracked_chain_types = {
+        "num_dna_chains": ChainType.DNA,
+        "num_hetatm_chains": ChainType.HETATM,
+        "num_hybrid_chains": ChainType.NA_HYBRID,
+        "num_protein_chains": ChainType.PROTEIN,
+        "num_rna_chains": ChainType.RNA,
+        "num_solvent_chains": ChainType.SOLVENT,
+        "num_unknown_chains": ChainType.UNKNOWN,
+    }
 
-    # Order must match HEADERS
-    __tracked_chain_types = [
-        ChainType.RNA,
-        ChainType.PROTEIN,
-        ChainType.DNA,
-        ChainType.NA_HYBRID,
-        ChainType.HETATM,
-        ChainType.SOLVENT,
-        ChainType.UNKNOWN,
-    ]
-
-    # Order must match HEADERS
-    __tracked_residue_types = [
-        ResidueType.SOLVENT,
-        ResidueType.HETATM,
-        ResidueType.MOD_RNA,
-        ResidueType.MOD_DNA,
-        ResidueType.MOD_PROTEIN,
-    ]
+    __tracked_residue_types = {
+        "hetatm_residues": ResidueType.HETATM,
+        "modified_dna_residues": ResidueType.MOD_DNA,
+        "modified_protein_residues": ResidueType.MOD_PROTEIN,
+        "modified_rna_residues": ResidueType.MOD_RNA,
+        "solvent_residues": ResidueType.SOLVENT,
+    }
 
     # Regex for identifying modified residues in annotated sequences
     __mod_residue_re = re.compile(r"-\(([A-Za-z0-9_-]*)\)-")
@@ -679,14 +575,14 @@ class StructureInfo:
                     (
                         ResidueType.to_chain_type(rtype)
                         for rtype, residues in restype_lists.items()
-                        if len(residues) / chain.length() > Config.HYBRID_CUTOFF
+                        if len(residues) / chain.length() > Config3D.HYBRID_CUTOFF
                     ),
                     None,
                 )
                 chain_type = dominant_chain_type or chain_type
 
             for res_type, residues in restype_lists.items():
-                if res_type in self.__tracked_residue_types:
+                if res_type in self.__tracked_residue_types.values():
                     for residue in residues:
                         self.residues[res_type].add(residue.name)
 
@@ -722,8 +618,9 @@ class StructureInfo:
         # Convert to Seq objects
         self.sequences_unmod = {
             asym_id: Seq(
-                str(StructureInfo.__unmodify_seq(seq)).replace(
-                    "?", "X" if asym_id in protein_asym_ids else "N"
+                canonicalize_sequence(
+                    str(StructureInfo.__unmodify_seq(seq)),
+                    protein=asym_id in protein_asym_ids,
                 )
             )
             for asym_id, seq in self.sequences.items()
@@ -751,25 +648,24 @@ class StructureInfo:
 
         # --- Identify fam hits for RNAs ---
         self.fam_hits = {}
-        if len(rna_chains) <= Config.MAX_RFAM_MSAS:
-            for chain in rna_chains:
-                chain_id = chain.subchain_id()
-                sequence = self.sequences_unmod[chain_id]
-                auth_chain_id = self.asym_id_to_auth_id[chain_id]
+        for chain in rna_chains:
+            chain_id = chain.subchain_id()
+            sequence = self.sequences_unmod[chain_id]
+            auth_chain_id = self.asym_id_to_auth_id[chain_id]
 
-                if Config.RNA_MIN_NT <= len(sequence) <= Config.RNA_MAX_NT:
-                    with NamedTemporaryFile(mode="w+", delete=True) as tmp:
-                        alignment.write_fasta(((chain_id, str(sequence)),), tmp)
-                        tmp.seek(0)
-                        self.fam_hits[chain_id] = FamHits.from_fam(
-                            self.pdb_id,
-                            chain_id,
-                            auth_chain_id,
-                            tmp,
-                            FamHits.Source.RFAM,
-                        )
-                else:
-                    self.fam_hits[chain_id] = None
+            if len(sequence) >= Config3D.MIN_ANNOTATION_LENGTH:
+                with NamedTemporaryFile(mode="w+", delete=True) as tmp:
+                    alignment.write_fasta(((chain_id, str(sequence)),), tmp)
+                    tmp.seek(0)
+                    self.fam_hits[chain_id] = FamHits.from_fam(
+                        self.pdb_id,
+                        chain_id,
+                        auth_chain_id,
+                        tmp,
+                        FamHits.Source.RFAM,
+                    )
+            else:
+                self.fam_hits[chain_id] = None
 
         # --- Structural details ---
         self.revision_dates = get_cif_key(
@@ -779,15 +675,15 @@ class StructureInfo:
         self.keywords = get_cif_key(self.cif, "_struct_keywords.text")
         self.method = get_cif_key(self.cif, "_exptl.method")
         if "X-RAY DIFFRACTION" in self.method:
-            self.resolution = get_cif_key(
-                self.cif, "_refine.ls_d_res_high", default="n.s."
+            self.resolution = parse_resolution(
+                get_cif_key(self.cif, "_refine.ls_d_res_high")
             )
         elif "ELECTRON MICROSCOPY" in self.method:
-            self.resolution = get_cif_key(
-                self.cif, "_em_3d_reconstruction.resolution", default="n.s."
+            self.resolution = parse_resolution(
+                get_cif_key(self.cif, "_em_3d_reconstruction.resolution")
             )
         else:
-            self.resolution = "N/A"
+            self.resolution = None
 
         # --- Organism details ---
         # NOTE(MCA): RCSB guarantees that the entity IDs in the biological
@@ -844,54 +740,29 @@ class StructureInfo:
                 syn_organism=eid_to_syn_org.get(entity_id, None),
             )
 
-        # --- Identify RNA chain cofactors ---
-        # Populate a grid-based neighbor search
+        # --- Identify RNA contacts ---
         grid = gemmi.NeighborSearch(model, self.assembly.cell, max_radius=5.0).populate(
             include_h=False
         )
-        cofactor_contacts = get_interchain_contacts(
-            grid, model, rna_asym_ids, only_cofactors=True
+        contacts = get_contact_annotations(
+            grid,
+            model,
+            rna_asym_ids,
+            Config3D.COVERAGE_RADIUS,
+            Config3D.SELF_CONTACT_MIN_NEIGHBOR_DISTANCE,
         )
-
-        # Identify cofactors (start -> cofactor -> end)
-        self.cofactors = defaultdict(set)
-        for start, neighbors in cofactor_contacts.items():
-            if start.entity_type != gemmi.EntityType.Polymer:
-                continue
-
-            # Since we started with a polymer, all the neighbors must be
-            # non-polymer
-            for cofactor in neighbors:
-                ends = cofactor_contacts[cofactor]
-
-                # Start and end must be in the same entity, but at distinct
-                # segments (> +/-3 residues from the original residue)
-                for end in ends:
-                    if (
-                        end.entity_id == start.entity_id
-                        and abs(end.seqid.num - start.seqid.num) > 3
-                    ):
-                        asym_chain_id = start.subchain
-                        self.cofactors[asym_chain_id].add(cofactor.name)
-
-        # --- Identify inter-chain nucleic acid contacts ---
-        nucleic_contacts = get_interchain_contacts(
-            grid, model, rna_asym_ids, only_nucleic=True
-        )
-
-        self.neighbors = defaultdict(set)
-        for start, neighbors in nucleic_contacts.items():
-            for neighbor in neighbors:
-                self.neighbors[start.subchain].add(neighbor.subchain)
+        self.cofactors = contacts.cofactors
+        self.neighbors = contacts.neighbors
+        self.self_contacts = contacts.self_contacts
+        self.chain_coverages = {
+            ChainType.ANY: contacts.polymer_coverage,
+            ChainType.NA: contacts.nucleic_acid_coverage,
+        }
 
         # --- Write minimal chain PDBs for structural alignments ---
         for chain in rna_chains:
             chain_id = chain.subchain_id()
-            pdb_out = Path(
-                Config.CHAIN_MINIMAL_PDB_FILE.format(
-                    pdb_id=self.pdb_id, chain_id=chain_id
-                )
-            )
+            pdb_out = Config3D.chain_file(self.pdb_id, chain_id)
             if not pdb_out.exists() or pdb_out.stat().st_size == 0:
                 pdb_out.parent.mkdir(parents=True, exist_ok=True)
                 new_structure = gemmi.Structure()
@@ -908,27 +779,6 @@ class StructureInfo:
                 new_structure.add_model(new_model)
                 new_structure.write_minimal_pdb(str(pdb_out))
 
-        # --- Get information about self-contacts ---
-        self.self_contacts = {}
-        for chain in rna_chains:
-            chain_id = chain.subchain_id()
-            self.self_contacts[chain_id] = get_self_contacts(
-                grid,
-                model,
-                chain,
-                min_neighbor_dist=Config.SELF_CONTACT_MIN_NEIGHBOR_DIST,
-            )
-
-        # --- Populate chain coverages ---
-        self.chain_coverages = {
-            ChainType.ANY: get_chain_coverages(
-                grid, model, rna_asym_ids, Config.COVERAGE_RADIUS
-            ),
-            ChainType.NA: get_chain_coverages(
-                grid, model, rna_asym_ids, Config.COVERAGE_RADIUS, only_nucleic=True
-            ),
-        }
-
     @staticmethod
     def from_pdb_id(pdb_id: str) -> Optional[StructureInfo]:
         """
@@ -937,8 +787,6 @@ class StructureInfo:
         Parameters:
             pdb_id (str): The 4-letter PDB ID to check on RCSB.
         """
-        print(f"Processing {pdb_id}...")
-
         # Retrieve the full structure to identify resolution and keywords, as
         # well as the assembly for annotation
         try:
@@ -992,7 +840,7 @@ class StructureInfo:
             sequence,
         )
 
-    def get_frac_missing_residues(self, chain_id: ChainID) -> int:
+    def get_frac_missing_residues(self, chain_id: ChainID) -> float:
         """
         Retrieves the fraction of missing residues in the input chain ID.
         """
@@ -1005,15 +853,15 @@ class StructureInfo:
     def rna_chain_ids(self) -> Generator[ChainID, None, None]:
         """
         Returns a generator of the asym. chain IDs of RNAs in this structure.
-        RNAs will only be yielded if they meet the length criterias specified
-        in `Config`.
+        RNAs will only be yielded if they meet the length criteria specified
+        in `Config3D`.
         """
         for chain in self.chains_of_type[ChainType.RNA]:
             chain_id = chain.subchain_id()
             if "-" in chain_id:
                 continue
             sequence = self.sequences_unmod[chain_id]
-            if Config.RNA_MIN_NT <= len(sequence) <= Config.RNA_MAX_NT:
+            if len(sequence) >= Config3D.MIN_ANNOTATION_LENGTH:
                 yield chain_id
 
     @property
@@ -1024,113 +872,78 @@ class StructureInfo:
     def pdb_name(self) -> str:
         return get_cif_key(self.cif, "_struct.title")
 
-    def get_data(self, chain_id: ChainID = None) -> Union[List[str], List[List[str]]]:
-        """
-        Returns a list of strings representing the data stored in this
-        StructureInfo object sorted according to HEADERS.  If chain_id is not
-        provided, defaults to retrieving info on all RNA chains.
-
-        Parameters:
-            chain_id (ChainID): The asym. chain ID to get data for.
-        """
-        # Default to returning info on all chains
+    def get_data(
+        self, chain_id: ChainID | None = None
+    ) -> dict[str, object] | list[dict[str, object]]:
+        """Return native typed annotations for one or every RNA chain."""
         if chain_id is None:
-            return [self.get_data(chain_id) for chain_id in self.rna_chain_ids]
+            return [self.get_data(item) for item in self.rna_chain_ids]
+        if chain_id not in self.sequences:
+            raise ValueError(f"Chain {chain_id} has no sequence information")
 
-        # Otherwise, retrieve chain-specific information
-        data = []
-
-        # Structure information
-        auth_id = self.asym_id_to_auth_id[chain_id]
-        chain_key = f"{self.pdb_id.lower()}_{auth_id}"
-        data.append(self.pdb_id.upper())
-        data.append(chain_id)
-        data.append(auth_id)
-        data.append(Config.SEQ_CLUST_REPR_CHAINS.get(chain_key, ""))
-        data.append(str(Config.STRUCT_CLUST_COMPONENTS.get(chain_key, "")))
-        data.append(self.pdb_name)
-        data.append(self.published_date)
-        data.append(self.keywords)
-        data.append(self.method)
-        data.append(self.resolution)
-
-        # Chain-specific structure information
+        sequence = str(self.sequences_unmod[chain_id])
         chain_info = self.chain_infos[chain_id]
-        data.append(chain_info.src_organism)
-        data.append(chain_info.syn_organism)
-
-        # Whether the RNA has structure (monomer or multimer)
-        data.append(
-            str(
-                len(self.self_contacts[chain_id].keys())
-                > Config.MIN_STRUCTURED_CONTACTS
-            )
-        )
-        data.append(f"{self.chain_coverages[ChainType.ANY][chain_id]:.4f}")
-        data.append(f"{self.chain_coverages[ChainType.NA][chain_id]:.4f}")
-        n_na_neighbors = str(len(self.neighbors[chain_id]))
-        data.append(n_na_neighbors)
-
-        # Chain types
-        for chain_type in self.__tracked_chain_types:
-            data.append(str(len(self.chains_of_type[chain_type])))
-
-        # Number of nucleotides/amino acids
-        n_nt = sum(
+        num_nucleotides = sum(
             len(self.sequences_unmod[chain.subchain_id().split("-")[0]])
             for chain_type in ChainType.ALL_NAS
             for chain in self.chains_of_type[chain_type]
         )
-        n_aa = sum(
+        num_amino_acids = sum(
             len(self.sequences_unmod[chain.subchain_id().split("-")[0]])
             for chain in self.chains_of_type[ChainType.PROTEIN]
         )
-        n = n_nt + n_aa
-        data.append(str(n_nt))
-        data.append(str(n_aa))
-        data.append(str(n))
-
-        # Residue types
-        for residue_type in self.__tracked_residue_types:
-            data.append(", ".join(sorted(self.residues[residue_type])))
-
-        # Cofactors
-        data.append(", ".join(sorted(self.cofactors[chain_id])))
-
-        # Sequence information
-        if chain_id not in self.sequences:
-            raise ValueError(f"Chain {chain_id} has no sequence information")
-
-        seq = str(self.sequences[chain_id])
-        seq_unmod = str(self.sequences_unmod[chain_id])
-        data.append(seq)
-        data.append(seq_unmod)
-        data.append(str(len(seq_unmod)))
-
-        # RNA missing residue %
-        data.append(f"{self.get_frac_missing_residues(chain_id):.3f}")
-
-        # Fam Hits data
-        if (
-            not self.fam_hits
-            or chain_id not in self.fam_hits
-            or not self.fam_hits[chain_id]
-            or not self.fam_hits[chain_id][0]
-        ):
-            data += [""] * 6
-        else:
-            best_fam_hit = self.fam_hits[chain_id][0]
-            data.append(best_fam_hit.name)
-            data.append(f"{best_fam_hit.n_over_l:.3f}")
-            data.append(str(best_fam_hit.model_len))
-            data.append(
-                f"{min(1.0, best_fam_hit.model_len / best_fam_hit.seq_len):.3f}"
-            )
-            data.append(f"{best_fam_hit.score:.3f}")
-            data.append(f"{best_fam_hit.e_value:.3e}")
-
-        if len(data) != len(self.HEADERS):
-            raise RuntimeError(
-                f"Expected {len(self.HEADERS)} fields, found {len(data)}"
+        data = {
+            "pdb_id": self.pdb_id,
+            "asym_id": chain_id,
+            "auth_id": self.asym_id_to_auth_id[chain_id],
+            "name": self.pdb_name,
+            "published": self.published_date,
+            "keywords": self.keywords,
+            "method": self.method,
+            "resolution": self.resolution,
+            "organism": chain_info.src_organism,
+            "synthetic_organism": chain_info.syn_organism,
+            "self_structured": len(self.self_contacts[chain_id])
+            > Config3D.MIN_STRUCTURED_CONTACTS,
+            "polymer_coverage": self.chain_coverages[ChainType.ANY][chain_id],
+            "nucleic_acid_coverage": self.chain_coverages[ChainType.NA][chain_id],
+            "num_neighbor_na_chains": len(self.neighbors[chain_id]),
+            **{
+                name: len(self.chains_of_type[chain_type])
+                for name, chain_type in self.__tracked_chain_types.items()
+            },
+            "num_nucleotides": num_nucleotides,
+            "num_amino_acids": num_amino_acids,
+            "num_polymer_residues": num_nucleotides + num_amino_acids,
+            **{
+                name: sorted(self.residues[residue_type])
+                for name, residue_type in self.__tracked_residue_types.items()
+            },
+            "cofactors": sorted(self.cofactors[chain_id]),
+            "modified_sequence": str(self.sequences[chain_id]),
+            "sequence": sequence,
+            "length": len(sequence),
+            "fraction_missing": self.get_frac_missing_residues(chain_id),
+            "rfam": None,
+            "rfam_n_over_l": None,
+            "rfam_model_length": None,
+            "rfam_model_coverage": None,
+            "rfam_bit_score": None,
+            "rfam_e_value": None,
+        }
+        hit = self.fam_hits.get(chain_id)
+        best_hit = hit[0] if hit and hit[0] else None
+        if best_hit:
+            data.update(
+                {
+                    "rfam": best_hit.name,
+                    "rfam_n_over_l": best_hit.n_over_l,
+                    "rfam_model_length": best_hit.model_len,
+                    "rfam_model_coverage": min(
+                        1.0, best_hit.model_len / best_hit.seq_len
+                    ),
+                    "rfam_bit_score": best_hit.score,
+                    "rfam_e_value": best_hit.e_value,
+                }
             )
         return data

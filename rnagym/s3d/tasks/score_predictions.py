@@ -12,17 +12,17 @@ import pandas as pd
 from tqdm import tqdm
 
 from rnagym.config import Config3D
-from rnagym.s3d.util import Config
+from rnagym.s3d.models import BASELINES, prediction_path
 from rnagym.s3d.util.analysis import Analysis, valid_prediction
 
-IDENTIFIERS = ["PDB ID", "Asym. Chain ID", "Auth. Chain ID"]
+IDENTIFIERS = ["pdb_id", "asym_id", "auth_id"]
 SCORE_KEY = ["type", *IDENTIFIERS, "model"]
 
 
 @cache
 def _completed_targets(model: str, kind: str) -> frozenset[str]:
     """Load targets with outputs current to their model inputs."""
-    baseline = Config.BASELINES[model]
+    baseline = BASELINES[model]
     adapter = importlib.import_module(
         f"rnagym.s3d.models.{baseline.environment}"
     ).ADAPTER
@@ -43,8 +43,8 @@ def prediction_available(target: dict, model: str) -> bool:
     """Check for a completed prediction without loading its reference structure."""
     multimer = target["type"] == "multimer"
     kind = "multimers" if multimer else "monomers"
-    name = target["PDB ID"] if multimer else target["sequence_id"]
-    _, prediction = Config.get_bl_out_pdb(model, name, multimer)
+    name = target["pdb_id"] if multimer else target["sequence_id"]
+    _, prediction = prediction_path(model, name, multimer)
     return name.lower() in _completed_targets(model, kind) and _valid_prediction(
         prediction
     )
@@ -54,12 +54,12 @@ def score_target(job: tuple[dict, str]) -> dict:
     """Score one model against one experimental target."""
     target, model = job
     analysis = Analysis(
-        target["PDB ID"],
-        target["Asym. Chain ID"],
-        target["Auth. Chain ID"],
+        target["pdb_id"],
+        target["asym_id"],
+        target["auth_id"],
         target["sequence_id"],
     )
-    baseline = Config.BASELINES[model]
+    baseline = BASELINES[model]
     multimer = target["type"] == "multimer"
     tm_score = analysis.usa_result(baseline, multimer).tm_score
     with redirect_stderr(StringIO()):
@@ -80,12 +80,12 @@ def scoring_jobs(targets: list[dict]) -> list[tuple[dict, str]]:
     for target in targets:
         jobs.extend(
             (target, model)
-            for model, baseline in Config.BASELINES.items()
-            if (target["type"] == "monomer" or baseline.mul_afa_file is not None)
+            for model, baseline in BASELINES.items()
+            if (target["type"] == "monomer" or baseline.supports_multimers)
             and prediction_available(target, model)
         )
     # Group by model so workers annotate distinct references instead of sharing locks
-    return sorted(jobs, key=lambda job: (job[1], -job[0]["L"]))
+    return sorted(jobs, key=lambda job: (job[1], -job[0]["length"]))
 
 
 def main() -> None:
@@ -95,7 +95,7 @@ def main() -> None:
     if not jobs:
         print("No available predictions to score")
         return
-    missing_models = set(Config.BASELINES) - {model for _, model in jobs}
+    missing_models = set(BASELINES) - {model for _, model in jobs}
     if missing_models:
         print(f"No predictions found for: {', '.join(sorted(missing_models))}")
     if not Config3D.MC_ANNOTATE.is_file():

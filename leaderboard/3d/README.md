@@ -1,5 +1,7 @@
 # RNAGym 3D Leaderboard
 
+**Dataset:** [RNA3DB 2026-01-05 full release][1]
+
 **Metrics:** TM score measures global fold similarity. ΔTM is the prediction TM
 score minus the best PDB-chain TM score from before the model's training
 cutoff, while ρTM is their Spearman correlation. INF-WC and INF-NWC measure
@@ -29,3 +31,5 @@ zero, and all metrics are better when higher. Models are ranked by TM score.
 | 1 | AlphaFold 3 | 0.407 | -0.096 | 0.77 | 0.88 | 0.66 |
 | 2 | RoseTTAFold2NA | 0.194 | -0.295 | 0.30 | 0.50 | 0.38 |
 <!-- END GENERATED TABLES -->
+
+[1]: https://github.com/marcellszi/rna3db/releases/tag/2026-01-05-full-release

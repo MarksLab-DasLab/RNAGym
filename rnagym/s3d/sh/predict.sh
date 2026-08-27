@@ -40,8 +40,11 @@ for kind in "${kinds[@]}"; do
 	rhofold:monomers)
 		walltime=12:00:00 cpus=4 memory=128G gpu=h100
 		;;
-	rf2na:monomers | rf2na:multimers)
+	rf2na:monomers)
 		walltime=24:00:00 cpus=4 memory=64G gpu=l40s
+		;;
+	rf2na:multimers)
+		walltime=24:00:00 cpus=4 memory=64G gpu=h100
 		;;
 	trrna:monomers)
 		walltime=24:00:00 cpus=4 memory=128G gpu=l40s
