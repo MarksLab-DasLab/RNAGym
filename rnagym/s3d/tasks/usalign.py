@@ -2,7 +2,6 @@
 
 import sys
 
-import pandas as pd
 import polars as pl
 
 from rnagym.config import Config3D
@@ -27,16 +26,16 @@ def main() -> None:
 
     shard, num_shards = map(int, sys.argv[1:])
     targets = (
-        pd.read_parquet(Config3D.TARGET_FILE)
-        .sort_values("length", ascending=False)
-        .iloc[shard::num_shards]
+        pl.read_parquet(Config3D.TARGET_FILE)
+        .sort("length", "pdb_id", "asym_id", descending=[True, False, False])
+        .gather_every(num_shards, offset=shard)
     )
     Config3D.USALIGN_ANNOTATION_DIR.mkdir(parents=True, exist_ok=True)
 
-    for _, target in targets.iterrows():
-        name = f"{target.pdb_id}_{target.asym_id}"
+    for target in targets.iter_rows(named=True):
+        name = f"{target['pdb_id']}_{target['asym_id']}"
         output = Config3D.USALIGN_ANNOTATION_DIR / f"{name}.parquet"
-        source = Config3D.chain_file(target.pdb_id, target.asym_id)
+        source = Config3D.chain_file(target["pdb_id"], target["asym_id"])
         dependencies = (Config3D.USALIGN_REFERENCES_FILE, source)
         fresh = (
             output.is_file()
@@ -46,12 +45,10 @@ def main() -> None:
         )
         if fresh and pl.read_parquet_schema(output) == ANNOTATION_SCHEMA:
             continue
-        result = target.to_frame().T
-        add_tm_id(result)
+        result = add_tm_id(pl.from_dicts([target]))
         temporary = output.with_suffix(".parquet.tmp")
-        pl.from_pandas(
-            result[[*IDENTIFIERS, *HOMOLOGY_COLUMNS]],
-            schema_overrides=ANNOTATION_SCHEMA,
+        result.select(*IDENTIFIERS, *HOMOLOGY_COLUMNS).cast(
+            ANNOTATION_SCHEMA
         ).write_parquet(temporary)
         temporary.replace(output)
         print(f"Wrote {output}")

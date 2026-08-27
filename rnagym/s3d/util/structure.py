@@ -21,11 +21,9 @@ from typing import (
     Tuple,
 )
 
-import evcouplings.align.alignment as alignment
 import gemmi
 import requests
 from Bio.Seq import Seq
-from evcouplings.utils.system import ResourceError
 from gemmi import Residue, ResidueSpan, Structure
 from gemmi.cif import Document
 
@@ -50,12 +48,17 @@ class ResidueType(Enum):
 
     @staticmethod
     def get_residue_type(residue: Residue) -> ResidueType:
-        """
-        Returns the residue type of the input residue.
+        """Return the type of a Gemmi residue.
 
-        Parameters:
-            residue (pd.DataFrame): A residue acquired from an EVCouplings
-             Chain object.
+        Parameters
+        ----------
+        residue : Residue
+            Gemmi structure residue.
+
+        Returns
+        -------
+        ResidueType
+            RNAGym residue category.
         """
         is_polymer = residue.entity_type == gemmi.EntityType.Polymer
         residue = residue.name
@@ -310,17 +313,20 @@ def canonicalize_sequence(sequence: str, protein: bool) -> str:
 
 
 def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
-    """
-    Returns the selected PDB from RCSB as an EVCouplings PDB object.  PDB
-    download results are cached under the shared 3D curation cache.
+    """Download or load one PDB entry as Gemmi objects.
 
-    Parameters:
-        pdb_id (str): The PDB ID of interest.
+    Parameters
+    ----------
+    pdb_id : str
+        Four-character PDB identifier.
 
-    Returns:
-        cif (Document):  A Document object representing of the full CIF file.
-        structure (Structure):  A Structure object representing the assembly
-          CIF file.
+    Returns
+    -------
+    cif : Document
+        Full asymmetric-unit mmCIF document.
+    assembly : Structure
+        Biological assembly with alternative conformations, waters, and
+        hydrogens removed.
     """
     # Download the full CIF and assembly CIFs
     pdb_id = pdb_id.lower()
@@ -655,7 +661,7 @@ class StructureInfo:
 
             if len(sequence) >= Config3D.MIN_ANNOTATION_LENGTH:
                 with NamedTemporaryFile(mode="w+", delete=True) as tmp:
-                    alignment.write_fasta(((chain_id, str(sequence)),), tmp)
+                    tmp.write(f">{chain_id}\n{sequence}\n")
                     tmp.seek(0)
                     self.fam_hits[chain_id] = FamHits.from_fam(
                         self.pdb_id,
@@ -792,7 +798,6 @@ class StructureInfo:
         try:
             cif, assembly = get_structure(pdb_id)
         except (
-            ResourceError,
             gzip.BadGzipFile,
             requests.exceptions.RequestException,
         ) as e:

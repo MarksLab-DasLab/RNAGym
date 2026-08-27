@@ -8,7 +8,7 @@ from functools import cache
 from io import StringIO
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 from tqdm import tqdm
 
 from rnagym.config import Config3D
@@ -90,7 +90,7 @@ def scoring_jobs(targets: list[dict]) -> list[tuple[dict, str]]:
 
 def main() -> None:
     """Score available predictions and write the shared score table."""
-    targets = pd.read_parquet(Config3D.TARGET_FILE).to_dict("records")
+    targets = pl.read_parquet(Config3D.TARGET_FILE).to_dicts()
     jobs = scoring_jobs(targets)
     if not jobs:
         print("No available predictions to score")
@@ -108,13 +108,13 @@ def main() -> None:
         )
         results = [future.result() for future in progress]
 
-    scores = pd.DataFrame(results).sort_values(SCORE_KEY)
-    if scores.duplicated(SCORE_KEY).any():
+    scores = pl.from_dicts(results).sort(SCORE_KEY)
+    if scores.select(SCORE_KEY).is_duplicated().any():
         raise RuntimeError("Duplicate 3D scores")
     temporary = Config3D.SCORE_FILE.with_suffix(".tmp.parquet")
-    scores.to_parquet(temporary, index=False)
+    scores.write_parquet(temporary)
     temporary.replace(Config3D.SCORE_FILE)
-    print(f"Wrote {len(scores)} scores to {Config3D.SCORE_FILE}")
+    print(f"Wrote {scores.height} scores to {Config3D.SCORE_FILE}")
 
 
 if __name__ == "__main__":

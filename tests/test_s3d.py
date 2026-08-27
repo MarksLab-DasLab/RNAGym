@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pandas as pd
 import polars as pl
 from polars.testing import assert_frame_equal
 from rnagym.config import Config2D, Config3D
@@ -64,10 +63,9 @@ def test_3d_workflow(tmp_path, monkeypatch) -> None:
         .sort("pdb_id", "asym_id"),
         pl.read_csv(FIXTURE_DIR / "targets.csv"),
     )
-    pd.testing.assert_frame_equal(
-        pd.read_csv(Config3D.LEADERBOARD_FILE),
-        pd.read_csv(FIXTURE_DIR / "leaderboard.csv"),
-        check_exact=True,
+    assert_frame_equal(
+        pl.read_csv(Config3D.LEADERBOARD_FILE),
+        pl.read_csv(FIXTURE_DIR / "leaderboard.csv"),
     )
     assert (
         Config3D.LEADERBOARD_README.read_text()
