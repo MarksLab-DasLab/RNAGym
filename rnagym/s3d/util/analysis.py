@@ -43,6 +43,17 @@ def _cache_lock(path: Path):
         yield
 
 
+def _canonical_residues(structure: RNA_normalizer.PDBStruct) -> dict[int, str]:
+    """Map selected PDB residue numbers to canonical bases."""
+    residues = {}
+    for index in structure.res_seq:
+        residue = structure.res_list[index]
+        code = gemmi.find_tabulated_residue(residue.res.resname).one_letter_code.upper()
+        code = code.replace("T", "U")
+        residues[residue.pos] = code if code in "ACGU" else "N"
+    return residues
+
+
 def _ensure_annotation(pdb_path: Path) -> None:
     """Generate one MC-Annotate cache atomically under a file lock."""
     annotation = pdb_path.with_name(f"{pdb_path.name}.mcout")
@@ -180,46 +191,31 @@ def interaction_network_fidelity(reference_pdb, prediction_pdb):
             raise RuntimeError(f"Failed to parse {pdb_path}")
         return s, s.raw_sequence()
 
-    # 1) Load both fully (no index yet)
-    ref_struct, ref_seq = load_struct(reference_pdb)
-    pred_struct, pred_seq = load_struct(prediction_pdb)
-
-    # Create a mapping from resid to resname for the predicted structure
-    struct = gemmi.read_pdb(str(prediction_pdb))
-    resid_to_resname = {
-        r.seqid.num: r.name for chain in struct[0].subchains() for r in chain
-    }
-
-    # 2) Load the predicted structure with indices matching the reference
-    # NOTE(MCA): The reference resids are guaranteed to align with their
-    #   position in the sequence.  For example, if the first resid in the
-    #   reference structure is 3 it means the first 2 residues from the
-    #   sequence are missing
-    ref_indices = [
-        r.pos
-        for r in ref_struct.res_list
-        if resid_to_resname.get(r.pos, "N") != "N"
-        and r.res.resname in {"A", "C", "G", "U"}
+    ref_struct, _ = load_struct(reference_pdb)
+    pred_struct, _ = load_struct(prediction_pdb)
+    pred_residues = _canonical_residues(pred_struct)
+    positions = [
+        position
+        for position, base in _canonical_residues(ref_struct).items()
+        if base in "ACGU" and position in pred_residues
     ]
+    if not positions:
+        raise ValueError("No matching canonical residues")
 
     with NamedTemporaryFile("w") as tmp:
         ref_chain = ref_struct.res_list[0].chain
         pred_chain = pred_struct.res_list[0].chain
 
-        # Reload reference structure
-        tmp.write("\n".join(f"{ref_chain}:{i}:1" for i in ref_indices))
+        # Compare the same residue numbers rather than inferring a new alignment
+        tmp.write("\n".join(f"{ref_chain}:{position}:1" for position in positions))
         tmp.flush()
-        ref_struct, ref_seq = load_struct(reference_pdb, tmp.name)
+        ref_struct, _ = load_struct(reference_pdb, tmp.name)
 
-        # Reload predicted structure
         tmp.seek(0)
         tmp.truncate()
-        tmp.write("\n".join(f"{pred_chain}:{i}:1" for i in ref_indices))
+        tmp.write("\n".join(f"{pred_chain}:{position}:1" for position in positions))
         tmp.flush()
-        pred_struct, pred_seq = load_struct(prediction_pdb, tmp.name)
-
-    if ref_seq != pred_seq:
-        raise ValueError(f"{ref_seq} != {pred_seq}")
+        pred_struct, _ = load_struct(prediction_pdb, tmp.name)
 
     def inf(interaction_type):
         """Return INF, using 1 if both interaction sets are empty and 0 if only one is."""

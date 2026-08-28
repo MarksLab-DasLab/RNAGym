@@ -123,7 +123,9 @@ def _monomer_configs(targets: pl.DataFrame) -> int:
         .unique("sequence_id")
         .sort("sequence_id")
     )
-    for (sequence_id,) in targets.select("sequence_id").iter_rows():
+    sequence_ids = targets.get_column("sequence_id").to_list()
+    _remove_stale_configs("monomers", set(sequence_ids))
+    for sequence_id in sequence_ids:
         run_dir = _PREDICTION_DIR / "monomers" / sequence_id
         msa, sequence = prepare_msa(sequence_id, run_dir / "sequence.a3m", unknown="X")
         chain = {
@@ -132,7 +134,7 @@ def _monomer_configs(targets: pl.DataFrame) -> int:
             "unpairedMsaPath": str(msa),
         }
         _write_config(run_dir / "config.json", sequence_id, [{"rna": chain}])
-    return targets.height
+    return len(sequence_ids)
 
 
 def _multimer_configs(targets: pl.DataFrame) -> int:
@@ -144,6 +146,7 @@ def _multimer_configs(targets: pl.DataFrame) -> int:
     for pdb_id, asym_id, sequence_id in multimer_targets.iter_rows():
         target_groups.setdefault(pdb_id.lower(), {})[asym_id] = sequence_id
 
+    _remove_stale_configs("multimers", set(target_groups))
     for pdb_id, rna_targets in sorted(target_groups.items()):
         run_dir = _PREDICTION_DIR / "multimers" / pdb_id
         document = gemmi.cif.read(str(Config3D.assembly_file(pdb_id)))
@@ -198,6 +201,13 @@ def _recover() -> None:
         if task_root.exists():
             shutil.rmtree(task_root)
         print(f"Recovered {completed} {kind} predictions and {cached} prepared inputs")
+
+
+def _remove_stale_configs(kind: str, names: set[str]) -> None:
+    """Remove configurations absent from the current target table."""
+    for config in _PREDICTION_DIR.glob(f"{kind}/*/config.json"):
+        if config.parent.name not in names:
+            shutil.rmtree(config.parent)
 
 
 def _sequence_length(config: Path) -> int:
