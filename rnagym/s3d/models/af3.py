@@ -16,6 +16,7 @@ from rnagym.s3d.models.utils import (
     run,
     valid_structure,
 )
+from rnagym.s3d.util.polymer import canonical_polymer_sequence
 
 _AF3_TYPES = {
     gemmi.PolymerType.Dna: "dna",
@@ -70,34 +71,15 @@ def _config_dependencies(config: Path) -> tuple[Path, ...]:
     return (config, *msas)
 
 
-def _chain_data(
-    block: gemmi.cif.Block, structure: gemmi.Structure
-) -> dict[str, tuple[str, str]]:
+def _chain_data(structure: gemmi.Structure) -> dict[str, tuple[str, str]]:
     """Return each polymer chain's AF3 molecule type and full sequence."""
-    molecules = {}
+    chains = {}
     for entity in structure.entities:
         molecule = _AF3_TYPES.get(entity.polymer_type)
         if molecule is not None:
-            molecules.update(dict.fromkeys(entity.subchains, molecule))
-    sequences = {asym_id: "" for asym_id in molecules}
-    table = block.find_mmcif_category("_pdbx_poly_seq_scheme")
-    for asym_id, residue in zip(
-        table.find_column("asym_id"), table.find_column("mon_id")
-    ):
-        if asym_id not in sequences:
-            continue
-        unknown = "X" if molecules[asym_id] == "protein" else "N"
-        code = gemmi.find_tabulated_residue(residue).one_letter_code.upper()
-        sequences[asym_id] += code if len(code) == 1 and code.isalpha() else unknown
-    return {
-        asym_id: (
-            molecule,
-            sequences[asym_id].replace("T", "U")
-            if molecule == "rna"
-            else sequences[asym_id],
-        )
-        for asym_id, molecule in molecules.items()
-    }
+            sequence = canonical_polymer_sequence(entity)
+            chains.update(dict.fromkeys(entity.subchains, (molecule, sequence)))
+    return chains
 
 
 def _collect(configs: list[Path], output_dir: Path) -> int:
@@ -123,7 +105,9 @@ def _monomer_configs(targets: pl.DataFrame) -> int:
         .unique("sequence_id")
         .sort("sequence_id")
     )
-    for (sequence_id,) in targets.select("sequence_id").iter_rows():
+    sequence_ids = targets.get_column("sequence_id").to_list()
+    _remove_stale_configs("monomers", set(sequence_ids))
+    for sequence_id in sequence_ids:
         run_dir = _PREDICTION_DIR / "monomers" / sequence_id
         msa, sequence = prepare_msa(sequence_id, run_dir / "sequence.a3m", unknown="X")
         chain = {
@@ -132,7 +116,7 @@ def _monomer_configs(targets: pl.DataFrame) -> int:
             "unpairedMsaPath": str(msa),
         }
         _write_config(run_dir / "config.json", sequence_id, [{"rna": chain}])
-    return targets.height
+    return len(sequence_ids)
 
 
 def _multimer_configs(targets: pl.DataFrame) -> int:
@@ -144,12 +128,12 @@ def _multimer_configs(targets: pl.DataFrame) -> int:
     for pdb_id, asym_id, sequence_id in multimer_targets.iter_rows():
         target_groups.setdefault(pdb_id.lower(), {})[asym_id] = sequence_id
 
+    _remove_stale_configs("multimers", set(target_groups))
     for pdb_id, rna_targets in sorted(target_groups.items()):
         run_dir = _PREDICTION_DIR / "multimers" / pdb_id
         document = gemmi.cif.read(str(Config3D.assembly_file(pdb_id)))
-        block = document.sole_block()
-        structure = gemmi.make_structure_from_block(block)
-        chain_data = _chain_data(block, structure)
+        structure = gemmi.make_structure_from_block(document.sole_block())
+        chain_data = _chain_data(structure)
         sequences = []
         for subchain in structure[0].subchains():
             asym_id = subchain.subchain_id()
@@ -198,6 +182,13 @@ def _recover() -> None:
         if task_root.exists():
             shutil.rmtree(task_root)
         print(f"Recovered {completed} {kind} predictions and {cached} prepared inputs")
+
+
+def _remove_stale_configs(kind: str, names: set[str]) -> None:
+    """Remove configurations absent from the current target table."""
+    for config in _PREDICTION_DIR.glob(f"{kind}/*/config.json"):
+        if config.parent.name not in names:
+            shutil.rmtree(config.parent)
 
 
 def _sequence_length(config: Path) -> int:

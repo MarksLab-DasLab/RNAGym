@@ -14,11 +14,13 @@ def quality_filter() -> pl.Expr:
         Config3D.MAX_RESOLUTION
     ).fill_null(False)
     length = pl.col("sequence").str.len_chars()
+    modified_ratio = pl.col("modified_sequence").str.count_matches(r"-\(") / length
     unknown_ratio = pl.col("sequence").str.count_matches("[^ACGU]") / length
     return (
         length.gt(0)
         & resolution_ok
         & pl.col("fraction_missing").le(Config3D.MAX_MISSING)
+        & modified_ratio.le(Config3D.MAX_MODIFIED_RATIO)
         & unknown_ratio.le(Config3D.MAX_UNKNOWN_RATIO)
     )
 

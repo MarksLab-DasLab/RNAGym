@@ -7,6 +7,13 @@
 | `3d/msa/` | Riboseek alignments used for 3D prediction | `sequence_id` |
 | `fitness/msa/` | Riboseek alignments used for fitness scoring | `sequence_id` |
 
+To browse the Parquet datasets as interactive tables:
+
+```bash
+cd data
+pixi run browse
+```
+
 To regenerate the Rfam annotations, run from the repository root:
 
 ```bash
