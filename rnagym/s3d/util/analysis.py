@@ -27,6 +27,7 @@ from rnagym.config import Config3D
 from rnagym.s3d.models import BASELINES, Baseline, homology_columns, prediction_path
 from rnagym.s3d.models.utils import valid_structure as valid_prediction
 from rnagym.s3d.util import ChainID
+from rnagym.s3d.util.polymer import canonical_residue
 
 # RNA_normalizer still assumes Python 2 and the import-time working directory
 RNA_normalizer.xrange = range
@@ -48,9 +49,9 @@ def _canonical_residues(structure: RNA_normalizer.PDBStruct) -> dict[int, str]:
     residues = {}
     for index in structure.res_seq:
         residue = structure.res_list[index]
-        code = gemmi.find_tabulated_residue(residue.res.resname).one_letter_code.upper()
-        code = code.replace("T", "U")
-        residues[residue.pos] = code if code in "ACGU" else "N"
+        residues[residue.pos] = canonical_residue(
+            residue.res.resname, gemmi.PolymerType.Rna
+        )
     return residues
 
 

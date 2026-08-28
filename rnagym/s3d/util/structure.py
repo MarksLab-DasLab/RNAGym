@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import gzip
-import re
 from collections import defaultdict
 from enum import Enum, auto
 from pathlib import Path
@@ -23,12 +22,12 @@ from typing import (
 
 import gemmi
 import requests
-from Bio.Seq import Seq
 from gemmi import Residue, ResidueSpan, Structure
 from gemmi.cif import Document
 
 from rnagym.config import Config3D
 from rnagym.s3d.util import ChainID, Residues
+from rnagym.s3d.util.polymer import canonical_polymer_sequence
 from rnagym.s3d.util.sequence import FamHits
 
 
@@ -304,14 +303,6 @@ def parse_resolution(value: str) -> float | None:
     return max(resolutions, default=None)
 
 
-def canonicalize_sequence(sequence: str, protein: bool) -> str:
-    """Replace unresolved polymer residues with the appropriate unknown token."""
-    if protein:
-        return sequence.replace("?", "X")
-    sequence = sequence.upper().replace("T", "U")
-    return "".join(base if base in "ACGU" else "N" for base in sequence)
-
-
 def get_structure(pdb_id: str) -> Tuple[Document, Structure]:
     """Download or load one PDB entry as Gemmi objects.
 
@@ -501,9 +492,9 @@ class StructureInfo:
         revision_dates (List[str]):  Dates this PDB was revised.
         self_contacts (Dict[ChainID, Set[int]]):  Residues in each chain with
           nonlocal self contacts.
-        sequences (Dict[ChainID, Seq]):  Mapping from each ChainID in the
+        sequences (Dict[ChainID, str]):  Mapping from each ChainID in the
           input structure to its respective sequence.
-        sequences_unmod (Dict[ChainID, Seq]):  Same as `sequences` but
+        sequences_unmod (Dict[ChainID, str]):  Same as `sequences` but
           with modified residues converted to their standard counterparts
           (e.g., 6MA -> A).
     """
@@ -550,9 +541,6 @@ class StructureInfo:
         "solvent_residues": ResidueType.SOLVENT,
     }
 
-    # Regex for identifying modified residues in annotated sequences
-    __mod_residue_re = re.compile(r"-\(([A-Za-z0-9_-]*)\)-")
-
     def __init__(self, cif: Document, assembly: Structure):
         self.cif = cif
         self.assembly = assembly
@@ -597,9 +585,6 @@ class StructureInfo:
 
         # --- Map from asym. ID to sequence ---
         block = self.cif.sole_block()
-        poly_seq_table = block.find_mmcif_category("_pdbx_poly_seq_scheme")
-        asym_ids = poly_seq_table.find_column("asym_id")
-        mon_ids = poly_seq_table.find_column("mon_id")
         rna_chains = self.chains_of_type[ChainType.RNA]
         polymer_chains = (
             rna_chains
@@ -608,30 +593,24 @@ class StructureInfo:
             + self.chains_of_type[ChainType.NA_HYBRID]
         )
         rna_asym_ids = set(chain.subchain_id() for chain in rna_chains)
-        protein_asym_ids = {
-            chain.subchain_id() for chain in self.chains_of_type[ChainType.PROTEIN]
-        }
         polymer_asym_ids = set(chain.subchain_id() for chain in polymer_chains)
-        self.sequences = {}
-        self.sequences_unmod = {}
-        for asym_id, mon_id in zip(asym_ids, mon_ids):
-            if asym_id in polymer_asym_ids:
-                self.sequences.setdefault(asym_id, "")
-                self.sequences[asym_id] += (
-                    mon_id if len(mon_id) == 1 else f"-({mon_id})-"
-                )
-
-        # Convert to Seq objects
-        self.sequences_unmod = {
-            asym_id: Seq(
-                canonicalize_sequence(
-                    str(StructureInfo.__unmodify_seq(seq)),
-                    protein=asym_id in protein_asym_ids,
-                )
-            )
-            for asym_id, seq in self.sequences.items()
+        entities = {
+            asym_id: entity
+            for entity in self.assembly.entities
+            for asym_id in entity.subchains
+            if asym_id in polymer_asym_ids
         }
-        self.sequences = {asym_id: Seq(seq) for asym_id, seq in self.sequences.items()}
+        self.sequences = {
+            asym_id: "".join(
+                residue if len(residue) == 1 else f"-({residue})-"
+                for residue in entity.full_sequence
+            )
+            for asym_id, entity in entities.items()
+        }
+        self.sequences_unmod = {
+            asym_id: canonical_polymer_sequence(entity)
+            for asym_id, entity in entities.items()
+        }
 
         # --- Map from asym. ID to entity ID ---
         self.asym_id_to_entity_id = {}
@@ -809,41 +788,6 @@ class StructureInfo:
             raise e
 
         return StructureInfo(cif, assembly=assembly)
-
-    @staticmethod
-    def __unmodify_res(match: re.Match[str]):
-        r"""
-        Returns the one-letter code for a mod. residue or "?" if a suitable
-        replacement is not known.
-
-        Parameters:
-            match (re.Match[str]): A regex match of the form r"-\((.*)\)-"
-              where the inner capturing group is the modified residue name of
-              interest.
-        """
-        mod_resname = match.group(1)
-        one_letter_resname = (
-            Residues.ModNA.get(mod_resname)
-            or Residues.ModProtein.get(mod_resname)
-            or Residues.ProteinTo1Letter.get(mod_resname)
-            or Residues.DNATo1Letter.get(mod_resname)
-            or "?"
-        )
-
-        return one_letter_resname
-
-    @staticmethod
-    def __unmodify_seq(sequence: str) -> str:
-        """
-        Returns the "unmodified" version of the input sequence.  This entails
-        replacing any modified DNA, RNA, or protein residues with their
-        unmodified counterparts.
-        """
-        return re.sub(
-            StructureInfo.__mod_residue_re,
-            StructureInfo.__unmodify_res,
-            sequence,
-        )
 
     def get_frac_missing_residues(self, chain_id: ChainID) -> float:
         """

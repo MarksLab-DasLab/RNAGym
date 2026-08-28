@@ -16,18 +16,18 @@ better when higher. Models are ranked by TM score.
 
 | Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: | ---: |
-| 1 | AlphaFold 3 | 0.489 | -0.128 | 0.81 | 0.85 | 0.43 |
-| 2 | NuFold | 0.483 | -0.139 | 0.82 | 0.79 | 0.32 |
-| 3 | RoseTTAFold2NA | 0.457 | -0.144 | 0.84 | 0.75 | 0.32 |
-| 4 | RhoFold+ | 0.456 | -0.168 | 0.81 | 0.53 | 0.10 |
-| 5 | trRosettaRNA | 0.414 | -0.207 | 0.68 | 0.70 | 0.14 |
+| 1 | AlphaFold 3 | 0.491 | -0.128 | 0.81 | 0.85 | 0.43 |
+| 2 | NuFold | 0.484 | -0.139 | 0.82 | 0.79 | 0.32 |
+| 3 | RoseTTAFold2NA | 0.458 | -0.144 | 0.84 | 0.75 | 0.32 |
+| 4 | RhoFold+ | 0.457 | -0.168 | 0.81 | 0.53 | 0.09 |
+| 5 | trRosettaRNA | 0.414 | -0.209 | 0.67 | 0.70 | 0.14 |
 
 ### Multimers (n=455 structures)
 
 | Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: | ---: |
-| 1 | AlphaFold 3 | 0.402 | -0.097 | 0.77 | 0.89 | 0.66 |
-| 2 | RoseTTAFold2NA | 0.191 | -0.293 | 0.29 | 0.49 | 0.37 |
+| 1 | AlphaFold 3 | 0.403 | -0.096 | 0.78 | 0.89 | 0.67 |
+| 2 | RoseTTAFold2NA | 0.190 | -0.294 | 0.29 | 0.49 | 0.37 |
 <!-- END GENERATED TABLES -->
 
 Targets were sourced from the [RNA3DB 2026-01-05 full release][1].
