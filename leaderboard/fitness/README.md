@@ -14,24 +14,27 @@ Two changes from before:
 | Rank | Model | Ribozyme (n=26) | tRNA (n=3) | Aptamer (n=2) | Macro (3 ncRNA) |
 |---:|:--|--:|--:|--:|--:|
 | 1 | AIDO.RNA (650M) | 0.0660 | 0.4894 | 0.0934 | 0.2163 |
-| 2 | Evo 2 (40B) | 0.1081 | 0.4310 | 0.0970 | 0.2120 |
-| 3 | AIDO.RNA (1.6B) | 0.0609 | 0.4884 | 0.0718 | 0.2070 |
-| 4 | RNA-ERNIE | 0.1343 | 0.4161 | 0.0306 | 0.1937 |
-| 5 | Evo 2 (7B) | 0.0651 | 0.3867 | 0.1192 | 0.1904 |
-| 6 | RNAGenesis | 0.0750 | 0.4381 | 0.0343 | 0.1825 |
-| 7 | RiNALMo | -0.0243 | 0.4856 | 0.0459 | 0.1690 |
-| 8 | AIDO.RNA (300M) | -0.0256 | 0.4551 | 0.0372 | 0.1556 |
-| 9 | AIDO.RNA (25M) | -0.0299 | 0.4569 | 0.0348 | 0.1540 |
-| 10 | Evo 1.5 | 0.0278 | 0.3850 | 0.0007 | 0.1378 |
-| 11 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
-| 12 | Nucleotide Transformer | 0.1329 | 0.3166 | -0.0886 | 0.1203 |
-| 13 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
-| 14 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
-| 15 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
-| 16 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
+| 2 | Evo 2 (20B) | 0.1105 | 0.4345 | 0.0937 | 0.2129 |
+| 3 | Evo 2 (40B) | 0.1081 | 0.4310 | 0.0970 | 0.2120 |
+| 4 | AIDO.RNA (1.6B) | 0.0609 | 0.4884 | 0.0718 | 0.2070 |
+| 5 | Evo 2 (1B base) | 0.0087 | 0.4466 | 0.1334 | 0.1962 |
+| 6 | RNA-ERNIE | 0.1343 | 0.4161 | 0.0306 | 0.1937 |
+| 7 | Evo 2 (7B) | 0.0651 | 0.3867 | 0.1192 | 0.1904 |
+| 8 | RNAGenesis | 0.0750 | 0.4381 | 0.0343 | 0.1825 |
+| 9 | RiNALMo | -0.0243 | 0.4856 | 0.0459 | 0.1690 |
+| 10 | AIDO.RNA (300M) | -0.0256 | 0.4551 | 0.0372 | 0.1556 |
+| 11 | AIDO.RNA (25M) | -0.0299 | 0.4569 | 0.0348 | 0.1540 |
+| 12 | Evo 1.5 | 0.0278 | 0.3850 | 0.0007 | 0.1378 |
+| 13 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
+| 14 | Nucleotide Transformer | 0.1329 | 0.3166 | -0.0886 | 0.1203 |
+| 15 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
+| 16 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
+| 17 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
+| 18 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
 
-AIDO.RNA (650M), Evo 2 (40B) and AIDO.RNA (1.6B) span 0.0093. With only 31 assays, this difference
-should not be treated as a resolved ordering.
+The top four models span 0.0093. With only 31 assays, this difference should not be treated as a
+resolved ordering. Evo 2 1B is a base-pretrained 8k-context checkpoint, while the 7B, 20B and 40B
+checkpoints are mid-trained at 1M context, so it is not a like-for-like size point.
 
 All five released AIDO.RNA checkpoints are listed as separate entries rather than in a side table,
 since they are separate models scored the same way. Their scores rise steeply to 650M and then stop:
@@ -145,7 +148,7 @@ a few hundredths as unresolved rather than as an ordering.
 ## Scoring scripts
 
 Scoring scripts, paths relative to the repository root:
-- Evo 2 40B: `fitness/baselines/Evo/score_evo2_single_dms.py` and `score_evo2.sh`
+- Evo 2: `fitness/baselines/Evo/score_evo2_single_dms.py` and `score_evo2.sh`
 - Orthrus: `fitness/baselines/Orthrus/score_orthrus_single_dms.py` and `score_orthrus.sh`
 - AIDO.RNA: `fitness/baselines/AIDO_RNA/score_aido_rna_single_dms.py` and `score_aido_rna.sh`
 - RNAGenesis: `fitness/baselines/RNAGenesis/score_rnagenesis_single_dms.py` and `score_rnagenesis.sh`

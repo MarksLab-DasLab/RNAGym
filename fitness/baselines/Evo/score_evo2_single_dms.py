@@ -1,407 +1,293 @@
 #!/usr/bin/env python3
-"""
-Score RNAGym DMS assays with an Evo 2 model.
+"""Score one or more RNAGym assays with the official Evo 2 predictor.
 
-Evo 2 is an autoregressive genomic language model (StripedHyena 2). For each
-variant sequence we compute the mean per-token log-likelihood under the model
-and use it as the fitness score, then report the Spearman correlation against
-the experimental ``DMS_score``.
-
-This is the Evo 2 counterpart of ``score_evo_single_dms.py`` (Evo 1 / 1.5). It
-uses the official ``evo2`` package (https://github.com/ArcInstitute/evo2) rather
-than the ``evo`` package, and supports every checkpoint in ``evo2.utils.MODEL_NAMES``
-(``evo2_1b_base``, ``evo2_7b``, ``evo2_20b``, ``evo2_40b``, ...).
-
-Notes on multi-GPU
-------------------
-Vortex places and (for large models) shards the model across all CUDA devices
-that are visible. Select the GPUs with ``CUDA_VISIBLE_DEVICES`` and do NOT move
-the model manually with ``.to(device)``. ``evo2_40b`` does not fit on a single
-80 GB GPU and needs at least two (e.g. 2xH100-80GB). The 40B/20B/7B/1B
-checkpoints all request FP8 via Transformer Engine, i.e. a Hopper GPU.
-
-Offline weights
----------------
-The 40B checkpoint ships as two ~41 GB shards that ``evo2`` merges into a single
-``evo2_40b.pt`` on first load (a network call). On air-gapped compute nodes,
-pre-merge the checkpoint once (see ``download_weights.sh``) and pass the merged
-file via ``--local_path`` so no network access is needed at run time.
-
-Batching
---------
-All variants of one assay share a single sequence length, so batches never need
-padding between sequences and the batch size cannot change a score beyond
-floating point roundoff. ``--max_tokens_per_batch`` sizes each batch by a token
-budget rather than a sequence count. When FP8 input projections are enabled,
-Vortex pads the sequence dimension up to a multiple of 16 inside every
-projection, so the budget is applied to that padded length.
-
-Usage
------
-    python score_evo2_single_dms.py \
-        --row_id 0 \
-        --ref_sheet reference_sheet_final.csv \
-        --dms_dir_path fitness_processed_assays \
-        --output_dir_path evo2_40b_output \
-        --model_name evo2_40b \
-        --local_path /path/to/evo2_40b.pt \
-        --batch_size 1
-
-    # several assays in one process, so the checkpoint is loaded once
-    python score_evo2_single_dms.py --row_ids 0-8,11-32 ...
+Multiple ``--row_ids`` share one model load. Vortex controls model placement
+and sharding across the visible GPUs, so this script never moves the model.
 """
 
 import argparse
-import math
-import os
+import re
 import sys
-import tempfile
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
 import torch
 from scipy.stats import spearmanr
 
-from evo2 import Evo2
+
+def _nonnegative_int(value: str) -> int:
+    """Parse a nonnegative command-line integer."""
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be nonnegative")
+    return parsed
 
 
-def preprocess_sequence(sequence: str) -> str:
-    """Preprocess an RNA/DNA sequence for the Evo 2 (DNA) model.
-
-    - Convert RNA (U) to DNA (T)
-    - Uppercase
-    - Strip surrounding whitespace
-    """
-    return sequence.strip().upper().replace("U", "T")
+def _positive_int(value: str) -> int:
+    """Parse a positive command-line integer."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be positive")
+    return parsed
 
 
-def parse_row_ids(spec: str) -> list:
-    """Parse a row selection such as ``0-8,11-32,40`` into a sorted list.
-
-    Empty components are rejected rather than skipped: ``0-8,,11`` is far more
-    likely to be a typo than an intention, and silently dropping it would score
-    a different set of assays than the caller asked for.
-    """
-    rows = set()
-    for part in spec.split(","):
-        part = part.strip()
-        if not part:
-            raise ValueError(f"Empty component in --row_ids: {spec!r}")
-        if "-" in part.lstrip("-"):
-            start, end = part.split("-", 1)
-            start, end = int(start), int(end)
-            if end < start:
-                raise ValueError(f"Empty range in --row_ids: {part}")
-            rows.update(range(start, end + 1))
-        else:
-            rows.add(int(part))
-    if not rows:
-        raise ValueError(f"No rows selected by --row_ids {spec!r}")
-    return sorted(rows)
+def effective_length(sequence_length: int, prepend_bos: bool, fp8: bool) -> int:
+    """Return the sequence dimension used by the largest input projection."""
+    length = sequence_length + int(prepend_bos)
+    return ((length + 15) // 16) * 16 if fp8 else length
 
 
-def effective_length(seq_len: int, prepend_bos: bool, fp8: bool) -> int:
-    """The sequence length the model actually processes.
-
-    ``prepare_batch`` prepends one token when ``prepend_bos`` is set, and Vortex's
-    ``pad_to_multiple`` pads the sequence dimension to a multiple of 16 inside
-    every input projection when FP8 is enabled.
-    """
-    length = seq_len + int(prepend_bos)
-    if fp8:
-        length = 16 * math.ceil(length / 16)
-    return length
+def load_dms_data(dms_dir: Path, dms_id: str) -> pd.DataFrame:
+    """Load and validate an assay table."""
+    path = dms_dir / f"{dms_id}.csv"
+    data = pd.read_csv(path)
+    required = {"mutant", "DMS_score", "sequence"}
+    missing = sorted(required - set(data.columns))
+    if missing:
+        raise ValueError(f"{path} is missing columns: {missing}")
+    return data
 
 
-def parse_args():
-    """Parse command line arguments."""
+def load_reference_data(reference_file: Path, row_ids: list[int]) -> list[str]:
+    """Return the DMS IDs at the selected reference-sheet rows."""
+    reference = pd.read_csv(reference_file, encoding="utf-8-sig")
+    if "DMS_ID" not in reference:
+        raise ValueError(f"{reference_file} is missing column 'DMS_ID'")
+
+    invalid = [row_id for row_id in row_ids if row_id < 0 or row_id >= len(reference)]
+    if invalid:
+        raise ValueError(
+            f"Reference rows {invalid} fall outside 0-{len(reference) - 1}"
+        )
+    dms_ids = reference.iloc[row_ids]["DMS_ID"]
+    missing = [row_id for row_id, dms_id in zip(row_ids, dms_ids) if pd.isna(dms_id)]
+    if missing:
+        raise ValueError(f"DMS_ID is missing for reference rows {missing}")
+    return dms_ids.astype(str).tolist()
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Run Evo 2 inference on the sequences of one or more DMS assays."
+        description="Score one or more RNAGym assays with Evo 2",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     rows = parser.add_mutually_exclusive_group(required=True)
     rows.add_argument(
         "--row_id",
-        type=int,
-        help="Row ID in the reference sheet to process",
+        type=_nonnegative_int,
+        help="Reference-sheet row to score",
     )
     rows.add_argument(
         "--row_ids",
-        type=str,
-        help="Several reference sheet rows, e.g. '0-8,11-32'. They are scored in "
-        "one process so the checkpoint is loaded once.",
+        help="Comma-separated rows and ranges to score in one model load, e.g. 0-8,11-32",
     )
     parser.add_argument(
         "--ref_sheet",
-        type=str,
+        type=Path,
         required=True,
-        help="Path to reference sheet containing a DMS_ID column",
+        help="Reference sheet containing DMS_ID",
     )
     parser.add_argument(
         "--dms_dir_path",
-        type=str,
+        type=Path,
         required=True,
-        help="Directory containing DMS assay CSV files ({DMS_ID}.csv)",
+        help="Directory containing assay CSVs",
     )
     parser.add_argument(
         "--output_dir_path",
-        type=str,
+        type=Path,
         required=True,
-        help="Directory to save the scored output CSV",
+        help="Directory for scored CSVs",
     )
     parser.add_argument(
         "--model_name",
-        type=str,
         default="evo2_40b",
-        help="Evo 2 checkpoint name (default: evo2_40b). The score column is "
-        "named '{model_name}_score', e.g. evo2_40b_score.",
+        help="Evo 2 checkpoint name",
     )
     parser.add_argument(
         "--local_path",
-        type=str,
-        default=None,
-        help="Path to a pre-merged Evo 2 .pt checkpoint. When given, the model "
-        "is loaded fully offline (no HuggingFace network access). Recommended "
-        "for air-gapped compute nodes.",
+        help="Optional local checkpoint path",
     )
     parser.add_argument(
         "--batch_size",
-        type=int,
+        type=_positive_int,
         default=1,
-        help="Number of sequences scored per forward pass (default: 1). All "
-        "variants of an assay share one length, so batching is padding-free; "
-        "raise it for short assays, keep it small for very long ones / 40B.",
+        help="Sequences per forward pass",
     )
     parser.add_argument(
         "--max_tokens_per_batch",
-        type=int,
-        default=None,
-        help="If set, the batch size is derived per assay as "
-        "max(1, max_tokens_per_batch // effective_length), overriding "
-        "--batch_size. The effective length accounts for the BOS token and for "
-        "Vortex's multiple-of-16 padding under FP8. Keeps GPU memory roughly "
-        "constant across assays of very different lengths (e.g. 8192).",
+        type=_positive_int,
+        help="Derive each assay's batch size from this token budget",
     )
     parser.add_argument(
         "--reduce_method",
-        type=str,
+        choices=("mean", "sum"),
         default="mean",
-        choices=["mean", "sum"],
-        help="Reduce per-token log-likelihoods by mean (mean PLL, default) or "
-        "sum (PLL).",
+        help="Per-sequence log-likelihood reduction",
     )
     parser.add_argument(
         "--prepend_bos",
         action="store_true",
-        help="Prepend the BOS/EOD token before scoring (default: off, matching "
-        "the evo2 package default).",
+        help="Prepend the BOS/EOD token",
     )
     parser.add_argument(
         "--average_reverse_complement",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Score each sequence as the mean of its forward and "
-        "reverse-complement log-likelihood (default: ON). Evo 2 is a "
-        "strand-symmetric DNA model and the RNAGym evo2 baselines use "
-        "reverse-complement averaging, so this is the default for a fair "
-        "comparison. Pass --no-average_reverse_complement for forward strand "
-        "only (~2x faster).",
+        help="Average forward and reverse-complement scores",
     )
     parser.add_argument(
         "--require_fp8",
         action="store_true",
-        help="Abort unless the model was actually built with FP8 input "
-        "projections. Evo2.load_evo2_model silently falls back to bf16 for 7B "
-        "checkpoints when Transformer Engine is unavailable, so without this a "
-        "run can be bf16 while everything around it records FP8.",
+        help="Require FP8 input projections in the constructed model",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Re-score even if the output CSV already exists.",
+        help="Replace existing scored CSVs",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def load_reference_data(ref_sheet_path: str, row_ids) -> list:
-    """Return the DMS_IDs for ``row_ids`` in the reference sheet."""
-    try:
-        ref_df = pd.read_csv(ref_sheet_path)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Reference sheet not found: {ref_sheet_path}")
-
-    # Tolerate a UTF-8 BOM on the DMS_ID column header.
-    ref_df.columns = [c.lstrip("﻿") for c in ref_df.columns]
-    if "DMS_ID" not in ref_df.columns:
-        raise KeyError("Reference sheet must contain a 'DMS_ID' column")
-
-    dms_ids = []
-    for row_id in row_ids:
-        if row_id < 0 or row_id >= len(ref_df):
-            raise ValueError(
-                f"Row ID {row_id} out of range (reference sheet has {len(ref_df)} rows)"
-            )
-        dms_id = ref_df.loc[row_id, "DMS_ID"]
-        if pd.isna(dms_id):
-            raise ValueError(f"DMS_ID is missing for row {row_id}")
-        dms_ids.append(str(dms_id))
-    return dms_ids
+def parse_row_ids(specification: str) -> list[int]:
+    """Expand a row selection such as ``0-8,11-32``."""
+    rows = set()
+    for selection in specification.split(","):
+        match = re.fullmatch(r"\s*(\d+)(?:-(\d+))?\s*", selection)
+        if match is None:
+            raise ValueError(f"Invalid --row_ids selection: {selection!r}")
+        start = int(match.group(1))
+        end = int(match.group(2) or start)
+        if end < start:
+            raise ValueError(f"Descending --row_ids range: {selection!r}")
+        rows.update(range(start, end + 1))
+    return sorted(rows)
 
 
-def load_dms_data(dms_dir_path: str, dms_id: str) -> pd.DataFrame:
-    """Load the DMS assay CSV for ``dms_id``."""
-    dms_file = Path(dms_dir_path) / f"{dms_id}.csv"
-    if not dms_file.exists():
-        raise FileNotFoundError(f"DMS file not found: {dms_file}")
-
-    df = pd.read_csv(dms_file)
-    required_cols = ["mutant", "DMS_score", "sequence"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"Missing required columns in DMS file: {missing_cols}")
-    return df
+def preprocess_sequence(sequence: str) -> str:
+    """Convert an RNA or DNA sequence to uppercase DNA."""
+    return sequence.strip().upper().replace("U", "T")
 
 
-def write_csv_atomically(df, output_file):
-    """Write the scored assay, then rename it into place.
+def score_assay(model, args: argparse.Namespace, dms_id: str, fp8: bool) -> float:
+    """Score one assay, write its prediction table, and return Spearman rho."""
+    data = load_dms_data(args.dms_dir_path, dms_id)
+    raw_sequences = data["sequence"]
+    valid = raw_sequences.notna() & raw_sequences.astype(str).str.strip().ne("")
+    sequences = [preprocess_sequence(value) for value in raw_sequences[valid]]
+    if not sequences:
+        raise ValueError(f"{dms_id} has no nonempty sequences")
 
-    These CSVs are the published scores, so a partial file must never appear
-    under the final name: an interrupted or out-of-quota write would otherwise
-    leave a truncated CSV that later looks like a completed assay to the
-    resume logic, and --overwrite would destroy a good file to produce it.
-    """
-    output_file = Path(output_file)
-    handle, tmp_path = tempfile.mkstemp(dir=str(output_file.parent),
-                                        prefix=f".{output_file.name}.", suffix=".tmp")
-    os.close(handle)
-    try:
-        df.to_csv(tmp_path, index=False)
-        os.replace(tmp_path, output_file)
-    except BaseException:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        raise
-
-
-def score_one_assay(evo2_model, args, dms_id, fp8_enabled):
-    """Score one assay and write its CSV. Returns the Spearman correlation."""
-    output_file = Path(args.output_dir_path) / f"{dms_id}.csv"
-    dms_df = load_dms_data(args.dms_dir_path, dms_id)
-
-    # Preprocess sequences (RNA -> DNA), tracking any rows we cannot score.
-    print("Preprocessing sequences...")
-    raw = dms_df["sequence"]
-    valid_mask = raw.notna() & (raw.astype(str).str.strip() != "")
-    n_skipped = int((~valid_mask).sum())
-    if n_skipped:
-        print(f"Skipping {n_skipped} rows with empty/NaN sequence")
-    sequences = [preprocess_sequence(s) for s in raw[valid_mask].astype(str)]
-    max_len = max((len(s) for s in sequences), default=0)
-    print(f"Scoring {len(sequences)} sequences (max length {max_len} nt)")
-
-    # Choose the batch size (token-budget adaptive if requested).
+    lengths = {len(sequence) for sequence in sequences}
+    if len(lengths) != 1:
+        raise ValueError(f"{dms_id} contains mixed sequence lengths: {sorted(lengths)}")
+    sequence_length = lengths.pop()
     batch_size = args.batch_size
-    if args.max_tokens_per_batch is not None and sequences:
-        eff_len = effective_length(max_len, args.prepend_bos, fp8_enabled)
-        batch_size = max(1, args.max_tokens_per_batch // eff_len)
-        print(f"Token budget {args.max_tokens_per_batch}: seq_len={max_len} "
-              f"prepend_bos={args.prepend_bos} fp8={fp8_enabled} "
-              f"effective_length={eff_len} -> batch_size={batch_size}")
+    if args.max_tokens_per_batch is not None:
+        length = effective_length(sequence_length, args.prepend_bos, fp8)
+        batch_size = max(1, args.max_tokens_per_batch // length)
 
-    print(f"Running inference (batch_size={batch_size}, "
-          f"reduce_method={args.reduce_method}, prepend_bos={args.prepend_bos}, "
-          f"rc={args.average_reverse_complement})...")
-    scores = evo2_model.score_sequences(
-        sequences,
-        batch_size=batch_size,
-        prepend_bos=args.prepend_bos,
-        reduce_method=args.reduce_method,
-        average_reverse_complement=args.average_reverse_complement,
+    print(
+        f"{dms_id}: scoring {len(sequences)} sequences of length {sequence_length} "
+        f"in batches of {batch_size}"
     )
-    scores = np.asarray(scores, dtype=float)
+    scores = np.asarray(
+        model.score_sequences(
+            sequences,
+            batch_size=batch_size,
+            prepend_bos=args.prepend_bos,
+            reduce_method=args.reduce_method,
+            average_reverse_complement=args.average_reverse_complement,
+        ),
+        dtype=float,
+    )
+    if scores.shape != (len(sequences),):
+        raise ValueError(
+            f"{dms_id} returned score shape {scores.shape}, expected {(len(sequences),)}"
+        )
+    if not np.isfinite(scores).all():
+        raise FloatingPointError(f"{dms_id} returned nonfinite model scores")
 
-    # Write scores back onto the scored rows (NaN for skipped ones).
     score_column = f"{args.model_name}_score"
-    dms_df[score_column] = np.nan
-    dms_df.loc[valid_mask, score_column] = scores
-
-    # Spearman on the rows we actually scored.
-    scored = dms_df.loc[valid_mask, ["DMS_score", score_column]].dropna()
-    if len(scored) >= 2:
-        correlation, pvalue = spearmanr(scored["DMS_score"], scored[score_column])
+    data[score_column] = np.nan
+    data.loc[valid, score_column] = scores
+    pairs = data[["DMS_score", score_column]].replace([np.inf, -np.inf], np.nan)
+    pairs = pairs.dropna()
+    if len(pairs) < 2:
+        correlation = pvalue = float("nan")
     else:
-        correlation, pvalue = float("nan"), float("nan")
+        result = spearmanr(pairs["DMS_score"], pairs[score_column])
+        correlation, pvalue = result.statistic, result.pvalue
 
-    write_csv_atomically(dms_df, output_file)
-
-    print("\nSummary:")
-    print(f"  DMS ID:            {dms_id}")
-    print(f"  Sequences scored:  {len(sequences)}")
-    print(f"  Score column:      {score_column}")
-    print(f"  Spearman vs DMS:   {correlation:.3f} (p={pvalue:.2e})")
-    print(f"  Saved to:          {output_file}")
+    output_file = args.output_dir_path / f"{dms_id}.csv"
+    write_csv_atomically(data, output_file)
+    print(f"{dms_id}: Spearman={correlation:.3f} p={pvalue:.2e} -> {output_file}")
     return correlation
 
 
-def main():
-    args = parse_args()
+def write_csv_atomically(data: pd.DataFrame, output_file: Path) -> None:
+    """Replace an output only after its complete CSV has been written."""
+    permissions = output_file.stat().st_mode & 0o777 if output_file.exists() else 0o644
+    with NamedTemporaryFile(
+        dir=output_file.parent,
+        prefix=f".{output_file.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        temporary_file = Path(handle.name)
+    try:
+        data.to_csv(temporary_file, index=False)
+        temporary_file.chmod(permissions)
+        temporary_file.replace(output_file)
+    finally:
+        temporary_file.unlink(missing_ok=True)
 
-    output_dir = Path(args.output_dir_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
+def run(args: argparse.Namespace, model_factory=None) -> None:
+    """Load Evo 2 once and score all requested assays."""
     row_ids = [args.row_id] if args.row_id is not None else parse_row_ids(args.row_ids)
-
     dms_ids = load_reference_data(args.ref_sheet, row_ids)
-    print(f"Rows {row_ids} -> DMS IDs: {dms_ids}")
-
-    todo = []
-    for row_id, dms_id in zip(row_ids, dms_ids):
-        output_file = output_dir / f"{dms_id}.csv"
-        if output_file.exists() and not args.overwrite:
-            print(f"Output already exists (use --overwrite to redo): {output_file}")
-            continue
-        todo.append((row_id, dms_id))
-    if not todo:
-        print("Nothing to score.")
+    args.output_dir_path.mkdir(parents=True, exist_ok=True)
+    pending = [
+        (row_id, dms_id)
+        for row_id, dms_id in zip(row_ids, dms_ids)
+        if args.overwrite or not (args.output_dir_path / f"{dms_id}.csv").exists()
+    ]
+    if not pending:
+        print("Nothing to score")
         return
 
     if not torch.cuda.is_available():
-        print("WARNING: CUDA not available - Evo 2 requires a GPU.", file=sys.stderr)
-    print(f"Visible GPUs: {torch.cuda.device_count()}")
+        print("WARNING: Evo 2 requires CUDA", file=sys.stderr)
+    print(f"Loading {args.model_name} on {torch.cuda.device_count()} visible GPUs")
+    if model_factory is None:
+        from evo2 import Evo2
 
-    # Initialize model. Vortex handles device placement / multi-GPU sharding;
-    # do NOT call .to(device). The checkpoint is loaded once for every assay.
-    print(f"Loading Evo 2 model: {args.model_name} "
-          f"(local_path={args.local_path})...")
-    evo2_model = Evo2(args.model_name, local_path=args.local_path)
-    # Always ask the built model, never the packaged YAML: load_evo2_model can
-    # turn FP8 off for 7B when Transformer Engine is missing, and the batch-size
-    # arithmetic below has to follow the config the model was actually built with.
-    config = evo2_model.model.config
-    fp8_enabled = bool(config.get("use_fp8_input_projections", False))
-    print(f"use_fp8_input_projections={fp8_enabled}")
-    if args.require_fp8 and not fp8_enabled:
-        raise SystemExit(
-            "--require_fp8 was given but the model resolved to "
-            "use_fp8_input_projections=False. For a 7B checkpoint this happens "
-            "silently when Transformer Engine is unavailable; for the others it "
-            "means Transformer Engine is not providing FP8. Refusing to score, because "
-            "the surrounding provenance would claim FP8.")
+        model_factory = Evo2
+    model = model_factory(args.model_name, local_path=args.local_path)
+    fp8 = bool(model.model.config.get("use_fp8_input_projections", False))
+    if args.require_fp8 and not fp8:
+        raise RuntimeError("The constructed model does not use FP8 input projections")
 
     failures = []
-    for row_id, dms_id in todo:
-        print(f"\n=== row {row_id}: {dms_id} ===")
+    for row_id, dms_id in pending:
         try:
-            score_one_assay(evo2_model, args, dms_id, fp8_enabled)
-        except Exception as e:
-            print(f"Error scoring {dms_id}: {str(e)}", file=sys.stderr)
-            failures.append(dms_id)
-            if len(todo) == 1:
+            score_assay(model, args, dms_id, fp8)
+        except Exception as error:
+            if len(pending) == 1:
                 raise
-
+            print(f"Row {row_id} ({dms_id}) failed: {error}", file=sys.stderr)
+            failures.append(dms_id)
     if failures:
-        print(f"\nFAILED assays ({len(failures)}): {failures}", file=sys.stderr)
-        sys.exit(1)
+        raise RuntimeError(f"Failed assays: {', '.join(failures)}")
+
+
+def main() -> None:
+    """Run the Evo 2 scoring command."""
+    run(parse_args())
 
 
 if __name__ == "__main__":

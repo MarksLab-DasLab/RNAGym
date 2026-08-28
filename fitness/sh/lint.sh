@@ -4,6 +4,7 @@ set -euo pipefail
 taplo lint pixi.toml
 ruff check --extend-select I \
 	analyze_fill_strategies.py \
+	baselines/Evo/score_evo2_single_dms.py \
 	baselines/{AIDO_RNA,Orthrus,RNAGenesis,RNA_FM,RiNALMo}/*.py \
 	baselines/masked_lm \
 	merge_scoring_files.py \
@@ -12,6 +13,7 @@ ruff check --extend-select I \
 	../tests/test_fitness.py
 ruff format --check \
 	analyze_fill_strategies.py \
+	baselines/Evo/score_evo2_single_dms.py \
 	baselines/{AIDO_RNA,Orthrus,RNAGenesis,RNA_FM,RiNALMo}/*.py \
 	baselines/masked_lm \
 	merge_scoring_files.py \
