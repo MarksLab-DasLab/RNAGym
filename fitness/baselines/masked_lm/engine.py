@@ -1,16 +1,4 @@
-"""
-Batched inference over a deduplicated context bank.
-
-The engine owns everything that is the same for every masked RNA language model:
-padding a batch of masked contexts into token ids, running the model, taking
-log-softmax at the masked positions, and accumulating the signed log-probability
-terms into per-variant scores. Everything model-specific lives behind the
-``MaskedLMAdapter`` interface in ``adapter.py``.
-
-A context may carry more than one mask, because ``mask-fill`` masks a variant's
-whole mutated set at once, so masked positions are read from the task table
-rather than inferred from the context string.
-"""
+"""Run batched inference over deduplicated masked contexts."""
 
 import numpy as np
 import torch
@@ -20,29 +8,14 @@ from .strategies import MASK_CHAR, validate_table
 
 
 def window_contexts(table, budget: int) -> None:
-    """
-    Trim contexts to a model's position limit, centred on their masked span.
-
-    RNA-FM and RiNALMo accept a bounded number of positions. The non-coding
-    constructs used for the four-strategy comparison are 45 to 425 nucleotides
-    and never reach it, but the mRNA-coding constructs are kilobases, so a
-    window centred on the masked span is taken, mirroring the windowing in the
-    baselines' original ``compute_fitness.py``. Mutations outside the window are
-    lost from the context, which is inherent to windowing.
-
-    Modifies ``table`` in place: contexts are rewritten and positions shifted.
-
-    Raises:
-        ValueError: if a context's masked span itself does not fit in the
-        budget, since there is then no window that shows every scored position.
-    """
+    """Window contexts in place around their masked span."""
     if all(len(c) <= budget for c in table.contexts):
         return
 
-    # Masked span per context, from the task table rather than from the string.
+    # Masked span per context, from the task table rather than from the string
     # The table is sorted by context, so the spans come from one grouped reduce
     # rather than a pass over every term, which matters on the mRNA-coding
-    # assays where this path is reached at all.
+    # assays where this path is reached at all
     span_lo = {}
     span_hi = {}
     if table.n_terms():
@@ -65,7 +38,7 @@ def window_contexts(table, budget: int) -> None:
         if span > budget:
             raise ValueError(
                 f"Masked span of {span} positions does not fit in a window of "
-                f"{budget}; this context cannot be scored"
+                f"{budget}. This context cannot be scored"
             )
         centre = (low + high) // 2
         start = max(0, centre - budget // 2)
@@ -88,22 +61,7 @@ def accumulate_scores(
     max_batch_tokens: int,
     progress: bool = True,
 ) -> np.ndarray:
-    """
-    Run every context once and accumulate the task table into per-variant scores.
-
-    Args:
-        adapter: a loaded MaskedLMAdapter.
-        table: the TaskTable built by ``strategies.build_tasks``.
-        n_rows: number of rows in the assay dataframe.
-        batch_size: maximum contexts per forward pass.
-        max_batch_tokens: cap on ``batch_size x sequence length``, so that long
-            assays automatically use a smaller batch.
-        progress: show a progress bar.
-
-    Returns:
-        Array of shape ``(len(table.strategies), n_rows)``. Rows that could not
-        be scored are NaN under every strategy.
-    """
+    """Return one score row per strategy, leaving unscorable variants NaN."""
     contexts = table.contexts
     if not contexts:
         raise ValueError("No scorable variants found")
@@ -112,7 +70,7 @@ def accumulate_scores(
     # The gather is vectorized, so it needs the context-to-token map to be a
     # constant shift. The adapter declares that, and the declaration is checked
     # here: an off-by-one reads a neighbouring nucleotide's distribution and
-    # still produces plausible finite scores.
+    # still produces plausible finite scores
     if not adapter.constant_token_offset:
         raise ValueError(
             f"{adapter.name} does not declare a constant context-to-token offset, "
@@ -130,7 +88,15 @@ def accumulate_scores(
     )
 
     seq_len = max(len(c) for c in contexts)
-    batch_size = max(1, min(batch_size, max_batch_tokens // (seq_len + n_special)))
+    encoded_length = seq_len + n_special
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    if max_batch_tokens < encoded_length:
+        raise ValueError(
+            f"max_batch_tokens={max_batch_tokens} cannot hold one encoded context "
+            f"of length {encoded_length}"
+        )
+    batch_size = min(batch_size, max_batch_tokens // encoded_length)
     print(f"Using batch size {batch_size} for sequence length {seq_len}")
 
     scores = np.full((len(table.strategies), n_rows), np.nan, dtype=float)
@@ -162,7 +128,7 @@ def accumulate_scores(
             input_ids[b, : len(ids)] = torch.tensor(ids, dtype=torch.long)
             attention_mask[b, : len(ids)] = 1
 
-        # The task table is sorted by context, so this batch's terms are one slice.
+        # The task table is sorted by context, so this batch's terms are one slice
         lo = int(np.searchsorted(table.ctx_id, start, "left"))
         hi = int(np.searchsorted(table.ctx_id, start + len(batch), "left"))
         if lo == hi:
@@ -172,7 +138,7 @@ def accumulate_scores(
         uniq, inverse = np.unique(key, return_inverse=True)
         # (context, position) is the identity of a gathered distribution: one
         # context may be read at several positions, because mask-fill masks a
-        # variant's whole mutated set in a single context.
+        # variant's whole mutated set in a single context
         rows = torch.from_numpy((uniq // max_len).astype(np.int64)).to(device)
         cols = torch.from_numpy((uniq % max_len).astype(np.int64) + offset).to(device)
 
@@ -185,10 +151,21 @@ def accumulate_scores(
 
         vocab = vocab_of_base[table.base[lo:hi]]
         values = log_probs[inverse, vocab] * table.sign[lo:hi]
+        if not np.isfinite(values).all():
+            bad = lo + int(np.flatnonzero(~np.isfinite(values))[0])
+            raise FloatingPointError(
+                f"{adapter.name} produced a non-finite log probability for "
+                f"context {table.ctx_id[bad]}, position {table.pos[bad]}, "
+                f"base {adapter.bases[table.base[bad]]}"
+            )
         np.add.at(
             flat,
             table.strategy[lo:hi].astype(np.int64) * n_rows + table.row[lo:hi],
             values,
         )
 
+    if not np.isfinite(scores[:, table.scorable]).all():
+        raise FloatingPointError(
+            f"{adapter.name} produced a non-finite accumulated score"
+        )
     return scores

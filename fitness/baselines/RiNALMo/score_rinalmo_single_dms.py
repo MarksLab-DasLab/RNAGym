@@ -1,33 +1,9 @@
 #!/usr/bin/env python3
-"""
-Score DMS assay sequences with RiNALMo.
+"""Score RiNALMo with the shared masked-marginal engine.
 
-RiNALMo is scored with the shared masked-marginal engine in
-``fitness/baselines/masked_lm``, which offers the four fill strategies
-(``wt-fill``, ``mask-fill``, ``mut-fill``, ``match-fill``) that differ in what
-the model sees at a variant's other mutated positions.
-
-This replaces the earlier ``compute_fitness.py``, which already masked one
-position at a time in the variant's own sequence but read the wrong logit for
-the mutant base. RiNALMo's alphabet is DNA-based (A C G T), and while
-``Alphabet.encode`` folds U to T internally, ``Alphabet.get_idx('U')`` returns
-<unk>. That script looks the mutant base up in a U-form sequence and the
-wild-type base up in a T-form sequence, so every mutation to U scores against
-the <unk> logit instead of the T logit. Emulating that lookup reproduces the
-published predictions much better (Pearson 0.83 to 0.84) than any correct
-implementation (0.13 to 0.27), which is evidence that the published numbers
-carry it, though the match is not exact so at least one other difference
-remains. That script also stripped N from the wild type inside the scoring loop
-without adjusting coordinates, which would shift positions on any construct
-containing N. The shared engine's ``check_alphabet`` refuses to run if any base
-maps to the unknown token, so this class of bug cannot recur silently.
-
-Precision note: the transformer body must run in bfloat16 because the
-checkpoint's flash-attention kernels accept only fp16 or bf16, but bf16 logits
-are too coarse for this score. The model's logits are large enough that bf16
-spacing quantises log-ratio differences onto multiples of about 0.125, tying
-about 8% of single mutants at exactly 0. The masked LM head is therefore
-recomputed in fp32 from the bf16 representation, which keeps the ranking usable.
+RiNALMo uses a DNA alphabet, so U is folded to T before token lookup. Its
+transformer runs in bfloat16 for flash attention and its masked-LM head is
+recomputed in float32 to avoid quantized log-likelihood ratios.
 """
 
 import sys
@@ -62,7 +38,7 @@ class RiNALMoAdapter(MaskedLMAdapter):
 
     def load(self, args):
         # The released checkpoint stores the flash-attention module layout, so
-        # flash attention must stay enabled.
+        # flash attention must stay enabled
         from rinalmo.config import model_config
         from rinalmo.data.alphabet import Alphabet
         from rinalmo.model.model import RiNALMo
@@ -89,5 +65,3 @@ class RiNALMoAdapter(MaskedLMAdapter):
 
 if __name__ == "__main__":
     main(RiNALMoAdapter())
-
-# python score_rinalmo_single_dms.py --row_id 0 --ref_sheet reference_sheet.csv --dms_dir_path fitness_processed_assays --output_dir_path rinalmo_output --checkpoint_path rinalmo_giga_pretrained.pt

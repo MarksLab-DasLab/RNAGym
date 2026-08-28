@@ -1,23 +1,5 @@
 #!/usr/bin/env python3
-"""
-Score DMS assay sequences with RNA-FM.
-
-RNA-FM is scored with the shared masked-marginal engine in
-``fitness/baselines/masked_lm``, which offers the four fill strategies
-(``wt-fill``, ``mask-fill``, ``mut-fill``, ``match-fill``) that differ in what
-the model sees at a variant's other mutated positions. See that package's
-docstrings for the formulas and their provenance.
-
-This replaces the earlier ``compute_fitness.py``, which offered two strategies
-and whose released predictions match neither of the masked ones. Its
-``masked-marginals`` masked ALL of a variant's mutated positions at once in the
-WILD-TYPE sequence, which is this package's ``mask-fill``, and its
-``wt-marginals`` did not mask at all. The released RNA-FM predictions are
-reproduced to floating-point noise by ``wt-marginals`` (Pearson 1.000000, max
-abs difference under 2e-5 on the two assays checked) and not by any masked
-strategy (Pearson 0.28 to 0.89), even though its run script requested
-``masked-marginals``.
-"""
+"""Score RNA-FM with the shared masked-marginal engine."""
 
 import sys
 from pathlib import Path
@@ -46,14 +28,14 @@ class RNAFMAdapter(MaskedLMAdapter):
             required=True,
             help="Path to the RNA-FM_pretrained.pth weights file. Note this differs "
             "from compute_fitness.py's --model_location, which is the cloned RNA-FM "
-            "module directory added to sys.path; here the package is expected to be "
+            "module directory added to sys.path. Here the package is expected to be "
             "installed (pip install rna-fm) and only the checkpoint is passed.",
         )
 
     def load(self, args):
         # The released checkpoint pickles an argparse.Namespace, which torch>=2.6
         # refuses to unpickle under the weights_only default, so that one class is
-        # allowlisted rather than disabling the check entirely.
+        # allowlisted rather than disabling the check entirely
         import argparse as _argparse
 
         torch.serialization.add_safe_globals([_argparse.Namespace])
@@ -75,5 +57,3 @@ class RNAFMAdapter(MaskedLMAdapter):
 
 if __name__ == "__main__":
     main(RNAFMAdapter())
-
-# python score_rna_fm_single_dms.py --row_id 0 --ref_sheet reference_sheet.csv --dms_dir_path fitness_processed_assays --output_dir_path rna_fm_output --checkpoint_path RNA-FM_pretrained.pth

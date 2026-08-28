@@ -30,9 +30,8 @@ Two changes from before:
 | 15 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
 | 16 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
 
-**The top three are a tie, not a ranking.** AIDO.RNA (650M), Evo 2 (40B) and AIDO.RNA (1.6B) span
-0.0093, inside the roughly 0.01 band that 31 assays cannot resolve (see Notes). What the top of the
-table does show is that a 650M-parameter masked RNA model is level with a 40B autoregressive one.
+AIDO.RNA (650M), Evo 2 (40B) and AIDO.RNA (1.6B) span 0.0093. With only 31 assays, this difference
+should not be treated as a resolved ordering.
 
 All five released AIDO.RNA checkpoints are listed as separate entries rather than in a side table,
 since they are separate models scored the same way. Their scores rise steeply to 650M and then stop:
@@ -40,30 +39,26 @@ the 650M scores above the 1.6B under `wt-fill` and `match-fill`, though not unde
 `mut-fill`, so the shape of that curve depends on the scoring convention and should be read with that
 in mind.
 
-Per category columns are the mean signed Spearman over the assays in that category; Macro is the
-unweighted average of the three category means. Underlying values: [`leaderboard_signed_3ncRNA.csv`](leaderboard_signed_3ncRNA.csv).
+Per category columns are the mean signed Spearman over the assays in that category. Macro is the
+unweighted average of the three category means. Underlying values:
+[`leaderboard_signed_3ncRNA.csv`][0].
 
-The masked language models (AIDO.RNA at five sizes, RNAGenesis, RiNALMo, RNA-FM) are scored with `wt-fill`,
-the convention the ESM and ProteinGym reference implementations use; see below. Their previous
-numbers on this table used a different fill and were lower. **Two entries are not on this convention.**
-RNA-ERNIE's scorer runs a single forward pass over the UNMASKED wild type, applies a softmax rather
-than a log-softmax, and sums raw probability differences `p(mutant) - p(wild type)` at the mutated
-positions. That is neither a masked marginal nor a log-likelihood ratio, and for multi-mutants no
-rank-preserving transformation relates the two, so its 0.1937 is not comparable with the masked
-checkpoints above; it cannot be rescored here because it needs a paddlepaddle environment. Orthrus is now scored on `wt-fill` like
-the rest: its MLM checkpoint documents zeroed nucleotide channels as its masking operation, so the
-fill strategies apply to it. Its two annotation channels stay zero throughout, because DMS constructs
-carry no transcript structure, which is a limit of applying the model to this data rather than of the
-masking. Read RNA-ERNIE's rank with that caveat.
+The masked language models other than RNA-ERNIE are scored with `wt-fill`, the convention used by
+the ESM and ProteinGym reference implementations. RNA-ERNIE retains its original scorer: one
+unmasked wild-type forward pass followed by a sum of raw probability differences at mutated
+positions. It is a separate zero-shot method, not a masked-marginal score. Orthrus uses its official
+[MLM variant-scoring interface][1].
+Its optional CDS and splice channels stay zero because the DMS assays do not provide those
+annotations.
 
 ## Scoring convention
 
 The masked language models are scored with the masked-marginal log-likelihood ratio: mask a mutated
 position, take `log p(mutant) - log p(wild type)` there, and sum over the variant's mutated
-positions. Four such conventions exist in the literature, all from Meier et al. 2021 (ESM-1v),
-supplement Appendix A, and they differ in exactly one thing: **what fills the variant's OTHER mutated
-positions while one position is masked.** With `M` the mutated positions, `x_-i` a mask at `i` and
-`x_-M` masks at every position in `M`:
+positions. Meier et al. 2021 (ESM-1v), supplement Appendix A defines three context choices. A fourth,
+closely related convention is implemented by the authors' released code. They differ in exactly one
+thing: **what fills the variant's OTHER mutated positions while one position is masked.** With `M`
+the mutated positions, `x_-i` a mask at `i` and `x_-M` masks at every position in `M`:
 
 | name | fill at the other mutated sites | score |
 |:--|:--|:--|
@@ -73,18 +68,18 @@ positions while one position is masked.** With `M` the mutated positions, `x_-i`
 | `match-fill` | the allele being scored | `sum_i log p(mt_i \| x^mt_-i) - log p(wt_i \| x^wt_-i)` |
 
 **The leaderboard uses `wt-fill`.** It is what the ESM authors' own
-`examples/variant-prediction/predict.py` and ProteinGym's `proteingym/baselines/esm/compute_fitness.py`
-implement under the option name `masked-marginals`, so it is the convention the surrounding
-zero-shot literature is calibrated on. The choice is on that provenance, not on which scores best.
+[ESM example][2] and [ProteinGym baseline][3]
+implement under the option name `masked-marginals`, so it is the convention the surrounding zero-shot
+literature is calibrated on. The choice is on that provenance, not on which scores best.
 
 All four are computed and published, see the sensitivity section below. `fitness/baselines/masked_lm`
 computes them in a single pass per checkpoint: the four share most of their masked contexts, so all
 four together cost about 19% more unique context examples than `mut-fill` alone (2,929,196 against
-2,458,521 over the 31 assays; these are batched inputs, not model invocations). Every scoring script
+2,458,521 over the 31 assays). These are batched inputs, not model invocations. Every scoring script
 accepts `--strategies`.
 
 Two properties worth knowing. **On single mutants all four are identical**, because a variant with
-one mutation has no other mutated positions; that is used as a fixture test. And **99.4% of the ncRNA
+one mutation has no other mutated positions. That is used as a fixture test. And **99.4% of the ncRNA
 variants are multi-mutants**, so the conventions diverge on essentially everything here.
 
 The name is overloaded and the overloading has caused real errors. The ESM code option called
@@ -99,8 +94,8 @@ unmasked wild-type pass (`wt-marginals`) rather than the masked strategy its run
 ## Sensitivity to the fill strategy
 
 Every masked model is scored under all four conventions, so the effect of the choice is visible
-rather than assumed. Macro over the 3 ncRNA categories; regenerate this table, the per-category
-values and the bootstrap intervals with `fitness/analyze_fill_strategies.py`.
+rather than assumed. Macro over the 3 ncRNA categories. Regenerate this table, the per-category
+values and the category spreads with `fitness/analyze_fill_strategies.py`.
 
 | Checkpoint | `wt-fill` | `mask-fill` | `mut-fill` | `match-fill` |
 |:--|--:|--:|--:|--:|
@@ -128,11 +123,6 @@ Two things to keep in mind when reading it:
 - **Model ranking is far more stable than the absolute numbers.** Across the nine checkpoints the
   only ordering change between strategies is that AIDO.RNA-650M and AIDO.RNA-1.6B trade places.
 
-Orthrus is included from 2026-08-24. It was previously left out on the grounds that it has no mask
-token, but its MLM checkpoint's own documentation specifies the masking convention, "positions to
-score should be masked (nucleotide channels set to zero) before calling", and the score it already
-published relied on exactly that operation at one position.
-
 ## Why we now exclude the mRNA assays
 
 We restrict evaluation to assays whose DMS readout is a direct measure of the RNA molecule's own
@@ -142,19 +132,15 @@ function (ribozyme cleavage, tRNA function, aptamer binding).
 2. mRNA-splicing (2 assays, `Julien_2016_mRNA` and `Ke_2017_mRNA`): the readout is exon or alternative splicing efficiency in human cells, a regulatory phenotype rather than the molecular fitness of the mRNA itself.
 
 Signed Spearman on the excluded assays is kept for reference in
-[`mRNA/leaderboard_signed_mRNA.csv`](mRNA/leaderboard_signed_mRNA.csv). Those numbers predate the
+[`mRNA/leaderboard_signed_mRNA.csv`][4]. Those numbers predate the
 RiNALMo and RNA-FM rescoring, so their rows there still use the earlier scoring, and RiNALMo's
 position in that table in particular should not be read as current.
 
 ## Notes
 
 Categories: ribozyme (26 assays), tRNA (3), aptamer (2). Because the macro-mean weights each category
-equally, the small tRNA and aptamer sets carry outsized, higher-variance weight. Small differences in macro are not resolved by 31
-assays. A paired bootstrap over assays, resampled within each category, puts the gap between the top
-two entries at +0.0043 with a 95% interval of [-0.0224, +0.0314], so its sign is not determined;
-treat differences of a few hundredths as unresolved rather than as an ordering. The `bootstrap_se`
-columns emitted by `performance_fitness.py` do not measure this: they are standard errors of an
-assay-weighted difference from the best model, not of the equal-weight category macro reported here.
+equally, the small tRNA and aptamer sets carry outsized, higher-variance weight. Treat differences of
+a few hundredths as unresolved rather than as an ordering.
 
 ## Scoring scripts
 
@@ -166,10 +152,10 @@ Scoring scripts, paths relative to the repository root:
 - RNA-FM: `fitness/baselines/RNA_FM/score_rna_fm_single_dms.py` and `score_rna_fm.sh`
 - RiNALMo: `fitness/baselines/RiNALMo/score_rinalmo_single_dms.py` and `score_rinalmo.sh`
 
-The four masked models share one scoring engine, `fitness/baselines/masked_lm`, which implements the
-four fill strategies, the context deduplication and the batching; each model's script is a thin
-adapter supplying its alphabet, tokenization and forward pass. `tests/test_masked_lm.py` covers the
-strategies against a per-variant reference implementation and needs no checkpoint or GPU.
+The five masked model adapters share one scoring engine, `fitness/baselines/masked_lm`, which implements the
+four fill strategies, the context deduplication and the batching. Each model's script is a thin
+adapter supplying its alphabet, tokenization and forward pass. `tests/test_fitness.py` covers the
+checkpoint-free scoring, merge and analysis workflow on fixtures from real assays.
 
 All are registered in `fitness/merge_scoring_files.py` and `fitness/performance_fitness.py`.
 
@@ -180,10 +166,16 @@ publishes. Its per-category means now match the columns above, and the macro is 
 mean. AUC and MCC are directed too: an AUC below 0.5 or an MCC below 0 means the model ranks variants
 the wrong way round, where both were previously folded onto their better side.
 
-`fitness/analyze_fill_strategies.py` regenerates the sensitivity table, the category spreads and the
-bootstrap intervals from the prediction files.
+`fitness/analyze_fill_strategies.py` regenerates the sensitivity table and category spreads from the
+prediction files.
 
 Scores computed in bfloat16 depend on the GPU: the same code and checkpoint on an L40S and an H100
 differ by up to 0.2 in score and about 0.001 in per-assay Spearman. Every prediction file is written
-with a manifest recording the strategies, alphabet, dtype, checkpoint and GPU. All numbers on this
-page were produced on H100s.
+with a manifest recording the strategies, alphabet, model arguments and hardware. All numbers on
+this page were produced on H100s.
+
+[0]: leaderboard_signed_3ncRNA.csv
+[1]: https://huggingface.co/antichronology/orthrus-mlm-6-track/blob/5f0dc87d51065035fc28e71972c69f9c84f4deae/orthrus_hf.py#L290-L325
+[2]: https://github.com/facebookresearch/esm/blob/2b369911bb5b4b0dda914521b9475cad1656b2ac/examples/variant-prediction/predict.py#L186-L225
+[3]: https://github.com/OATML-Markslab/ProteinGym/blob/144fe22b07dfaeec2b366f2346203a9838a55b4c/proteingym/baselines/esm/compute_fitness.py#L486-L514
+[4]: mRNA/leaderboard_signed_mRNA.csv

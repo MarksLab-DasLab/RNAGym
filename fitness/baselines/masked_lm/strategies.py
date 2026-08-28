@@ -1,64 +1,7 @@
-"""
-The four masked-marginal fill strategies, expressed as contexts and tasks.
+"""Build shared contexts and score terms for masked-marginal strategies.
 
-Every masked-marginal score computes a log-odds at each mutated position of a
-variant and sums over the variant's mutations. The strategies differ in exactly
-one thing: what fills the variant's OTHER mutated positions while the scored
-position is masked. Following Meier et al. 2021 (ESM-1v) supplement, Appendix A,
-with ``M`` the mutated positions, ``x^wt`` and ``x^mt`` the wild-type and variant
-sequences, ``x_-i`` a mask at position ``i`` and ``x_-M`` masks at every position
-in ``M``:
-
-    wt-fill      sum_i [ log p(mt_i | x^wt_-i) - log p(wt_i | x^wt_-i) ]
-    mask-fill    sum_i [ log p(mt_i | x^wt_-M) - log p(wt_i | x^wt_-M) ]
-    mut-fill     sum_i [ log p(mt_i | x^mt_-i) - log p(wt_i | x^mt_-i) ]
-    match-fill   sum_i [ log p(mt_i | x^mt_-i) - log p(wt_i | x^wt_-i) ]
-
-``wt-fill`` is what the ESM authors' released code and ProteinGym's baseline
-implement under the name ``masked-marginals``; ``mask-fill`` is the formula
-written in the ESM paper; ``mut-fill`` and ``match-fill`` are strategies c and b
-of the supplement. All four are identical on single mutants, because a variant
-with one mutation has no other mutated positions and ``x^mt_-i`` equals
-``x^wt_-i``. They diverge on multi-mutants, which are 99.4% of this benchmark's
-non-coding variants.
-
-Only ``match-fill`` mixes two contexts: its mutant term is conditioned on the
-variant's own sequence and its wild-type term on the wild type, so it is a
-difference of two conditionals rather than a log-odds ratio.
-
-This module turns an assay into two things:
-
-    contexts   deduplicated strings over the model's alphabet plus a mask
-               placeholder, one per unique context example
-    tasks      a flat table of (context, position, base, row, strategy, sign)
-               terms to accumulate, as parallel arrays
-
-Contexts are shared across strategies wherever they coincide, which is what
-makes computing all four cost only about 19% more unique context examples than
-computing ``mut-fill`` alone on the non-coding assays. These are context
-examples, not model invocations: contexts are batched, and a context carrying
-several masks is read at several positions from one pass.
-
-Coordinates
------------
-
-Three coordinate systems appear and must not be confused:
-
-    full position       0-based index into the assay's sequences, which is what
-                        a mutation string names (1-based) and what this module
-                        stores in ``TaskTable.pos``
-    context position    index into a context string. Equal to the full position
-                        unless the context was windowed, in which case
-                        ``engine.window_contexts`` subtracts the window origin
-                        from ``TaskTable.pos`` so that the stored value is
-                        always a context position
-    token position      index into the model's input ids, which the adapter
-                        computes from the context position, normally by adding
-                        the number of leading special tokens
-
-Every task position must point at a mask in its context; ``validate_table``
-checks this, because a position that is off by one gathers a neighbouring
-nucleotide's distribution and still produces plausible finite scores.
+The formulas and provenance are documented in this package's README. Task
+positions are zero-based context coordinates and must point at a mask.
 """
 
 from array import array
@@ -69,8 +12,8 @@ import pandas as pd
 
 MASK_CHAR = "#"
 
-# Canonical order. The CLI accepts the hyphenated spelling used in the write-up;
-# the underscored spelling is used for identifiers and output column suffixes.
+# Canonical order. The CLI accepts the hyphenated spelling used in the write-up
+# the underscored spelling is used for identifiers and output column suffixes
 STRATEGIES = ("wt_fill", "mask_fill", "mut_fill", "match_fill")
 
 
@@ -78,30 +21,13 @@ def normalize_strategy(name: str) -> str:
     """Accept either the hyphenated or the underscored spelling of a strategy."""
     key = name.strip().lower().replace("-", "_")
     if key not in STRATEGIES:
-        raise ValueError(f"Unknown strategy {name!r}; expected one of {STRATEGIES}")
+        raise ValueError(f"Unknown strategy {name!r}. Expected one of {STRATEGIES}")
     return key
 
 
 @dataclass
 class TaskTable:
-    """
-    A deduplicated set of masked contexts plus the terms to read out of them.
-
-    Attributes:
-        contexts: masked context strings, deduplicated. A context may
-            carry more than one mask (``mask-fill`` masks a variant's whole
-            mutated set at once), so a context does not identify the position
-            being scored and ``pos`` is carried explicitly.
-        ctx_id, pos, base, row, strategy, sign: parallel arrays, one entry per
-            term to accumulate. Term ``k`` adds
-            ``sign[k] * log p(base[k] | contexts[ctx_id[k]])`` evaluated at
-            position ``pos[k]`` into the score of variant ``row[k]`` under
-            strategy ``strategy[k]``. Sorted by ``ctx_id`` so that each
-            context's terms are a contiguous slice.
-        scorable: per-variant mask; False rows are reported as NaN under every
-            strategy.
-        strategies: the strategy names indexed by ``strategy``.
-    """
+    """Deduplicated contexts and parallel arrays of accumulation terms."""
 
     contexts: list
     ctx_id: np.ndarray
@@ -118,15 +44,7 @@ class TaskTable:
 
 
 def parse_mutations(mutant_str: str, bases: str) -> list:
-    """
-    Parse a mutation string such as ``"A4U,A5G"`` into a list of
-    ``(pos0, wt_base, mut_base)`` tuples with 0-based positions, in the alphabet
-    the model uses.
-
-    Raises:
-        ValueError: for non-substitution edits (indels) or bases outside the
-        model's alphabet, so the caller can score the affected variant as NaN.
-    """
+    """Return ``(position, wild base, mutant base)`` substitution tuples."""
     fold_from, fold_to = ("U", "T") if "T" in bases else ("T", "U")
     mutations = []
     for token in str(mutant_str).replace(" ", "").split(","):
@@ -142,23 +60,7 @@ def parse_mutations(mutant_str: str, bases: str) -> list:
 
 
 def recover_wild_type(mutants, sequences, bases: str) -> str:
-    """
-    Recover the assay's wild-type sequence by reverting each variant's own
-    mutations, and require that every variant agrees.
-
-    The wild-type-background strategies need a wild type, and taking it from the
-    reference sheet alone would not catch a coordinate mismatch between the
-    sheet and the assay file. Reverting the mutations uses only the assay, so
-    the two are independent and can be cross-checked by the caller.
-
-    Returns:
-        The single wild-type sequence implied by the assay.
-
-    Raises:
-        ValueError: if the variants do not all imply the same wild type, which
-        would mean the assay mixes backgrounds or the mutation coordinates do
-        not line up with the sequences.
-    """
+    """Recover one wild type by reverting every valid variant."""
     candidates = {}
     for mutant_str, seq in zip(mutants, sequences):
         if pd.isna(mutant_str):
@@ -185,24 +87,13 @@ def recover_wild_type(mutants, sequences, bases: str) -> str:
         top = sorted(candidates.items(), key=lambda kv: -kv[1])[:3]
         raise ValueError(
             "Variants imply more than one wild-type sequence "
-            f"({len(candidates)} distinct; top counts {[c for _, c in top]})"
+            f"({len(candidates)} distinct, top counts {[c for _, c in top]})"
         )
     return next(iter(candidates))
 
 
 def difference_counts(sequences, wild_type: str) -> np.ndarray:
-    """
-    Count, for every variant, how many positions differ from the wild type.
-
-    Used to verify that a variant differs from the wild type at exactly its
-    declared mutated positions and nowhere else. Done as one array comparison
-    rather than per row, since the assays run to hundreds of thousands of
-    variants.
-
-    Returns:
-        int array with one entry per sequence, or -1 where the sequence length
-        differs from the wild type's and the comparison is undefined.
-    """
+    """Count differences, using -1 for sequences of the wrong length."""
     length = len(wild_type)
     counts = np.full(len(sequences), -1, dtype=np.int64)
     same_length = np.array([len(s) == length for s in sequences], dtype=bool)
@@ -218,28 +109,26 @@ def difference_counts(sequences, wild_type: str) -> np.ndarray:
 
 
 def validate_table(table) -> None:
-    """
-    Check the task table's invariants: every scored position is masked in the
-    context it is read from.
-
-    A position that is off by one, or that survived windowing incorrectly, still
-    yields finite and plausible scores, so this is checked rather than assumed.
-
-    Raises:
-        ValueError: if any task points at a position that is not masked.
-    """
+    """Require every task position to point at a mask in its context."""
     if table.n_terms() == 0:
         return
+    if table.ctx_id.min() < 0 or table.ctx_id.max() >= len(table.contexts):
+        raise ValueError("A task references an unknown context")
+    context_lengths = np.fromiter(
+        (len(context) for context in table.contexts), dtype=np.int64
+    )
+    outside = (table.pos < 0) | (table.pos >= context_lengths[table.ctx_id])
+    if outside.any():
+        raise ValueError("A task position falls outside its context")
+
     lengths = {len(c) for c in table.contexts}
     if len(lengths) == 1:
         # The usual case: one construct length per assay, so the whole bank
-        # packs into an array and the check is one comparison.
+        # packs into an array and the check is one comparison
         length = lengths.pop()
         packed = np.frombuffer(
             "".join(table.contexts).encode("ascii"), dtype=np.uint8
         ).reshape(len(table.contexts), length)
-        if table.pos.min() < 0 or table.pos.max() >= length:
-            raise ValueError("A task position falls outside its context")
         bad = packed[table.ctx_id, table.pos] != ord(MASK_CHAR)
         if bad.any():
             k = int(np.flatnonzero(bad)[0])
@@ -293,48 +182,17 @@ def build_tasks(
     strategies=STRATEGIES,
     verbose: bool = True,
 ) -> TaskTable:
-    """
-    Expand an assay's variants into deduplicated masked contexts and the terms
-    read out of them, for every requested strategy at once.
+    """Build deduplicated contexts and signed log-probability terms.
 
-    A variant is scorable only if it is scorable under EVERY requested strategy,
-    so that the strategies are compared on exactly the same set of variants.
-
-    Every scorable variant is checked to satisfy all of:
-
-        the mutation string parses into substitutions over the alphabet;
-        its positions are inside the sequence and are distinct;
-        no mutation is a no-op (a mutant base equal to its wild-type base);
-        the variant sequence carries the mutant base at each mutated position;
-        the sequence contains no mask placeholder;
-
-    and additionally, when a wild-type-background strategy is requested:
-
-        the sequence has the same length as the wild type;
-        the wild type carries the declared wild-type base at each position;
-        the sequence equals the wild type at every position outside the mutated
-        set, so that the declared mutations describe the variant completely.
-
-    Anything else is reported as NaN under every strategy, matching the existing
-    scorers' all-or-nothing policy: a variant with one bad mutation contributes
-    none of its mutations. On the 31 non-coding assays (856,628 variants) none
-    of these checks currently rejects anything, so they cost no coverage.
-
-    Args:
-        mutants: the assay's ``mutant`` column.
-        sequences: the assay's ``sequence`` column, already folded to the
-            model's alphabet.
-        wild_type: the assay's wild-type sequence, in the same alphabet.
-        bases: the model's alphabet, ``"ACGU"`` or ``"ACGT"``.
-        strategies: which strategies to build terms for.
-        verbose: print the reason each skipped variant was skipped.
-
-    Returns:
-        A TaskTable.
+    Invalid variants remain NaN under every requested strategy. Wild-type
+    strategies also require the mutation string to describe every difference
+    from the supplied wild type.
     """
     strategies = tuple(normalize_strategy(s) for s in strategies)
     if not strategies:
         raise ValueError("At least one strategy is required")
+    if len(set(strategies)) != len(strategies):
+        raise ValueError(f"Duplicate strategies requested: {strategies}")
     strat_id = {name: i for i, name in enumerate(strategies)}
     base_id = {b: i for i, b in enumerate(bases)}
     needs_wt = any(s in ("wt_fill", "mask_fill", "match_fill") for s in strategies)
@@ -345,7 +203,7 @@ def build_tasks(
     scorable = np.zeros(len(sequences), dtype=bool)
 
     # The wild-type single-mask contexts depend only on the position, so they are
-    # shared by every variant and worth caching.
+    # shared by every variant and worth caching
     wt_ctx_cache = {}
 
     def wt_masked(pos: int) -> int:
@@ -364,7 +222,7 @@ def build_tasks(
         sign_a.append(sign)
 
     # One array comparison for the whole assay, so that the per-variant check
-    # that nothing outside the mutated set differs from the wild type is cheap.
+    # that nothing outside the mutated set differs from the wild type is cheap
     n_differences = difference_counts(sequences, wild_type) if needs_wt else None
 
     n_skipped = 0
@@ -382,12 +240,16 @@ def build_tasks(
                 )
             positions = [pos for pos, _, _ in mutations]
             if len(set(positions)) != len(positions):
-                raise ValueError(f"Mutation string names a position twice: {mutant_str}")
+                raise ValueError(
+                    f"Mutation string names a position twice: {mutant_str}"
+                )
             for pos, wt_base, mut_base in mutations:
                 if pos < 0 or pos >= len(seq):
                     raise ValueError(f"Mutation position {pos + 1} outside sequence")
                 if wt_base == mut_base:
-                    raise ValueError(f"Mutation {wt_base}{pos + 1}{mut_base} is a no-op")
+                    raise ValueError(
+                        f"Mutation {wt_base}{pos + 1}{mut_base} is a no-op"
+                    )
                 if seq[pos] != mut_base:
                     raise ValueError(
                         f"Sequence has {seq[pos]} at position {pos + 1}, "
@@ -439,7 +301,7 @@ def build_tasks(
             if "match_fill" in strat_id:
                 # The mutant term shares mut-fill's context and the wild-type
                 # term shares wt-fill's, which is why match-fill is free once
-                # both of those are being computed.
+                # both of those are being computed
                 emit(mut_ctx[pos], pos, mut_base, i, "match_fill", 1)
                 emit(wt_masked(pos), pos, wt_base, i, "match_fill", -1)
         scorable[i] = True

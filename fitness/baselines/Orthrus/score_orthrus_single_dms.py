@@ -1,34 +1,13 @@
 #!/usr/bin/env python3
 """
-Score DMS assay sequences with Orthrus.
+Score DMS assay sequences with Orthrus's official MLM predictor.
 
-Orthrus (https://github.com/bowang-lab/Orthrus) is a Mamba-based RNA foundation
-model. Its contrastive checkpoints produce embeddings only, but
-``antichronology/orthrus-mlm-6-track`` is dual-objective pretrained, contrastive
-plus masked LM, and exposes ``predict_tokens`` returning per-position logits over
-[A, C, G, T]. That checkpoint's own documentation describes the method as
-variant scoring and specifies the masking convention:
+The upstream model card defines variant scoring with ``predict_tokens``. This
+adapter calls that interface while the shared engine supplies batching and the
+multi-mutant fill contexts. DMS constructs have no CDS or splice annotation, so
+Orthrus's two optional annotation channels remain zero.
 
-    "Positions to score should be masked (nucleotide channels set to zero)
-     before calling."
-
-So zeroing a position's nucleotide channels is Orthrus's masking operation
-rather than a stand-in for a mask token, and the masked-marginal fill strategies
-apply to it the same way they apply to the token-based models. This scorer
-therefore offers the same ``--strategies`` as the other masked language models;
-see fitness/baselines/masked_lm/strategies.py for the formulas.
-
-Orthrus is a 6-track model: 4 one-hot nucleotide channels plus a CDS and a
-splice channel derived from a transcript's exon and CDS structure. DMS
-constructs are bare sequences with no such annotation, so those 2 channels are
-zero throughout, for the wild type and the variant alike. That is a limitation
-of applying the model to this data, not of the masking.
-
-The shared engine works on token ids, which Orthrus does not have. It is given
-integer base codes instead, 0 to 3 for A, C, G, T with 4 for a masked position,
-and ``logits_at`` expands those into the 6-track float tensor the model expects.
-That keeps Orthrus on the same context construction, deduplication, batching and
-accumulation as every other masked model, with no special case in the engine.
+https://huggingface.co/antichronology/orthrus-mlm-6-track/blob/5f0dc87d51065035fc28e71972c69f9c84f4deae/orthrus_hf.py#L290-L325
 """
 
 import sys
@@ -53,7 +32,7 @@ class OrthrusAdapter(MaskedLMAdapter):
     default_max_batch_tokens = 65536
 
     # Base codes standing in for token ids. The engine only needs these to be
-    # distinct integers; logits_at turns them back into channels.
+    # distinct integers and logits_at turns them back into channels
     MASK_CODE = 4
     PAD_CODE = 5
 
@@ -88,18 +67,10 @@ class OrthrusAdapter(MaskedLMAdapter):
 
     def logits_at(self, input_ids, attention_mask, rows, cols):
         """
-        Expand base codes into Orthrus's 6-track input and read the MLM head.
+        Convert base codes to six-track inputs for ``predict_tokens``.
 
-        A masked position is left as an all-zero column, which is the masking
-        convention the checkpoint documents. Padding is zero as well.
-
-        ``lengths`` is passed for interface parity, not for safety: this
-        checkpoint's ``forward`` discards it, and it affects pooled
-        representations only. What actually keeps padding out of the scored
-        positions is ``allows_mixed_length_batches`` staying False, so the
-        engine refuses to put contexts of different lengths in one batch, and
-        the wild-type-background strategies additionally require every variant
-        to have the wild type's length.
+        The nucleotide channels hold one-hot bases. Annotation channels stay
+        zero because the DMS assays do not supply them.
         """
         batch, length = input_ids.shape
         x = torch.zeros(batch, length, 6, dtype=torch.float32, device=input_ids.device)
@@ -112,5 +83,3 @@ class OrthrusAdapter(MaskedLMAdapter):
 
 if __name__ == "__main__":
     main(OrthrusAdapter())
-
-# python score_orthrus_single_dms.py --row_id 0 --ref_sheet reference_sheet.csv --dms_dir_path fitness_processed_assays --output_dir_path orthrus_output

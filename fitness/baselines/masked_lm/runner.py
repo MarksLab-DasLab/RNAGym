@@ -9,6 +9,7 @@ adapter.
 import argparse
 import hashlib
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -65,15 +66,6 @@ def build_parser(adapter) -> argparse.ArgumentParser:
         "because the contexts are shared",
     )
     parser.add_argument(
-        "--legacy_column",
-        type=str,
-        default=None,
-        choices=[s.replace("_", "-") for s in STRATEGIES],
-        help="Also write the model's historical bare score column, holding this "
-        "strategy's scores. Defaults to the single requested strategy when "
-        "exactly one is requested, and to nothing otherwise",
-    )
-    parser.add_argument(
         "--device",
         type=str,
         default=None,
@@ -110,25 +102,18 @@ def build_parser(adapter) -> argparse.ArgumentParser:
 
 
 def load_reference_row(ref_sheet_path: str, row_id: int):
-    """
-    Read one row of the reference sheet.
-
-    Returns:
-        (dms_id, raw_construct_seq). The construct sequence is None when the
-        sheet does not carry one, in which case the wild type comes from the
-        assay alone.
-
-    Raises:
-        ValueError: If row_id is not found or DMS_ID is missing
-    """
+    """Return one reference-sheet DMS ID and its optional construct."""
     try:
         ref_df = pd.read_csv(ref_sheet_path, encoding="utf-8-sig")
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference sheet not found: {ref_sheet_path}")
     if "DMS_ID" not in ref_df.columns:
         raise KeyError("Reference sheet must contain 'DMS_ID' column")
-    if row_id >= len(ref_df):
-        raise ValueError(f"Row ID {row_id} exceeds number of rows in reference sheet")
+    if not 0 <= row_id < len(ref_df):
+        raise ValueError(
+            f"Row ID {row_id} is outside the reference sheet's "
+            f"0..{len(ref_df) - 1} range"
+        )
 
     dms_id = ref_df.loc[row_id, "DMS_ID"]
     if pd.isna(dms_id):
@@ -143,12 +128,7 @@ def load_reference_row(ref_sheet_path: str, row_id: int):
 
 
 def load_dms_data(dms_dir_path: str, dms_id: str) -> pd.DataFrame:
-    """
-    Load DMS data for specified DMS_ID.
-
-    Raises:
-        FileNotFoundError: If DMS file is not found
-    """
+    """Load and validate one processed assay."""
     dms_file = Path(dms_dir_path) / f"{dms_id}.csv"
     if not dms_file.exists():
         raise FileNotFoundError(f"DMS file not found: {dms_file}")
@@ -163,21 +143,10 @@ def load_dms_data(dms_dir_path: str, dms_id: str) -> pd.DataFrame:
 
 
 def resolve_wild_type(adapter, mutants, sequences, construct) -> str:
-    """
-    Determine the assay's wild type and cross-check the two independent sources.
-
-    The wild type is reconstructed from the assay itself, by reverting each
-    variant's own mutations, which uses no outside information and therefore
-    catches a coordinate mismatch between the reference sheet and the assay
-    file. It is then compared with the reference sheet's RAW_CONSTRUCT_SEQ.
-
-    Raises:
-        ValueError: if the two disagree, since the wild-type-background
-        strategies would otherwise be scored against the wrong background.
-    """
+    """Recover the assay wild type and check it against the reference sheet."""
     recovered = recover_wild_type(mutants, sequences, adapter.bases)
     if construct is None:
-        print("Reference sheet has no RAW_CONSTRUCT_SEQ; using the recovered wild type")
+        print("Reference sheet has no RAW_CONSTRUCT_SEQ. Using the recovered wild type")
         return recovered
     folded = adapter.canonicalize_sequence(construct)
     if folded != recovered:
@@ -190,14 +159,14 @@ def resolve_wild_type(adapter, mutants, sequences, construct) -> str:
 
 
 def window_budget(adapter, max_tokens: int) -> int:
-    """
-    How many nucleotides fit in one context, given the model's position limit.
-
-    Uses the adapter's DECLARED special-token count rather than its loaded token
-    ids, so that an unsupported request is refused before a model is loaded.
-    ``check_alphabet`` verifies the declaration against the real tokenizer.
-    """
-    return max_tokens - adapter.n_special_tokens
+    """Return the nucleotide budget after declared special tokens."""
+    budget = max_tokens - adapter.n_special_tokens
+    if budget < 1:
+        raise ValueError(
+            f"max_tokens={max_tokens} leaves no sequence positions after "
+            f"{adapter.n_special_tokens} special tokens"
+        )
+    return budget
 
 
 def needs_windowing(contexts, budget: int) -> bool:
@@ -206,24 +175,23 @@ def needs_windowing(contexts, budget: int) -> bool:
 
 
 def code_revision() -> dict:
-    """
-    Identify the code that produced the scores.
-
-    The git revision alone is misleading while the tree is dirty, which it is
-    during development, so the scoring source itself is hashed as well: the
-    shared package plus the model script that was invoked. That hash identifies
-    the scoring code exactly whether or not it has been committed.
-    """
+    """Return the git revision and a hash of the scoring sources."""
     here = Path(__file__).resolve().parent
     revision, dirty = "unknown", None
     try:
+        revision_command = f"git -C {shlex.quote(str(here))} rev-parse HEAD"
         revision = subprocess.run(
-            ["git", "-C", str(here), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True,
+            shlex.split(revision_command),
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
+        status_command = f"git -C {shlex.quote(str(here))} status --porcelain"
         status = subprocess.run(
-            ["git", "-C", str(here), "status", "--porcelain"],
-            capture_output=True, text=True, check=True,
+            shlex.split(status_command),
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         dirty = bool(status)
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -245,40 +213,25 @@ def code_revision() -> dict:
     }
 
 
-def runtime_environment() -> dict:
-    """
-    Record what the scores were computed on.
-
-    bfloat16 results depend on the GPU: AIDO.RNA-1.6B scored in bf16 on an L40S
-    and on an H100 agrees only to about 0.2 in score and 3e-4 in Spearman, which
-    is invisible unless the hardware is written down.
-    """
+def runtime_environment(device) -> dict:
+    """Return the Torch, CUDA, and GPU versions used for scoring."""
     import torch
 
-    device_name = None
-    try:
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name()
-    except (AssertionError, RuntimeError):
-        pass
+    device = torch.device(device)
+    device_name = torch.cuda.get_device_name(device) if device.type == "cuda" else None
     return {
         "torch": torch.__version__,
         "cuda": getattr(torch.version, "cuda", None),
+        "device": str(device),
         "gpu": device_name,
     }
 
 
-def write_manifest(output_dir, dms_id, adapter, args, strategies, table, wild_type):
-    """
-    Record how a prediction file was produced, next to the file itself.
-
-    Which fill strategy a column holds, which alphabet the sequences were folded
-    to, and which checkpoint and dtype produced them are exactly the details
-    that were unrecoverable for the benchmark's earlier published predictions.
-    """
+def write_manifest(path, dms_id, adapter, args, strategies, table, wild_type):
+    """Write prediction provenance next to an assay output."""
     manifest = {
         "dms_id": dms_id,
-        "environment": runtime_environment(),
+        "environment": runtime_environment(adapter.device),
         "model": adapter.name,
         "score_column_stem": adapter.score_column,
         "strategies": [s.replace("_", "-") for s in strategies],
@@ -295,8 +248,7 @@ def write_manifest(output_dir, dms_id, adapter, args, strategies, table, wild_ty
             k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()
         },
     }
-    path = Path(output_dir) / f"{dms_id}.manifest.json"
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
 def main(adapter):
@@ -304,15 +256,19 @@ def main(adapter):
     parser = build_parser(adapter)
     args = parser.parse_args()
 
-    strategies = tuple(normalize_strategy(s) for s in args.strategies)
+    if args.batch_size < 1:
+        parser.error(f"--batch_size must be positive, got {args.batch_size}")
+    if args.max_batch_tokens < 1:
+        parser.error(
+            f"--max_batch_tokens must be positive, got {args.max_batch_tokens}"
+        )
+
+    try:
+        strategies = tuple(normalize_strategy(s) for s in args.strategies)
+    except ValueError as error:
+        parser.error(str(error))
     if len(set(strategies)) != len(strategies):
         parser.error(f"Duplicate strategies requested: {args.strategies}")
-    legacy = args.legacy_column and normalize_strategy(args.legacy_column)
-    if legacy is None and len(strategies) == 1:
-        legacy = strategies[0]
-    if legacy is not None and legacy not in strategies:
-        parser.error(f"--legacy_column {args.legacy_column} was not requested")
-
     output_dir = Path(args.output_dir_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -320,14 +276,22 @@ def main(adapter):
         dms_id, construct = load_reference_row(args.ref_sheet, args.row_id)
         print(f"Processing DMS ID: {dms_id}")
         dms_df = load_dms_data(args.dms_dir_path, dms_id)
+        missing_sequences = dms_df["sequence"].isna()
+        if missing_sequences.any():
+            rows = dms_df.index[missing_sequences].tolist()[:5]
+            raise ValueError(f"DMS file has missing sequences at rows {rows}")
 
         print(f"Preprocessing sequences into the {adapter.bases} alphabet...")
-        sequences = [adapter.canonicalize_sequence(s) for s in dms_df["sequence"].tolist()]
+        sequences = [
+            adapter.canonicalize_sequence(s) for s in dms_df["sequence"].tolist()
+        ]
         mutants = dms_df["mutant"].tolist()
         wild_type = resolve_wild_type(adapter, mutants, sequences, construct)
         print(f"Wild type: {len(wild_type)} nt, cross-checked against the assay")
 
-        print(f"Building contexts for: {', '.join(s.replace('_', '-') for s in strategies)}")
+        print(
+            f"Building contexts for: {', '.join(s.replace('_', '-') for s in strategies)}"
+        )
         table = build_tasks(
             mutants,
             sequences,
@@ -348,18 +312,13 @@ def main(adapter):
         max_tokens = getattr(args, "max_tokens", None)
         if max_tokens is not None:
             # The declared count, not the loaded one: this guard runs before the
-            # model is loaded so that an unsupported request fails cheaply.
+            # model is loaded so that an unsupported request fails cheaply
             budget = window_budget(adapter, max_tokens)
             if needs_windowing(table.contexts, budget):
-                if len(strategies) > 1:
-                    raise ValueError(
-                        f"Contexts exceed the {max_tokens} position limit and more "
-                        "than one strategy was requested. A windowed wild-type "
-                        "table and a windowed variant context are not in the same "
-                        "coordinate frame, so the strategies would not be "
-                        "comparable. Request one strategy at a time for this assay"
-                    )
-                print(f"Windowing contexts to {budget} positions around the masked span")
+                print(
+                    f"Windowing contexts to {budget} positions around the masked span"
+                )
+                window_contexts(table, budget)
 
         device = args.device
         if device is None:
@@ -368,15 +327,12 @@ def main(adapter):
             device = "cuda:0" if torch.cuda.is_available() else "cpu"
         if adapter.requires_cuda and not device.startswith("cuda"):
             raise ValueError(
-                f"{adapter.name} has no working CPU path; pass a CUDA device"
+                f"{adapter.name} has no working CPU path. Pass a CUDA device"
             )
         args.device = device
         print(f"Initializing {adapter.name} on {device}...")
         adapter.load(args)
         adapter.check_alphabet()
-
-        if max_tokens is not None:
-            window_contexts(table, window_budget(adapter, max_tokens))
 
         print("Running inference...")
         scores = accumulate_scores(
@@ -389,13 +345,8 @@ def main(adapter):
 
         for i, strategy in enumerate(strategies):
             dms_df[f"{adapter.score_column}_{strategy}"] = scores[i]
-        if legacy is not None:
-            dms_df[adapter.score_column] = scores[strategies.index(legacy)]
-
-        output_file = output_dir / f"{dms_id}.csv"
-        dms_df.to_csv(output_file, index=False)
-        write_manifest(output_dir, dms_id, adapter, args, strategies, table, wild_type)
-        print(f"Saved results to: {output_file}")
+        if len(strategies) == 1:
+            dms_df[adapter.score_column] = scores[0]
 
         print("\nSummary:")
         print(f"Number of sequences: {len(sequences)}")
@@ -408,8 +359,9 @@ def main(adapter):
                 f"(p {pvalue:.2e})"
             )
         if len(strategies) > 1:
-            finite = np.isfinite(scores).all(axis=0)
-            identical = np.allclose(scores[:, finite], scores[0, finite])
+            identical = np.allclose(
+                scores[:, table.scorable], scores[0, table.scorable]
+            )
             n_multi = 0
             for mutant in np.asarray(mutants)[table.scorable]:
                 if str(mutant).count(",") > 0:
@@ -423,8 +375,26 @@ def main(adapter):
                 f"  strategies identical: {identical} "
                 f"({n_multi} multi-mutants among {n_scorable} scorable variants)"
             )
+
+        output_file = output_dir / f"{dms_id}.csv"
+        temporary = output_file.with_name(f".{output_file.name}.tmp")
+        manifest_file = output_dir / f"{dms_id}.manifest.json"
+        manifest_temporary = manifest_file.with_name(f".{manifest_file.name}.tmp")
+        dms_df.to_csv(temporary, index=False)
+        write_manifest(
+            manifest_temporary,
+            dms_id,
+            adapter,
+            args,
+            strategies,
+            table,
+            wild_type,
+        )
+        temporary.replace(output_file)
+        manifest_temporary.replace(manifest_file)
         print(f"Output saved to: {output_file}")
 
-    except Exception as err:
+    # Model libraries raise unrelated exception types at this CLI boundary
+    except Exception as err:  # noqa: BLE001
         print(f"Error: {err}", file=sys.stderr)
         sys.exit(1)

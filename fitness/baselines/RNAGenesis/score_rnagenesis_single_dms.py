@@ -1,32 +1,9 @@
 #!/usr/bin/env python3
-"""
-Score DMS assay sequences with RNAGenesis.
+"""Score RNAGenesis with the shared masked-marginal engine.
 
-RNAGenesis (https://github.com/zaixizhang/RNAGenesis) is a generalist RNA
-foundation model. Its released encoder (https://huggingface.co/Zaixi/RNAGenesis)
-is an xTrimoPGLM-style bidirectional transformer pretrained with a masked
-language-modelling objective on RNAcentral, exposed as
-``xTrimoPGLMForMaskedLM``. It is scored with the shared masked-marginal engine
-in ``fitness/baselines/masked_lm``, which offers the four fill strategies
-(``wt-fill``, ``mask-fill``, ``mut-fill``, ``match-fill``) that differ in what
-the model sees at a variant's other mutated positions.
-
-Two properties of the released checkpoint drive the implementation:
-
-1. The model uses the RNA alphabet. Its vocabulary contains U and no T, so
-   sequences are folded to U (the opposite of AIDO.RNA).
-2. The shipped tokenizer wrapper cannot be used directly. ``<mask>``, ``<unk>``
-   and ``<eos>`` are absent from the vocabulary and receive phantom
-   added-token ids past the real vocab, ``mask_token_id`` is None, and
-   ``convert_tokens_to_ids`` iterates a string character by character. The
-   author's own ``run.py`` depends on that character iteration and adds no
-   special tokens, so input ids are built directly from ``tokenizer.model``:
-   one id per nucleotide, no CLS or EOS.
-
-The mask token is ``tMASK``, the token-level mask of the xTrimoPGLM family. It
-was confirmed empirically: on wild-type ncRNA constructs it gives a lower masked
-negative log-likelihood than gMASK or sMASK, and puts over 99.9% of the
-predicted mass on A/C/G/U.
+The checkpoint uses an RNA alphabet, one token per nucleotide, no special
+tokens, and ``tMASK``. Its vocabulary is read directly from ``tokenizer.model``
+because the shipped tokenizer does not expose the model's mask ID.
 """
 
 import sys
@@ -113,5 +90,3 @@ class RNAGenesisAdapter(MaskedLMAdapter):
 
 if __name__ == "__main__":
     main(RNAGenesisAdapter())
-
-# python score_rnagenesis_single_dms.py --row_id 0 --ref_sheet reference_sheet.csv --dms_dir_path fitness_processed_assays --output_dir_path rnagenesis_output --model_name /path/to/rnagenesis_checkpoint
