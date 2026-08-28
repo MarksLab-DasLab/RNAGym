@@ -119,7 +119,7 @@ pixi run fmt
 ## Models
 
 The default merge registry includes Evo 1, Evo 1.5, Evo 2 (1B base, 7B, 20B and
-40B), GenSLM, Nucleotide Transformer, RNA-ERNIE, RNA-FM, RiNALMo, RNAGenesis,
+40B), GenSLM, Nucleotide Transformer v3, RNA-ERNIE, RNA-FM, RiNALMo, RNAGenesis,
 Orthrus and the five released AIDO.RNA checkpoints. EVmutation is merged
 separately with `--assays_with_MSAs_only` because it only covers assays with an MSA.
 

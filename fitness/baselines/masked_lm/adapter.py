@@ -20,6 +20,8 @@ class MaskedLMAdapter:
     # the window-limit guard can run before the model is loaded. Checked against
     # the loaded tokenizer in ``check_alphabet``
     n_special_tokens = 0
+    # Optional filler for architecture-required context padding
+    context_pad_char = None
     # Whether context positions map to token positions by a constant shift, which
     # is what lets the engine gather without calling ``token_position`` per term
     # An adapter that overrides ``token_position`` non-linearly must clear this
@@ -65,6 +67,10 @@ class MaskedLMAdapter:
             ids.append(token_id)
         ids.extend(self.suffix_ids)
         return ids
+
+    def context_length_for(self, length: int) -> int:
+        """Return the model-ready context length."""
+        return length
 
     def token_position(self, context_position: int) -> int:
         """Map a context coordinate to an input-token coordinate."""
