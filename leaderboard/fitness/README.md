@@ -80,7 +80,7 @@ the mutated positions, `x_-i` a mask at `i` and `x_-M` masks at every position i
 implement under the option name `masked-marginals`, so it is the convention the surrounding zero-shot
 literature is calibrated on. The choice is on that provenance, not on which scores best.
 
-All four are computed and published, see the sensitivity section below. `fitness/baselines/masked_lm`
+All four are computed and published, see the sensitivity section below. `rnagym/fitness/baselines/masked_lm`
 computes them in a single pass per checkpoint: the four share most of their masked contexts, so all
 four together cost about 19% more unique context examples than `mut-fill` alone (2,929,196 against
 2,458,521 over the 31 assays). These are batched inputs, not model invocations. Every scoring script
@@ -103,7 +103,8 @@ unmasked wild-type pass (`wt-marginals`) rather than the masked strategy its run
 
 Every masked model is scored under all four conventions, so the effect of the choice is visible
 rather than assumed. Macro over the 3 ncRNA categories. Regenerate this table, the per-category
-values and the category spreads with `fitness/analyze_fill_strategies.py`.
+values and the category spreads with
+`python -m rnagym.fitness.tasks.analyze_fill_strategies`.
 
 | Checkpoint | `wt-fill` | `mask-fill` | `mut-fill` | `match-fill` |
 |:--|--:|--:|--:|--:|
@@ -153,29 +154,31 @@ a few hundredths as unresolved rather than as an ordering.
 ## Scoring scripts
 
 Scoring scripts, paths relative to the repository root:
-- Evo 2: `fitness/baselines/Evo/score_evo2_single_dms.py` and `score_evo2.sh`
-- Nucleotide Transformer v3: `fitness/baselines/Nucleotide_Transformer/compute_fitness.py` and `run.sh`
-- Orthrus: `fitness/baselines/Orthrus/score_orthrus_single_dms.py` and `score_orthrus.sh`
-- AIDO.RNA: `fitness/baselines/AIDO_RNA/score_aido_rna_single_dms.py` and `score_aido_rna.sh`
-- RNAGenesis: `fitness/baselines/RNAGenesis/score_rnagenesis_single_dms.py` and `score_rnagenesis.sh`
-- RNA-FM: `fitness/baselines/RNA_FM/score_rna_fm_single_dms.py` and `score_rna_fm.sh`
-- RiNALMo: `fitness/baselines/RiNALMo/score_rinalmo_single_dms.py` and `score_rinalmo.sh`
+- Evo 2: `rnagym/fitness/baselines/Evo/score_evo2_single_dms.py` and `score_evo2.sh`
+- Nucleotide Transformer v3: `rnagym/fitness/baselines/Nucleotide_Transformer/compute_fitness.py` and `run.sh`
+- Orthrus: `rnagym/fitness/baselines/Orthrus/score_orthrus_single_dms.py` and `score_orthrus.sh`
+- AIDO.RNA: `rnagym/fitness/baselines/AIDO_RNA/score_aido_rna_single_dms.py` and `score_aido_rna.sh`
+- RNAGenesis: `rnagym/fitness/baselines/RNAGenesis/score_rnagenesis_single_dms.py` and `score_rnagenesis.sh`
+- RNA-FM: `rnagym/fitness/baselines/RNA_FM/score_rna_fm_single_dms.py` and `score_rna_fm.sh`
+- RiNALMo: `rnagym/fitness/baselines/RiNALMo/score_rinalmo_single_dms.py` and `score_rinalmo.sh`
 
-The six masked model adapters share one scoring engine, `fitness/baselines/masked_lm`, which implements the
+The six masked model adapters share one scoring engine, `rnagym/fitness/baselines/masked_lm`, which implements the
 four fill strategies, the context deduplication and the batching. Each model's script is a thin
 adapter supplying its alphabet, tokenization and forward pass. `tests/test_fitness.py` covers the
 checkpoint-free scoring, merge and analysis workflow on fixtures from real assays.
 
-All are registered in `fitness/model_registry.py`.
+All are registered in `rnagym/fitness/tasks/model_registry.py`.
 
-Reproduce the aggregate with `performance_fitness.py --type ncRNA`, whose Spearman is now signed.
+Reproduce the aggregate with `pixi run leaderboard --type ncRNA`, whose
+Spearman is now signed.
 It previously reported the absolute value, which credited a model whose scores anti-correlate with
 fitness exactly as much as one that correlates, so it could not produce the numbers this page
 publishes. Its per-category means now match the columns above, and the macro is their unweighted
 mean. AUC and MCC are directed too: an AUC below 0.5 or an MCC below 0 means the model ranks variants
 the wrong way round, where both were previously folded onto their better side.
 
-`fitness/analyze_fill_strategies.py` regenerates the sensitivity table and category spreads from the
+`python -m rnagym.fitness.tasks.analyze_fill_strategies` regenerates the
+sensitivity table and category spreads from the
 prediction files.
 
 Scores computed in bfloat16 depend on the GPU: the same code and checkpoint on an L40S and an H100

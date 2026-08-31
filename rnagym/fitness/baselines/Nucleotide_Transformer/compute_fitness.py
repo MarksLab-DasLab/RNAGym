@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Score DMS assays using Nucleotide Transformer v3's pretrained MLM head.
+
+NTv3 requires lengths divisible by its U-Net downsampling factor. Upstream
+recommends padding shorter inputs with N, because the model was not trained on
+padding tokens. This benchmark applies its shared masked-marginal estimator,
+not the authors' supervised variant-effect method.
+"""
+
+from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
+
+
+class NTv3Adapter(MaskedLMAdapter):
+    """Single-base NTv3 adapter with architecture-required N padding."""
+
+    name = "Nucleotide Transformer v3"
+    bases = "ACGT"
+    score_column = "ntv3_score"
+    context_pad_char = "N"
+    default_batch_size = 128
+
+    @staticmethod
+    def add_arguments(parser):
+        parser.add_argument(
+            "--model_name",
+            default="InstaDeepAI/NTv3_650M_pre",
+            help="Main pretrained checkpoint ID or local path "
+            "(default: InstaDeepAI/NTv3_650M_pre)",
+        )
+
+    def load(self, args):
+        from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_name, trust_remote_code=True
+        )
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            args.model_name,
+            trust_remote_code=True,
+        )
+        self.model = self.model.to(args.device).eval()
+        self.device = args.device
+        self.num_downsamples = int(self.model.config.num_downsamples)
+
+        vocab = tokenizer.get_vocab()
+        self.base_ids = {base: vocab[base] for base in self.bases if base in vocab}
+        self.mask_id = tokenizer.mask_token_id
+        self.pad_id = tokenizer.pad_token_id
+        self.unk_id = vocab["N"]
+
+    def context_length_for(self, length: int) -> int:
+        """Round up to the checkpoint's U-Net block size."""
+        multiple = 2**self.num_downsamples
+        return ((length + multiple - 1) // multiple) * multiple
+
+    def logits_at(self, input_ids, attention_mask, rows, cols):
+        if (input_ids == self.pad_id).any():
+            raise ValueError(
+                f"{self.name} ignores the attention mask, but a padding token "
+                "reached the model"
+            )
+        return self.model(input_ids=input_ids).logits[rows, cols]
+
+
+if __name__ == "__main__":
+    main(NTv3Adapter())

@@ -1,7 +1,6 @@
 """Reproduce the fitness workflow on complete released assays."""
 
 import json
-import runpy
 import shlex
 import shutil
 import sys
@@ -12,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
-from fitness import analyze_fill_strategies
-from fitness.baselines.Evo import score_evo2_single_dms as evo2
-from fitness.baselines.masked_lm import (
+from rnagym.config import ConfigFitness
+from rnagym.fitness.baselines.Evo import score_evo2_single_dms as evo2
+from rnagym.fitness.baselines.masked_lm import (
     MASK_CHAR,
     MaskedLMAdapter,
     accumulate_scores,
@@ -23,12 +22,17 @@ from fitness.baselines.masked_lm import (
     runner,
     window_contexts,
 )
-from fitness.baselines.masked_lm.engine import pad_contexts
-from fitness.baselines.masked_lm.strategies import validate_table
-from fitness.baselines.Nucleotide_Transformer.compute_fitness import NTv3Adapter
-from fitness.merge_scoring_files import combine_csv_data
-from fitness.model_registry import ALL_MODELS, SCORE_COLS, resolve_source
-from fitness.performance_fitness import get_performance_dataset
+from rnagym.fitness.baselines.masked_lm.engine import pad_contexts
+from rnagym.fitness.baselines.masked_lm.strategies import validate_table
+from rnagym.fitness.baselines.Nucleotide_Transformer.compute_fitness import NTv3Adapter
+from rnagym.fitness.tasks import (
+    analyze_fill_strategies,
+    merge_scoring_files,
+    performance_fitness,
+)
+from rnagym.fitness.tasks.merge_scoring_files import combine_csv_data
+from rnagym.fitness.tasks.model_registry import ALL_MODELS, SCORE_COLS, resolve_source
+from rnagym.fitness.tasks.performance_fitness import get_performance_dataset
 
 REPOSITORY = Path(__file__).parent.parent
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "fitness"
@@ -119,14 +123,9 @@ class PaddedFixtureAdapter(FixtureAdapter):
         return 128
 
 
-def run_cli(monkeypatch, command):
-    """Run a Python command line entry point in the current process."""
-    arguments = shlex.split(command)
-    script = Path(arguments[0]).resolve()
-    arguments[0] = str(script)
-    monkeypatch.syspath_prepend(str(script.parent))
-    monkeypatch.setattr(sys, "argv", arguments)
-    runpy.run_path(str(script), run_name="__main__")
+def run_cli(entry_point, command):
+    """Run a package command line entry point in the current process."""
+    entry_point(shlex.split(command))
 
 
 def fixture_log_probs(adapter, context, position):
@@ -158,8 +157,13 @@ def runner_command(assay_dir, output_dir):
     )
 
 
-def test_fitness_workflow(tmp_path, monkeypatch):
+def test_fitness_workflow(tmp_path):
     """Reproduce the benchmark workflow from released RNA-FM predictions."""
+    assert (
+        ConfigFitness.REFERENCE_FILE
+        == REPOSITORY / "data" / "fitness" / "reference_sheet_final.csv"
+    )
+
     merged_dir = tmp_path / "merged"
     performance_dir = tmp_path / "performance"
     analysis_dir = tmp_path / "analysis"
@@ -168,16 +172,16 @@ def test_fitness_workflow(tmp_path, monkeypatch):
 
     models = " ".join(MODEL_NAMES)
     run_cli(
-        monkeypatch,
-        f"fitness/merge_scoring_files.py --processed_folder {ASSAY_DIR} "
+        merge_scoring_files.main,
+        f"--processed_folder {ASSAY_DIR} "
         f"--model_predictions_folder {PREDICTION_DIR.parent} "
         f"--output_folder {merged_dir} --reference_file {REFERENCE_FILE} "
         f"--models {models}",
     )
     assert not (merged_dir / "stale.csv").exists()
     run_cli(
-        monkeypatch,
-        f"fitness/performance_fitness.py --reference_file {REFERENCE_FILE} "
+        performance_fitness.cli,
+        f"--reference_file {REFERENCE_FILE} "
         f"--combined_dir {merged_dir} --performance_dir {performance_dir} "
         f"--models {models}",
     )
@@ -211,8 +215,7 @@ def test_fitness_workflow(tmp_path, monkeypatch):
             )
 
     run_cli(
-        monkeypatch,
-        f"{analyze_fill_strategies.__file__} "
+        analyze_fill_strategies.main,
         f"--predictions_folder {PREDICTION_DIR.parent} "
         f"--ref_sheet {REFERENCE_FILE} --output_folder {analysis_dir}",
     )

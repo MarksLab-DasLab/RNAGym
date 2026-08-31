@@ -1,2 +1,6 @@
-# Generated alignments
+# Local benchmark data
+/assays/
+/merged/
+/model_predictions/
 /msa/
+/reports/

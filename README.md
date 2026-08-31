@@ -23,7 +23,7 @@ RNAGym is under active development.  Please refer to our [releases](https://gith
 
 ### Fitness prediction
 
-We have currently implemented the following baselines (see `./fitness`):
+We have currently implemented the following baselines (see `./rnagym/fitness`):
 
 Model name | Model type | Reference
 --- | --- | --- |
@@ -75,13 +75,19 @@ conda env create -f rnagym_env.yml
 conda activate rnagym
 python -m pip install -e .
 ```
-For the fitness prediction task, we recommend the following folder structure:
+Fitness code is installed with `rnagym`. Downloaded and generated tables stay
+under the repository's data directory:
 ```
-fitness/
-├── processed_DMS_files/
+rnagym/fitness/          # Scoring and evaluation package
+data/fitness/
+├── assays/
 ├── model_predictions/
-└── model_checkpoints/
+├── merged/
+└── reports/
 ```
+
+The fitness scripts resolve these paths from the repository and do not require
+working-directory-specific path edits. See the [fitness benchmark guide][2].
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
 ```
@@ -165,3 +171,4 @@ This project is available under the MIT license found in the LICENSE file in thi
 [rnagym]: https://rnagym.org/
 [0]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
 [1]: https://github.com/MarksLab-DasLab/RNAGym/tree/main/rnagym/s3d
+[2]: rnagym/fitness/README.md
