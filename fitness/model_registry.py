@@ -8,7 +8,9 @@ ALL_MODELS = (
     "evo2_20b",
     "evo2_40b",
     "GenSLM",
-    "NT",
+    "ntv3_8m",
+    "ntv3_100m",
+    "ntv3_650m",
     "rinalmo",
     "RNAErnie",
     "RNA-FM",
@@ -35,7 +37,18 @@ SCORE_COLS = {
     "evo2_20b": "evo2_20b_score",
     "evo2_40b": "evo2_40b_score",
     "GenSLM": "logit_scores",
-    "NT": "kmer_pseudo_LL",
+    "ntv3_8m": {
+        "folder": "ntv3_8m_4fill",
+        "column": "ntv3_score_wt_fill",
+    },
+    "ntv3_100m": {
+        "folder": "ntv3_100m_4fill",
+        "column": "ntv3_score_wt_fill",
+    },
+    "ntv3_650m": {
+        "folder": "ntv3_650m_4fill",
+        "column": "ntv3_score_wt_fill",
+    },
     "RNA-FM": {"folder": "rna_fm_4fill", "column": "RNA_FM_scores_wt_fill"},
     "rinalmo": {"folder": "rinalmo_4fill", "column": "logit_scores_wt_fill"},
     "RNAErnie": "Mutation_Scores",
@@ -65,6 +78,9 @@ SCORE_COLS = {
 }
 
 FOUR_FILL_SPECS = {
+    "ntv3_8m": ("ntv3_8m_4fill", "ntv3_score"),
+    "ntv3_100m": ("ntv3_100m_4fill", "ntv3_score"),
+    "ntv3_650m": ("ntv3_650m_4fill", "ntv3_score"),
     "rna_fm": ("rna_fm_4fill", "RNA_FM_scores"),
     "rinalmo": ("rinalmo_4fill", "logit_scores"),
     "rnagenesis": ("rnagenesis_4fill", "rnagenesis_score"),

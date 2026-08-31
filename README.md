@@ -33,7 +33,7 @@ Evo 2 | Genomic Language Model | Brixi et al. "Genome modeling and design across
 RNAErnie | Genomic Language Model | Wang et al. "Multi-purpose RNA language modelling with motif-aware pretraining and type-guided fine-tuning". Nature Machine Intelligence, 2024.
 RiNALMo | RNA Language Model | Penić et al. "RiNALMo: General-Purpose RNA Language Models Can Generalize Well on Structure Prediction Tasks". arXiv, 2024.
 RNA-FM | RNA Language Model | Chen et al. "Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions" arXiv, 2022. 
-Nucleotide Transformer | Genomic Language Model | Dalla-Torre et al. "The Nucleotide Transformer: Building and Evaluating Robust Foundation Models for Human Genomics". Nature Methods, 2024.
+Nucleotide Transformer v3 | Genomic Language Model | Boshar et al. "A foundational model for joint sequence-function multi-species modeling at scale for long-range genomic prediction". bioRxiv, 2025.
 GenSLM | Genomic Language Model | Zvyagin et al. "GenSLMs: Genome-scale language models reveal SARS-CoV-2 evolutionary dynamics". The International Journal of High Performance Computing Applications, 2023.
 Orthrus | RNA Language Model | Fradkin et al. "Orthrus: Towards Evolutionary and Functional RNA Foundation Models". bioRxiv, 2024.
 

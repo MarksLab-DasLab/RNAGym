@@ -23,7 +23,9 @@ from fitness.baselines.masked_lm import (
     runner,
     window_contexts,
 )
+from fitness.baselines.masked_lm.engine import pad_contexts
 from fitness.baselines.masked_lm.strategies import validate_table
+from fitness.baselines.Nucleotide_Transformer.compute_fitness import NTv3Adapter
 from fitness.merge_scoring_files import combine_csv_data
 from fitness.model_registry import ALL_MODELS, SCORE_COLS, resolve_source
 from fitness.performance_fitness import get_performance_dataset
@@ -106,6 +108,15 @@ class LimitedFixtureAdapter(FixtureAdapter):
     """Fixture adapter with a deliberately small position limit."""
 
     max_tokens = 20
+
+
+class PaddedFixtureAdapter(FixtureAdapter):
+    """Fixture adapter that requires 128-position contexts."""
+
+    context_pad_char = "N"
+
+    def context_length_for(self, length):
+        return 128
 
 
 def run_cli(monkeypatch, command):
@@ -294,6 +305,32 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
             mutant_probs[mutant_id] - wild_probs[wild_id],
         ]
     assert formula_scores == pytest.approx(expected, abs=1e-6)
+
+    padded_table = build_tasks(
+        [variant["mutant"]],
+        [variant["sequence"]],
+        wild_type,
+        PaddedFixtureAdapter.bases,
+        ("wt_fill",),
+        verbose=False,
+    )
+    positions = padded_table.pos.copy()
+    pad_contexts(padded_table, PaddedFixtureAdapter())
+    assert {len(context) for context in padded_table.contexts} == {128}
+    assert np.array_equal(padded_table.pos, positions)
+    assert all(
+        context.endswith("N" * (128 - len(wild_type)))
+        for context in padded_table.contexts
+    )
+
+    ntv3 = NTv3Adapter()
+    ntv3.num_downsamples = 7
+    assert [ntv3.context_length_for(n) for n in (45, 128, 129, 425)] == [
+        128,
+        128,
+        256,
+        512,
+    ]
 
     nan_table = build_tasks(
         [None, variant["mutant"]],

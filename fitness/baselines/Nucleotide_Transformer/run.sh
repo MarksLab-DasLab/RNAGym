@@ -1,18 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-export reference_sheet="reference_sheet.csv"
-export output_scores_dir="path/to/output/scores/dir"
-export dms_data_dir="path/to/dms/data/dir"
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
-# https://huggingface.co/InstaDeepAI/nucleotide-transformer-2.5b-multi-species
-export model_location="InstaDeepAI/nucleotide-transformer-2.5b-multi-species"
+ref_sheet="$script_dir/../../reference_sheet_final.csv"
+dms_dir_path="path/to/dms/data/dir"
+output_dir_path="path/to/output/scores/dir"
+model_name="InstaDeepAI/NTv3_650M_pre"
+row_id=${SLURM_ARRAY_TASK_ID:-0}
 
-# Get the current index from the array (0-31)
-DMS_index=0
-
-python compute_fitness.py \
-  --reference_sheet "$reference_sheet" \
-  --task_id "$DMS_index" \
-  --model_location "$model_location" \
-  --dms_directory "$dms_data_dir" \
-  --output_directory "$output_scores_dir"
+python "$script_dir/compute_fitness.py" \
+	--row_id "$row_id" \
+	--ref_sheet "$ref_sheet" \
+	--dms_dir_path "$dms_dir_path" \
+	--output_dir_path "$output_dir_path" \
+	--model_name "$model_name"

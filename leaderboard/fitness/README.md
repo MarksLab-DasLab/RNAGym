@@ -25,12 +25,14 @@ Two changes from before:
 | 10 | AIDO.RNA (300M) | -0.0256 | 0.4551 | 0.0372 | 0.1556 |
 | 11 | AIDO.RNA (25M) | -0.0299 | 0.4569 | 0.0348 | 0.1540 |
 | 12 | Evo 1.5 | 0.0278 | 0.3850 | 0.0007 | 0.1378 |
-| 13 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
-| 14 | Nucleotide Transformer | 0.1329 | 0.3166 | -0.0886 | 0.1203 |
-| 15 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
-| 16 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
-| 17 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
-| 18 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
+| 13 | Nucleotide Transformer v3 (8M) | -0.0111 | 0.3053 | 0.0988 | 0.1310 |
+| 14 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
+| 15 | Nucleotide Transformer v3 (650M) | -0.0240 | 0.3518 | 0.0436 | 0.1238 |
+| 16 | Nucleotide Transformer v3 (100M) | -0.0174 | 0.2544 | 0.1001 | 0.1124 |
+| 17 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
+| 18 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
+| 19 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
+| 20 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
 
 The top four models span 0.0093. With only 31 assays, this difference should not be treated as a
 resolved ordering. Evo 2 1B is a base-pretrained 8k-context checkpoint, while the 7B, 20B and 40B
@@ -53,6 +55,9 @@ positions. It is a separate zero-shot method, not a masked-marginal score. Orthr
 [MLM variant-scoring interface][1].
 Its optional CDS and splice channels stay zero because the DMS assays do not provide those
 annotations.
+
+NTv3 requires sequence lengths divisible by 128. Following the [upstream guidance][5], its inputs
+are right-padded with `N` to the next valid length.
 
 ## Scoring convention
 
@@ -149,18 +154,19 @@ a few hundredths as unresolved rather than as an ordering.
 
 Scoring scripts, paths relative to the repository root:
 - Evo 2: `fitness/baselines/Evo/score_evo2_single_dms.py` and `score_evo2.sh`
+- Nucleotide Transformer v3: `fitness/baselines/Nucleotide_Transformer/compute_fitness.py` and `run.sh`
 - Orthrus: `fitness/baselines/Orthrus/score_orthrus_single_dms.py` and `score_orthrus.sh`
 - AIDO.RNA: `fitness/baselines/AIDO_RNA/score_aido_rna_single_dms.py` and `score_aido_rna.sh`
 - RNAGenesis: `fitness/baselines/RNAGenesis/score_rnagenesis_single_dms.py` and `score_rnagenesis.sh`
 - RNA-FM: `fitness/baselines/RNA_FM/score_rna_fm_single_dms.py` and `score_rna_fm.sh`
 - RiNALMo: `fitness/baselines/RiNALMo/score_rinalmo_single_dms.py` and `score_rinalmo.sh`
 
-The five masked model adapters share one scoring engine, `fitness/baselines/masked_lm`, which implements the
+The six masked model adapters share one scoring engine, `fitness/baselines/masked_lm`, which implements the
 four fill strategies, the context deduplication and the batching. Each model's script is a thin
 adapter supplying its alphabet, tokenization and forward pass. `tests/test_fitness.py` covers the
 checkpoint-free scoring, merge and analysis workflow on fixtures from real assays.
 
-All are registered in `fitness/merge_scoring_files.py` and `fitness/performance_fitness.py`.
+All are registered in `fitness/model_registry.py`.
 
 Reproduce the aggregate with `performance_fitness.py --type ncRNA`, whose Spearman is now signed.
 It previously reported the absolute value, which credited a model whose scores anti-correlate with
@@ -174,11 +180,11 @@ prediction files.
 
 Scores computed in bfloat16 depend on the GPU: the same code and checkpoint on an L40S and an H100
 differ by up to 0.2 in score and about 0.001 in per-assay Spearman. Every prediction file is written
-with a manifest recording the strategies, alphabet, model arguments and hardware. All numbers on
-this page were produced on H100s.
+with a manifest recording the strategies, alphabet, model arguments and hardware.
 
 [0]: leaderboard_signed_3ncRNA.csv
 [1]: https://huggingface.co/antichronology/orthrus-mlm-6-track/blob/5f0dc87d51065035fc28e71972c69f9c84f4deae/orthrus_hf.py#L290-L325
 [2]: https://github.com/facebookresearch/esm/blob/2b369911bb5b4b0dda914521b9475cad1656b2ac/examples/variant-prediction/predict.py#L186-L225
 [3]: https://github.com/OATML-Markslab/ProteinGym/blob/144fe22b07dfaeec2b366f2346203a9838a55b4c/proteingym/baselines/esm/compute_fitness.py#L486-L514
 [4]: mRNA/leaderboard_signed_mRNA.csv
+[5]: https://github.com/instadeepai/nucleotide-transformer/blob/2dc37b86e16a6970fbc731751f7719d9f676f7f9/docs/nucleotide_transformer_v3.md#L255-L260

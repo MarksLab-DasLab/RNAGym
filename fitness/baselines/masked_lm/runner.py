@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from .engine import accumulate_scores, window_contexts
+from .engine import accumulate_scores, pad_contexts, window_contexts
 from .strategies import STRATEGIES, build_tasks, normalize_strategy, recover_wild_type
 
 
@@ -240,6 +240,8 @@ def write_manifest(path, dms_id, adapter, args, strategies, table, wild_type):
         },
         "alphabet": adapter.bases,
         "wild_type_length": len(wild_type),
+        "context_length": len(table.contexts[0]) if table.contexts else None,
+        "context_pad_char": adapter.context_pad_char,
         "contexts": len(table.contexts),
         "terms": table.n_terms(),
         "scorable_variants": int(table.scorable.sum()),
@@ -334,6 +336,7 @@ def main(adapter):
         adapter.load(args)
         adapter.check_alphabet()
 
+        pad_contexts(table, adapter)
         print("Running inference...")
         scores = accumulate_scores(
             adapter,

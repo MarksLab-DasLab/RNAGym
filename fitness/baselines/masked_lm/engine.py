@@ -53,6 +53,34 @@ def window_contexts(table, budget: int) -> None:
     validate_table(table)
 
 
+def pad_contexts(table, adapter) -> None:
+    """Pad fixed-length contexts to the adapter's required length."""
+    if adapter.context_pad_char is None:
+        return
+    lengths = {len(c) for c in table.contexts}
+    if len(lengths) != 1:
+        raise ValueError(
+            f"{adapter.name} pads contexts to a fixed length, so every context "
+            f"must start the same length. Found {sorted(lengths)}"
+        )
+    length = lengths.pop()
+    target = adapter.context_length_for(length)
+    if target < length:
+        raise ValueError(
+            f"{adapter.name} asked to pad a {length} nt context down to {target}"
+        )
+    if target == length:
+        return
+    padding = target - length
+    filler = adapter.context_pad_char
+    print(
+        f"Padding contexts from {length} to {target} positions with "
+        f"{padding} trailing {filler}"
+    )
+    table.contexts = [context + filler * padding for context in table.contexts]
+    validate_table(table)
+
+
 def accumulate_scores(
     adapter,
     table,
