@@ -9,16 +9,19 @@ from pathlib import Path
 import pandas as pd
 
 if __package__:
-    from .model_registry import ALL_MODELS, SCORE_COLS, resolve_source
+    from .model_registry import (
+        ALL_MODELS,
+        ASSAY_GROUPS,
+        SCORE_COLS,
+        resolve_source,
+    )
 else:
-    from model_registry import ALL_MODELS, SCORE_COLS, resolve_source
+    from model_registry import ALL_MODELS, ASSAY_GROUPS, SCORE_COLS, resolve_source
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-NCRNA_TYPES = {"Aptamer", "Ribozyme", "tRNA"}
 
 
 def get_mutation_column(df):
@@ -42,21 +45,22 @@ def combine_csv_data(
     score_cols_dict,
     allow_incomplete=False,
     assay_types=None,
+    assay_group="all",
 ):
     """
     Merge each assay CSV with model prediction scores via inner join on mutations.
 
-    General models must cover every processed assay. Four-fill masked models
-    must cover every processed ncRNA assay when ``assay_types`` is supplied.
+    Every requested model must cover every assay in the selected group.
     The coverage check runs before any output is written, and all merged files
     are staged before they replace prior outputs.
     """
     if len(model_list) != len(set(model_list)):
         raise ValueError(f"Model list contains duplicates: {model_list}")
     processed_files = sorted(Path(processed_folder).glob("*.csv"))
-    processed_names = {path.name for path in processed_files}
     if not processed_files:
         raise FileNotFoundError(f"No assay CSVs found under {processed_folder}")
+    if assay_group != "all" and assay_group not in ASSAY_GROUPS:
+        raise ValueError(f"Unknown assay group: {assay_group!r}")
     if assay_types is not None:
         unknown = sorted(
             path.stem for path in processed_files if path.stem not in assay_types
@@ -65,17 +69,22 @@ def combine_csv_data(
             raise ValueError(
                 f"Processed assays are absent from the reference sheet: {unknown[:5]}"
             )
+    if assay_group != "all":
+        if assay_types is None:
+            raise ValueError("assay_types is required when selecting an assay group")
+        selected_types = ASSAY_GROUPS[assay_group]
+        processed_files = [
+            path for path in processed_files if assay_types[path.stem] in selected_types
+        ]
+        if not processed_files:
+            raise FileNotFoundError(
+                f"No {assay_group} assay CSVs found under {processed_folder}"
+            )
+    processed_names = {path.name for path in processed_files}
 
     expected = {}
     for model_name in model_list:
-        folder, _ = resolve_source(score_cols_dict, model_name)
-        if folder.endswith("_4fill") and assay_types is not None:
-            expected[model_name] = {
-                path.name
-                for path in processed_files
-                if assay_types[path.stem] in NCRNA_TYPES
-            }
-        elif model_name == "EVmutation":
+        if model_name == "EVmutation":
             expected[model_name] = set()
         else:
             expected[model_name] = processed_names
@@ -202,7 +211,7 @@ def main():
         "--reference_file",
         type=str,
         default=str(Path(__file__).with_name("reference_sheet_final.csv")),
-        help="Reference sheet used to identify the ncRNA assays",
+        help="Reference sheet used to identify the assays",
     )
     parser.add_argument(
         "--models",
@@ -211,6 +220,12 @@ def main():
         help="Model entries to merge (default: every entry in ALL_MODELS). Use "
         "this to merge a subset, such as one masked model's four fill "
         "strategies: rna_fm_wt_fill rna_fm_mask_fill rna_fm_mut_fill rna_fm_match_fill",
+    )
+    parser.add_argument(
+        "--type",
+        default="ncRNA",
+        choices=["all", *ASSAY_GROUPS],
+        help="Assay group to merge (default: ncRNA)",
     )
     parser.add_argument(
         "--allow_incomplete",
@@ -256,6 +271,7 @@ def main():
         SCORE_COLS,
         allow_incomplete=args.allow_incomplete,
         assay_types=assay_types,
+        assay_group=args.type,
     )
 
 

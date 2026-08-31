@@ -1,4 +1,4 @@
-"""Prediction folders and score columns used by the fitness workflow."""
+"""Assay groups, prediction folders and score columns for fitness workflows."""
 
 ALL_MODELS = (
     "evo1",
@@ -20,6 +20,12 @@ ALL_MODELS = (
     "aido_rna_300m",
     "aido_rna_650m",
 )
+
+ASSAY_GROUPS = {
+    "ncRNA": ("Ribozyme", "tRNA", "Aptamer"),
+    "non-coding": ("Ribozyme", "tRNA", "Aptamer", "mRNA-splicing"),
+    "coding": ("mRNA-coding",),
+}
 
 SCORE_COLS = {
     "evo1": "evo_1_131k_base_score",

@@ -176,8 +176,16 @@ def score_assay(model, args: argparse.Namespace, dms_id: str, fp8: bool) -> floa
     """Score one assay, write its prediction table, and return Spearman rho."""
     data = load_dms_data(args.dms_dir_path, dms_id)
     raw_sequences = data["sequence"]
-    valid = raw_sequences.notna() & raw_sequences.astype(str).str.strip().ne("")
-    sequences = [preprocess_sequence(value) for value in raw_sequences[valid]]
+    invalid_sequences = raw_sequences.isna() | raw_sequences.astype(
+        "string"
+    ).str.strip().eq("")
+    if invalid_sequences.any():
+        count = int(invalid_sequences.sum())
+        rows = list(data.index[invalid_sequences][:5])
+        raise ValueError(
+            f"{dms_id} has {count} missing or empty sequences, including rows {rows}"
+        )
+    sequences = [preprocess_sequence(value) for value in raw_sequences]
     if not sequences:
         raise ValueError(f"{dms_id} has no nonempty sequences")
 
@@ -211,15 +219,18 @@ def score_assay(model, args: argparse.Namespace, dms_id: str, fp8: bool) -> floa
     if not np.isfinite(scores).all():
         raise FloatingPointError(f"{dms_id} returned nonfinite model scores")
 
+    assay_scores = pd.to_numeric(data["DMS_score"], errors="coerce").to_numpy(
+        dtype=float
+    )
+    if not np.isfinite(assay_scores).all():
+        raise ValueError(f"{dms_id} contains missing or nonfinite DMS scores")
+
     score_column = f"{args.model_name}_score"
-    data[score_column] = np.nan
-    data.loc[valid, score_column] = scores
-    pairs = data[["DMS_score", score_column]].replace([np.inf, -np.inf], np.nan)
-    pairs = pairs.dropna()
-    if len(pairs) < 2:
+    data[score_column] = scores
+    if len(data) < 2:
         correlation = pvalue = float("nan")
     else:
-        result = spearmanr(pairs["DMS_score"], pairs[score_column])
+        result = spearmanr(assay_scores, scores)
         correlation, pvalue = result.statistic, result.pvalue
 
     output_file = args.output_dir_path / f"{dms_id}.csv"
