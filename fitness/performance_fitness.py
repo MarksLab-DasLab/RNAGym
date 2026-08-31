@@ -12,18 +12,13 @@ from scipy import stats
 from sklearn.metrics import matthews_corrcoef, roc_auc_score
 
 if __package__:
-    from .model_registry import ALL_MODELS
+    from .model_registry import ALL_MODELS, ASSAY_GROUPS
 else:
-    from model_registry import ALL_MODELS
+    from model_registry import ALL_MODELS, ASSAY_GROUPS
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-ASSAY_GROUPS = {
-    "ncRNA": ("Ribozyme", "tRNA", "Aptamer"),
-    "non-coding": ("Ribozyme", "tRNA", "Aptamer", "mRNA-splicing"),
-    "coding": ("mRNA-coding",),
-}
 DEPTHS = ("single", "multiple")
 METRICS = ("Spearman", "AUC", "MCC")
 RNA_TYPES = ("mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme")
@@ -49,18 +44,17 @@ def calculate_metrics(
 def get_performance_dataset(
     data: pd.DataFrame, assay_column: str, score_columns: list[str]
 ) -> dict[str, dict[str, float]]:
-    """Calculate each model's metrics from its finite assay-score pairs."""
+    """Calculate each model's metrics from complete finite values."""
     data = data.dropna(subset=["mutant"])
     missing_metrics = dict.fromkeys(METRICS, np.nan)
     results = {}
 
     for score_column in score_columns:
-        if assay_column not in data or score_column not in data:
-            results[score_column] = missing_metrics.copy()
-            continue
-
-        pairs = data[[assay_column, score_column]].replace([np.inf, -np.inf], np.nan)
-        pairs = pairs.dropna()
+        pairs = data[[assay_column, score_column]].apply(pd.to_numeric, errors="coerce")
+        invalid = (~np.isfinite(pairs)).sum()
+        invalid = invalid[invalid > 0].astype(int).to_dict()
+        if invalid:
+            raise ValueError(f"Missing or nonfinite metric values: {invalid}")
         if pairs.empty:
             results[score_column] = missing_metrics.copy()
             continue
@@ -97,28 +91,6 @@ def _metric_rows(
             row["Depth"] = depth
         rows.append(row | metrics)
     return rows
-
-
-def filter_available_models(
-    models: list[str], reference: pd.DataFrame, combined_dir: str | Path
-) -> list[str]:
-    """Drop models that have no score column in any selected assay."""
-    available = set()
-    combined_dir = Path(combined_dir)
-
-    for dms_id in reference["DMS_ID"]:
-        assay_path = combined_dir / f"{dms_id}.csv"
-        if not assay_path.exists():
-            continue
-        columns = pd.read_csv(assay_path, nrows=0).columns
-        available.update(model for model in models if f"{model}_score" in columns)
-        if len(available) == len(models):
-            break
-
-    missing = [model for model in models if model not in available]
-    if missing:
-        logger.warning("No merged scores found for %s", ", ".join(missing))
-    return [model for model in models if model in available]
 
 
 def filter_msa_assays(
@@ -159,10 +131,12 @@ def load_assay_metrics(
 
     for assay_info in reference.itertuples(index=False):
         assay_path = combined_dir / f"{assay_info.DMS_ID}.csv"
-        if assay_path.exists():
-            assay = pd.read_csv(assay_path)
-        else:
-            assay = pd.DataFrame(columns=["mutant", "DMS_score", *score_columns])
+        if not assay_path.is_file():
+            raise FileNotFoundError(f"Selected assay is missing: {assay_path}")
+        assay = pd.read_csv(assay_path)
+        missing_columns = [column for column in score_columns if column not in assay]
+        if missing_columns:
+            raise KeyError(f"{assay_path} is missing score columns: {missing_columns}")
 
         if "Depth" not in assay:
             _add_depth(assay)
@@ -177,22 +151,17 @@ def load_assay_metrics(
             _metric_rows(assay_info.DMS_ID, assay_info.RNA_TYPE, filtered_results)
         )
 
-        overall_results = (
-            get_performance_dataset(assay, "DMS_score", score_columns)
-            if msa_only
-            else filtered_results
-        )
         depth_rows.extend(
             _metric_rows(
                 assay_info.DMS_ID,
                 assay_info.RNA_TYPE,
-                overall_results,
+                filtered_results,
                 "overall",
             )
         )
         for depth in DEPTHS:
             depth_results = get_performance_dataset(
-                assay[assay["Depth"] == depth], "DMS_score", score_columns
+                filtered[filtered["Depth"] == depth], "DMS_score", score_columns
             )
             depth_rows.extend(
                 _metric_rows(
@@ -343,15 +312,14 @@ def select_assays(reference: pd.DataFrame, assay_type: str) -> pd.DataFrame:
 def main(args) -> None:
     """Run the fitness performance workflow."""
     reference = select_assays(pd.read_csv(args.reference_file), args.type)
+    if reference.empty:
+        raise ValueError(f"No assays found for type {args.type!r}")
     if args.msa_only:
         reference = filter_msa_assays(reference, args.combined_dir)
 
     models = list(args.models or ALL_MODELS)
     if args.msa_only and "EVmutation" not in models:
         models.append("EVmutation")
-    models = filter_available_models(models, reference, args.combined_dir)
-    if not models:
-        raise ValueError("No model score columns found in the selected assays")
 
     score_columns = [f"{model}_score" for model in models]
     rna_types = [
@@ -414,9 +382,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--type",
-        default="all",
+        default="ncRNA",
         choices=["all", *ASSAY_GROUPS],
-        help="Assay group (non-coding includes mRNA-splicing, while ncRNA does not)",
+        help="Assay group. The default is ncRNA. Non-coding includes mRNA-splicing",
     )
     arguments = parser.parse_args()
     if arguments.performance_dir is None:

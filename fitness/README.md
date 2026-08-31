@@ -83,6 +83,10 @@ pixi run python merge_scoring_files.py \
     --output_folder merged
 ```
 
+The merge defaults to the 31 ncRNA leaderboard assays. Pass `--type coding`,
+`--type non-coding` or `--type all` to select another assay group. As of
+`v0.2`, not all models are tested on coding or splice variants.
+
 ### 4. Evaluate model performance
 
 ```bash
@@ -97,7 +101,7 @@ Key flags:
 
 | Flag | Description |
 |------|-------------|
-| `--type {all,ncRNA,non-coding,coding}` | Select an assay group. `ncRNA` is the 31-assay leaderboard. `non-coding` also includes mRNA-splicing |
+| `--type {all,ncRNA,non-coding,coding}` | Select an assay group. The default is the 31-assay ncRNA leaderboard. `non-coding` also includes mRNA-splicing |
 | `--msa_only` | Restrict to datapoints where EVmutation has scores |
 | `--models MODEL ...` | Evaluate selected merged model columns instead of the defaults |
 
@@ -114,9 +118,9 @@ pixi run fmt
 
 ## Models
 
-The default merge registry includes Evo 1, Evo 1.5, Evo 2 (7B and 40B), GenSLM,
-Nucleotide Transformer, RNA-ERNIE, RNA-FM, RiNALMo, RNAGenesis, Orthrus and the
-five released AIDO.RNA checkpoints. EVmutation is merged separately with
-`--assays_with_MSAs_only` because it only covers assays with an MSA.
+The default merge registry includes Evo 1, Evo 1.5, Evo 2 (1B base, 7B, 20B and
+40B), GenSLM, Nucleotide Transformer, RNA-ERNIE, RNA-FM, RiNALMo, RNAGenesis,
+Orthrus and the five released AIDO.RNA checkpoints. EVmutation is merged
+separately with `--assays_with_MSAs_only` because it only covers assays with an MSA.
 
 [0]: https://marks.hms.harvard.edu/rnagym/fitness_prediction

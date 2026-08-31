@@ -6,12 +6,14 @@ import shlex
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 from fitness import analyze_fill_strategies
+from fitness.baselines.Evo import score_evo2_single_dms as evo2
 from fitness.baselines.masked_lm import (
     MASK_CHAR,
     MaskedLMAdapter,
@@ -24,7 +26,7 @@ from fitness.baselines.masked_lm import (
 from fitness.baselines.masked_lm.strategies import validate_table
 from fitness.merge_scoring_files import combine_csv_data
 from fitness.model_registry import ALL_MODELS, SCORE_COLS, resolve_source
-from fitness.performance_fitness import calculate_metrics, get_performance_dataset
+from fitness.performance_fitness import get_performance_dataset
 
 REPOSITORY = Path(__file__).parent.parent
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "fitness"
@@ -166,7 +168,7 @@ def test_fitness_workflow(tmp_path, monkeypatch):
         monkeypatch,
         f"fitness/performance_fitness.py --reference_file {REFERENCE_FILE} "
         f"--combined_dir {merged_dir} --performance_dir {performance_dir} "
-        f"--type ncRNA --models {models}",
+        f"--models {models}",
     )
 
     for assay_name in ASSAY_NAMES:
@@ -372,8 +374,8 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
     assert not list(invalid_output_dir.glob("*.manifest.json"))
 
 
-def test_metrics_omit_nonfinite_pairs():
-    """Treat infinities like missing predictions instead of losing an assay."""
+def test_metrics_reject_nonfinite_predictions():
+    """Reject incomplete predictions instead of changing the evaluation set."""
     frame = pd.DataFrame(
         {
             "mutant": ["A1C"] * 6,
@@ -381,13 +383,95 @@ def test_metrics_omit_nonfinite_pairs():
             "model_score": [0.0, 1.0, np.inf, 3.0, np.nan, 5.0],
         }
     )
-    observed = get_performance_dataset(frame, "DMS_score", ["model_score"])[
-        "model_score"
-    ]
-    expected = calculate_metrics(
-        np.array([0.0, 1.0, 3.0, 5.0]), np.array([0.0, 1.0, 3.0, 5.0])
+    with pytest.raises(ValueError, match="model_score"):
+        get_performance_dataset(frame, "DMS_score", ["model_score"])
+    with pytest.raises(KeyError, match="missing_score"):
+        get_performance_dataset(frame, "DMS_score", ["missing_score"])
+
+
+# TODO(MCA): Clean up model tests
+def test_evo2_workflow_and_guards(tmp_path):
+    """Score complete assays in one model load and reject failed inference."""
+
+    class FixtureEvo2:
+        calls = []
+        fp8 = True
+        loads = 0
+        nonfinite = False
+
+        def __init__(self, model_name, local_path=None):
+            type(self).loads += 1
+            self.model = SimpleNamespace(
+                config={"use_fp8_input_projections": type(self).fp8}
+            )
+
+        def score_sequences(self, sequences, **kwargs):
+            type(self).calls.append((sequences[0], kwargs))
+            scores = np.array(
+                [sequence.count("T") / len(sequence) for sequence in sequences]
+            )
+            if type(self).nonfinite:
+                scores[0] = np.nan
+            return scores
+
+    assay_dir = tmp_path / "assays"
+    shutil.copytree(ASSAY_DIR, assay_dir)
+    domingo_file = assay_dir / "Domingo_2018_tRNA.csv"
+    output_dir = tmp_path / "evo2"
+    command = (
+        f"--row_ids 0-2 --ref_sheet {REFERENCE_FILE} "
+        f"--dms_dir_path {assay_dir} --output_dir_path {output_dir} "
+        "--model_name evo2_1b_base --max_tokens_per_batch 4096 --require_fp8"
     )
-    assert observed == pytest.approx(expected)
+    args = evo2.parse_args(shlex.split(command))
+
+    evo2.run(args, FixtureEvo2)
+    assert FixtureEvo2.loads == 1
+    assert len(FixtureEvo2.calls) == 3
+    for sequence, options in FixtureEvo2.calls:
+        assert options == {
+            "batch_size": max(
+                1, 4096 // evo2.effective_length(len(sequence), False, True)
+            ),
+            "prepend_bos": False,
+            "reduce_method": "mean",
+            "average_reverse_complement": True,
+        }
+    for assay_file in sorted(assay_dir.glob("*.csv")):
+        output_file = output_dir / assay_file.name
+        observed = pd.read_csv(output_file)
+        source = pd.read_csv(assay_file)
+        score_column = "evo2_1b_base_score"
+        expected = source["sequence"].map(
+            lambda sequence: (
+                sequence.upper().replace("U", "T").count("T") / len(sequence)
+            )
+        )
+        np.testing.assert_allclose(observed[score_column], expected)
+        assert output_file.stat().st_mode & 0o777 == 0o644
+    assert not list(output_dir.glob("*.tmp"))
+
+    evo2.run(args, FixtureEvo2)
+    assert FixtureEvo2.loads == 1
+    args.row_id, args.row_ids = 0, None
+    args.output_dir_path = tmp_path / "invalid_evo2"
+    FixtureEvo2.fp8 = False
+    with pytest.raises(RuntimeError, match="does not use FP8"):
+        evo2.run(args, FixtureEvo2)
+
+    FixtureEvo2.fp8 = True
+    FixtureEvo2.nonfinite = True
+    with pytest.raises(FloatingPointError, match="nonfinite model scores"):
+        evo2.run(args, FixtureEvo2)
+    assert not list(args.output_dir_path.glob("*.csv"))
+
+    FixtureEvo2.nonfinite = False
+    domingo = pd.read_csv(domingo_file)
+    domingo.loc[0, "sequence"] = np.nan
+    domingo.to_csv(domingo_file, index=False)
+    args.row_id = 1
+    with pytest.raises(ValueError, match="missing or empty sequences"):
+        evo2.run(args, FixtureEvo2)
 
 
 def test_merge_rejects_incomplete_predictions(tmp_path):

@@ -1,11 +1,12 @@
-**/__pycache__/
-slurm
+# Root
+/.zed/
+/AGENTS.md
+/todo
+
+# Anywere
+__pycache__/
+slurm-*.out
 archives
 .vibe/
 .rg_jobs/
 
-# Fitness data (downloadable or generated)
-fitness/assays/
-fitness/model_predictions/
-fitness/merged/
-fitness/results_*/
