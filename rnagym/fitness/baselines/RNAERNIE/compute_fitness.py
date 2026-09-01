@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_checkpoint",
         type=Path,
-        default=Path(__file__).with_name("src"),
+        required=True,
         help="Path to the model checkpoint.",
     )
     parser.add_argument(

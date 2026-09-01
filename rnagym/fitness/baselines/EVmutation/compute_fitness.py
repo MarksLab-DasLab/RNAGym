@@ -1,164 +1,49 @@
-#!/usr/bin/env python3
-"""
-Score non-coding RNA assays with EVmutation.
-"""
+"""Score fitness assays with EVmutation and their released Riboseek MSAs."""
 
 import argparse
+import os
 import re
 import shlex
-import shutil
-import string
 import subprocess
-import sys
+import tempfile
 from pathlib import Path
 
-import pandas as pd
+import numpy as np
+import polars as pl
 import yaml
 from evcouplings.couplings import CouplingsModel
-from evcouplings.mutate import predict_mutation_table
-from rnagym.config import Config2D, ConfigFitness
+from evcouplings.mutate import extract_mutations
+from rnagym.config import ConfigFitness
+
+MUTATION_PATTERN = re.compile(r"^[ACGU]\d+[ACGU](?:,[ACGU]\d+[ACGU])*$")
+SCORE_COLUMN = "prediction_epistatic"
 
 
-def run_command(command_str, output_handle=None):
-    """Run shell command quietly using shlex."""
-    try:
-        cmd_parts = shlex.split(command_str)
-        return subprocess.run(
-            cmd_parts,
-            check=True,
-            capture_output=output_handle is None,
-            stdout=output_handle,
-            stderr=subprocess.PIPE if output_handle is not None else None,
-            text=True,
-        )
-    except subprocess.CalledProcessError as error:
-        print(f"[ERROR] Command failed: {command_str}")
-        print(f"{error.stderr.decode() if error.stderr else ''}")
-        raise error
-
-
-def get_rfam_match(
-    sequence, name, database_path, temp_path, cpu_count=1, threshold=0.2
-):
-    """
-    Scan Rfam and return the accession with the largest alignment file with
-    E-value less than the provided threshold.
-    """
-    if not re.search(r"ribozyme|trna|aptamer", name, re.IGNORECASE):
-        return None
-
-    query_fasta = temp_path / "query.fa"
-    query_fasta.write_text(f">{name}\n{sequence}\n")
-    table_out = temp_path / "rfam.tbl"
-
-    try:
-        run_command(
-            f"cmscan --rfam --nohmmonly --cpu {cpu_count} --tblout {table_out} "
-            f"{database_path}/Rfam.cm {query_fasta}"
-        )
-    except subprocess.CalledProcessError:
-        return None
-
-    if not table_out.exists():
-        return None
-
-    candidates = set()
-    with open(table_out) as file_handle:
-        for line in file_handle:
-            if not line.startswith("#"):
-                parts = line.split()
-                if len(parts) > 15:
-                    accession, e_value = parts[1], float(parts[15])
-                    if e_value <= threshold:
-                        candidates.add(parts[1])
-
-    # Select deepest alignment based on file size
-    best_accession = None
-    max_file_size = -1
-    for accession in candidates:
-        full_path = database_path / "alignments" / f"{accession}.sto"
-        current_size = full_path.stat().st_size
-        if current_size > max_file_size:
-            max_file_size = current_size
-            best_accession = accession
-
-    if best_accession is not None:
-        print(f"  > Selected {best_accession} ({max_file_size / 1024**2:.1f} MB)")
-    return best_accession
-
-
-def prepare_alignment(accession, sequence, name, database_path, temp_path):
-    """
-    Fetch CM, align query, and merge with reference (full/seed) into consensus A2M.
-    """
-    # Select Reference (Full vs Seed logic)
-    full_sto = database_path / "alignments" / f"{accession}.sto"
-
-    # Threshold: 300 MB
-    reference_file = (
-        full_sto
-        if full_sto.exists() and full_sto.stat().st_size <= 300 * 1024**2
-        else None
-    )
-
-    if not reference_file:
-        reference_file = temp_path / "ref_seed.sto"
-        with open(reference_file, "w") as file_handle:
-            run_command(
-                f"esl-afetch {database_path}/Rfam.seed {accession}",
-                output_handle=file_handle,
-            )
-
-    # Align Query
-    cm_file = temp_path / f"{accession}.cm"
-    with open(cm_file, "w") as file_handle:
-        run_command(
-            f"cmfetch {database_path}/Rfam.cm {accession}", output_handle=file_handle
-        )
-
-    query_sto = temp_path / "query.sto"
-    run_command(f"cmalign --notrunc -o {query_sto} {cm_file} {temp_path}/query.fa")
-
-    # Merge and filter (keeping uppercase and gaps, skipping insertions in
-    # lowercase)
-    trans_table = str.maketrans("", "", string.ascii_lowercase + ".")
-    combined_a2m = temp_path / "combined.a2m"
-
-    with open(combined_a2m, "w") as output_handle:
-        for source_file in [query_sto, reference_file]:
-            proc = run_command(
-                f"esl-reformat a2m {source_file}",
-            )
-
-            for line in proc.stdout.splitlines(keepends=True):
-                if line.startswith(">"):
-                    output_handle.write(line)
-                else:
-                    output_handle.write(line.strip().translate(trans_table) + "\n")
-
-    return combined_a2m
-
-
-def run_evcouplings(
-    job_name, aligned_a2m, dms_csv_path, sequence_id, temp_path, cpu_count
-):
-    """Configure, run pipeline, and score mutations."""
-    config = {
+def build_config(
+    name: str,
+    alignment_file: Path,
+    query_file: Path,
+    sequence_id: str,
+    work_dir: Path,
+    cpu_count: int,
+) -> dict:
+    """Build the EVcouplings existing-alignment pipeline configuration."""
+    return {
         "stages": ["align", "couplings"],
         "pipeline": "protein_monomer",
         "global": {
             "alphabet": "rna",
-            "prefix": str(temp_path / job_name),
+            "prefix": str(work_dir / name),
             "theta": 0.9,
             "cpu": cpu_count,
             "region": None,
             "sequence_id": sequence_id,
-            "sequence_file": str(temp_path / "query.fa"),
+            "sequence_file": str(query_file),
         },
         "align": {
             "alphabet": "rna",
             "protocol": "existing",
-            "input_alignment": str(aligned_a2m),
+            "input_alignment": str(alignment_file),
             "first_index": 1,
             "sequence_id": sequence_id,
             "seqid_filter": None,
@@ -206,66 +91,152 @@ def run_evcouplings(
         },
     }
 
-    config_path = temp_path / "config.yaml"
-    with open(config_path, "w") as file_handle:
-        yaml.dump(config, file_handle)
 
-    try:
-        run_command(f"evcouplings_runcfg {config_path}")
-
-        # Locate model file
-        model_files = list(temp_path.glob("**/*.model"))
-        if not model_files:
-            print(f"[ERROR] Model file not found in {temp_path}")
-            return None
-        model_path = model_files[0]
-
-        # Score
-        couplings_model = CouplingsModel(str(model_path))
-        dms_df = pd.read_csv(dms_csv_path)
-
-        # Clean and Filter
-        mutation_col = "mutant"
-        dms_df["mutant_clean"] = (
-            dms_df[mutation_col]
-            .astype(str)
-            .str.upper()
-            .str.replace("T", "U")
-            .str.replace(" ", "")
-        )
-
-        # Strict Regex
-        valid_mask = dms_df["mutant_clean"].str.match(
-            r"^([A-Z]\d+[A-Z])(,[A-Z]\d+[A-Z])*$"
-        )
-        valid_rows = dms_df[valid_mask]
-
-        if len(valid_rows) < len(dms_df) - 1:
-            raise ValueError("{dms_csv_path} contains invalid dms rows")
-
-        # Score and save in output_file
-        scoring_df = valid_rows.copy()
-        scoring_df["mutant"] = scoring_df["mutant_clean"]
-        predictions_df = predict_mutation_table(
-            couplings_model, scoring_df, "prediction_epistatic"
-        )
-        score_map = predictions_df.set_index("mutant")["prediction_epistatic"]
-        dms_df["prediction_epistatic"] = dms_df["mutant_clean"].map(score_map)
-        output_file = temp_path / f"{job_name}_prediction_epistatic.csv"
-        dms_df.drop(columns=["mutant_clean"]).to_csv(output_file, index=False)
-
-        return output_file
-
-    except Exception as error:
-        print(f"[ERROR] EVcouplings/Scoring failed: {error}")
-        return None
+def first_fasta_record(path: Path) -> tuple[str, str]:
+    """Read the identifier and sequence from the first FASTA record."""
+    identifier = None
+    sequence = []
+    with path.open() as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if identifier is not None:
+                    break
+                identifier = line[1:].split(maxsplit=1)[0]
+            elif identifier is None:
+                raise ValueError(f"{path} has sequence data before its first header")
+            else:
+                sequence.append(line)
+    if identifier is None or not sequence:
+        raise ValueError(f"{path} has no FASTA records")
+    return identifier, "".join(sequence)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Score RNA DMS assays using EVmutation"
+def normalize_sequence(sequence: str) -> str:
+    """Normalize an RNA sequence for reference and MSA consistency checks."""
+    return sequence.upper().replace("T", "U").replace("-", "").replace(".", "")
+
+
+def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, str]]:
+    """Parse one variant and verify its reference bases and positions."""
+    if mutant is None or not mutant.strip() or mutant.strip().lower() in {"wt", "wild"}:
+        return []
+    cleaned = mutant.upper().replace("T", "U").replace(" ", "")
+    if MUTATION_PATTERN.fullmatch(cleaned) is None:
+        raise ValueError(f"Invalid mutation string: {mutant!r}")
+    mutations = extract_mutations(cleaned)
+    positions = [position for position, _, _ in mutations]
+    if len(positions) != len(set(positions)):
+        raise ValueError(f"Mutation string repeats a position: {mutant!r}")
+    for position, source, _ in mutations:
+        if position < 1 or position > len(wild_type):
+            raise ValueError(
+                f"Mutation position {position} is outside a {len(wild_type)} nt construct"
+            )
+        if wild_type[position - 1] != source:
+            raise ValueError(
+                f"Mutation {mutant!r} expects {source} at position {position}, "
+                f"but the reference has {wild_type[position - 1]}"
+            )
+    return mutations
+
+
+def infer_model(config_file: Path, work_dir: Path) -> CouplingsModel:
+    """Run EVcouplings and load the inferred model.
+
+    EVcouplings may reject its downstream contact report when an alignment has
+    no significant couplings. Mutation scoring only requires the Potts model,
+    which PLMC has already saved at that point.
+    """
+    command = f"evcouplings_runcfg {shlex.quote(str(config_file))}"
+    process = subprocess.run(
+        shlex.split(command),
+        capture_output=True,
+        text=True,
     )
-    parser.add_argument("--rfam_dir", type=Path, default=Config2D.RFAM_DIR)
+    detail = process.stderr.strip() or process.stdout.strip()
+    expected_bailout = "No couplings identified" in detail
+    if process.returncode and not expected_bailout:
+        raise RuntimeError(f"EVcouplings exited {process.returncode}: {detail}")
+    model_files = list(work_dir.glob("**/*.model"))
+    if len(model_files) != 1:
+        raise RuntimeError(
+            f"EVcouplings exited {process.returncode} and produced "
+            f"{len(model_files)} models: {detail}"
+        )
+    return CouplingsModel(str(model_files[0]))
+
+
+def score_assay(
+    assay_file: Path,
+    alignment_file: Path,
+    query_file: Path,
+    wild_type: str,
+    name: str,
+    work_dir: Path,
+    cpu_count: int,
+) -> pl.DataFrame:
+    """Infer one Potts model and score every covered assay variant."""
+    sequence_id, aligned_query = first_fasta_record(alignment_file)
+    query_id, query_sequence = first_fasta_record(query_file)
+    if sequence_id != query_id:
+        raise ValueError(f"The Riboseek MSA and query identifiers differ for {name}")
+    aligned_query = normalize_sequence(aligned_query)
+    query_sequence = normalize_sequence(query_sequence)
+    if aligned_query != wild_type or query_sequence != wild_type:
+        raise ValueError(f"The Riboseek MSA query does not match {name}")
+
+    config = build_config(
+        name,
+        alignment_file.resolve(),
+        query_file.resolve(),
+        sequence_id,
+        work_dir,
+        cpu_count,
+    )
+    config_file = work_dir / "config.yaml"
+    config_file.write_text(yaml.safe_dump(config, sort_keys=False))
+    model = infer_model(config_file, work_dir)
+    covered_positions = set(model.index_list)
+
+    assay = pl.read_csv(assay_file)
+    required_columns = {"mutant", "sequence"}
+    missing_columns = sorted(required_columns - set(assay.columns))
+    if missing_columns:
+        raise ValueError(f"{assay_file} is missing columns: {missing_columns}")
+
+    scores = []
+    for row, (mutant, sequence) in enumerate(
+        assay.select("mutant", "sequence").iter_rows()
+    ):
+        mutations = parse_mutations(mutant, wild_type)
+        variant = list(wild_type)
+        for position, _, target in mutations:
+            variant[position - 1] = target
+        if sequence is None or normalize_sequence(sequence) != "".join(variant):
+            raise ValueError(f"{assay_file} row {row} sequence disagrees with mutant")
+        if any(position not in covered_positions for position, _, _ in mutations):
+            scores.append(float("nan"))
+            continue
+        score = float(model.delta_hamiltonian(mutations)[0])
+        if not np.isfinite(score):
+            raise FloatingPointError(
+                f"{assay_file} row {row} produced a nonfinite score"
+            )
+        scores.append(score)
+    return assay.with_columns(pl.Series(SCORE_COLUMN, scores))
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse EVmutation input and output locations."""
+    parser = argparse.ArgumentParser(
+        description="Score RNA fitness assays with EVmutation"
+    )
+    parser.add_argument(
+        "--msa_dir", type=Path, default=ConfigFitness.MSA_DIR / "by_assay"
+    )
     parser.add_argument("--ref_sheet", type=Path, default=ConfigFitness.REFERENCE_FILE)
     parser.add_argument("--dms_dir", type=Path, default=ConfigFitness.ASSAY_DIR)
     parser.add_argument(
@@ -275,63 +246,66 @@ def main():
         "--tmp_dir", type=Path, default=ConfigFitness.DATA_DIR / "tmp" / "evmutation"
     )
     parser.add_argument("--cpu", type=int, default=4)
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Score every reference-sheet assay that has a released Riboseek MSA."""
+    args = parse_args()
+    if args.cpu < 1:
+        raise ValueError("--cpu must be positive")
+    if not args.msa_dir.is_dir():
+        raise FileNotFoundError(f"Riboseek MSA directory is missing: {args.msa_dir}")
+
+    reference = pl.read_csv(args.ref_sheet, encoding="utf8-lossy")
+    if reference.columns and reference.columns[0].startswith("\ufeff"):
+        first = reference.columns[0]
+        reference = reference.rename({first: first.lstrip("\ufeff")})
+    required_columns = {"DMS_ID", "RAW_CONSTRUCT_SEQ"}
+    missing_columns = sorted(required_columns - set(reference.columns))
+    if missing_columns:
+        raise ValueError(f"{args.ref_sheet} is missing columns: {missing_columns}")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     args.tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    rfam_cm_path = args.rfam_dir / "Rfam.cm"
-    if not rfam_cm_path.exists():
-        sys.exit(f"[ERROR] Rfam.cm missing in {args.rfam_dir}")
-
-    reference_df = pd.read_csv(args.ref_sheet)
-    for _, row in reference_df.iterrows():
-        name = row["DMS_ID"]
-        raw_seq = row["RAW_CONSTRUCT_SEQ"]
-        sequence = raw_seq.upper().replace("T", "U").replace("N", "-")
-        output_path = args.out_dir / f"{name}.csv"
-
-        dms_path = args.dms_dir / f"{name}.csv"
-        if output_path.exists() or not dms_path.exists():
+    completed = 0
+    for name, raw_sequence in reference.select(
+        "DMS_ID", "RAW_CONSTRUCT_SEQ"
+    ).iter_rows():
+        alignment_file = args.msa_dir / f"{name}.a3m"
+        query_file = args.msa_dir / f"{name}.fa"
+        if not alignment_file.is_file() and not query_file.is_file():
             continue
+        if not alignment_file.is_file() or not query_file.is_file():
+            raise FileNotFoundError(f"Incomplete Riboseek MSA files for {name}")
+        assay_file = args.dms_dir / f"{name}.csv"
+        if not assay_file.is_file():
+            raise FileNotFoundError(f"Fitness assay is missing: {assay_file}")
+        output_file = args.out_dir / assay_file.name
+        if output_file.exists():
+            continue
+        if raw_sequence is None:
+            raise ValueError(f"{name} has no reference sequence")
 
-        print(f"--- Processing {name} ---")
-        assay_temp_dir = args.tmp_dir / name
-        if assay_temp_dir.exists():
-            shutil.rmtree(assay_temp_dir)
-        assay_temp_dir.mkdir()
-
-        try:
-            rfam_id = get_rfam_match(
-                sequence, name, args.rfam_dir, assay_temp_dir, args.cpu
+        print(f"Scoring {name}", flush=True)
+        with tempfile.TemporaryDirectory(prefix=f"{name}-", dir=args.tmp_dir) as path:
+            result = score_assay(
+                assay_file,
+                alignment_file,
+                query_file,
+                normalize_sequence(raw_sequence),
+                name,
+                Path(path),
+                args.cpu,
             )
-
-            if rfam_id:
-                print(f"  > Aligning to {rfam_id}...")
-                aligned_a2m = prepare_alignment(
-                    rfam_id, sequence, name, args.rfam_dir, assay_temp_dir
-                )
-
-                print("  > Running Pipeline...")
-                result_file = run_evcouplings(
-                    name, aligned_a2m, dms_path, name, assay_temp_dir, args.cpu
-                )
-
-                if result_file:
-                    shutil.copy(result_file, output_path)
-                    print(f"  [SUCCESS] Saved {output_path}")
-                else:
-                    print("  [ERROR] Prediction failed.")
-            else:
-                print("  [SKIP] No Rfam match.")
-
-        except Exception as error:
-            print(f"  [ERROR] Exception processing {name}: {error}")
-            raise error
-
-        finally:
-            if assay_temp_dir.exists():
-                shutil.rmtree(assay_temp_dir)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{name}.{os.getpid()}-", dir=args.out_dir
+        ) as output_staging_dir:
+            temporary_output = Path(output_staging_dir) / output_file.name
+            result.write_csv(temporary_output)
+            temporary_output.replace(output_file)
+        completed += 1
+    print(f"Scored {completed} assay(s)")
 
 
 if __name__ == "__main__":

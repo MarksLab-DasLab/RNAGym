@@ -27,6 +27,7 @@ from rnagym.fitness.baselines.masked_lm.strategies import validate_table
 from rnagym.fitness.baselines.Nucleotide_Transformer.compute_fitness import NTv3Adapter
 from rnagym.fitness.tasks import (
     analyze_fill_strategies,
+    check_published,
     merge_scoring_files,
     performance_fitness,
 )
@@ -427,6 +428,42 @@ def test_metrics_reject_nonfinite_predictions():
         get_performance_dataset(frame, "DMS_score", ["model_score"])
     with pytest.raises(KeyError, match="missing_score"):
         get_performance_dataset(frame, "DMS_score", ["missing_score"])
+
+
+def test_published_comparison_tolerance(tmp_path):
+    """Accept GPU rounding drift while preserving prediction structure."""
+    import polars as pl
+
+    expected_file = tmp_path / "expected.csv"
+    actual_file = tmp_path / "actual.csv"
+    expected = pl.DataFrame(
+        {"mutant": ["A1C", "C2G"], "sequence": ["CC", "AG"], "score": [0.0, None]}
+    )
+    expected.write_csv(expected_file)
+
+    exact = check_published.compare_predictions(
+        expected_file, expected_file, ("score",)
+    )
+    assert exact.exact and exact.max_absolute_difference == 0.0
+
+    close_score = check_published.ABSOLUTE_TOLERANCE * 0.98
+    expected.with_columns(pl.Series("score", [close_score, None])).write_csv(
+        actual_file
+    )
+    close = check_published.compare_predictions(actual_file, expected_file, ("score",))
+    assert not close.exact
+    assert close.max_absolute_difference == pytest.approx(close_score)
+
+    rejected_score = check_published.ABSOLUTE_TOLERANCE * 1.02
+    expected.with_columns(pl.Series("score", [rejected_score, None])).write_csv(
+        actual_file
+    )
+    with pytest.raises(AssertionError, match="absolute difference"):
+        check_published.compare_predictions(actual_file, expected_file, ("score",))
+
+    expected.with_columns(pl.Series("score", [0.0, 1.0])).write_csv(actual_file)
+    with pytest.raises(AssertionError, match="missing-value status"):
+        check_published.compare_predictions(actual_file, expected_file, ("score",))
 
 
 # TODO(MCA): Clean up model tests

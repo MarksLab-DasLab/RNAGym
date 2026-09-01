@@ -1,14 +1,17 @@
 [workspace]
 name = "rnagym-fitness"
 description = "RNAGym fitness benchmark environment"
-channels = ["pytorch", "conda-forge"]
-platforms = ["linux-64"]
+channels = ["conda-forge", "pytorch", "nvidia", "bioconda"]
+platforms = [
+  { name = "linux-64-cuda-12-9", platform = "linux-64", cuda = "12.9" },
+]
 
 [dependencies]
 cpuonly = { version = "*", channel = "pytorch" }
 go-shfmt = "==3.13.1"
 numpy = "2.*"
 pandas = "2.*"
+polars = "1.*"
 pytest = "==8.4.2"
 pytest-cov = "==7.0.0"
 python = "3.11.*"
@@ -25,6 +28,7 @@ rnagym = { path = "../..", editable = true }
 
 [tasks]
 analyze-fill-strategies = "python -m rnagym.fitness.tasks.analyze_fill_strategies"
+check-published = "python -m rnagym.fitness.tasks.check_published"
 coverage = "bash sh/coverage.sh"
 fmt = "bash sh/format.sh"
 leaderboard = "python -m rnagym.fitness.tasks.performance_fitness"
@@ -32,4 +36,204 @@ lint = "bash sh/lint.sh"
 merge = "python -m rnagym.fitness.tasks.merge_scoring_files"
 test = "python -m pytest -q ../../tests/test_fitness.py"
 
-# TODO(MCA): Add isolated environments for each fitness model adapter
+[feature.model]
+channel-priority = "flexible"
+
+[feature.model.dependencies]
+git = "2.*"
+numpy = "*"
+pandas = "*"
+polars = "1.*"
+scipy = "*"
+tqdm = "4.*"
+
+[feature.model.pypi-dependencies]
+rnagym = { path = "../..", editable = true }
+
+[feature.aido-rna.dependencies]
+numpy = "1.26.*"
+pandas = "2.*"
+python = "3.11.*"
+scipy = "1.14.*"
+
+[feature.aido-rna.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+modelgenerator = "==0.1.3.post0"
+torch = "==2.6.0"
+
+[feature.aido-rna.pypi-options.dependency-overrides]
+transformers = "==4.45.2"
+
+[feature.aido-rna.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published aido-rna"
+predict = "bash baselines/AIDO_RNA/score_aido_rna.sh"
+
+[feature.evmutation.dependencies]
+hhsuite = "3.*"
+plmc = "==20221105"
+python = "3.11.*"
+scikit-learn = "==1.7.2"
+setuptools = "<81"
+
+[feature.evmutation.pypi-dependencies]
+evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
+
+[feature.evmutation.tasks]
+predict = "bash baselines/EVmutation/run.sh"
+
+[feature.evo.dependencies]
+python = "3.11.*"
+
+[feature.evo.pypi-dependencies]
+evo-model = "==0.5"
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.7cxx11abiTRUE-cp311-cp311-linux_x86_64.whl" }
+torch = "==2.7.1"
+
+[feature.evo.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published evo"
+predict = "bash baselines/Evo/score_evo.sh"
+
+[feature.evo2.dependencies]
+cuda-cudart-dev = "12.9.*"
+cuda-driver-dev = "12.9.*"
+cuda-version = "12.9.*"
+einops = "==0.8.1"
+python = "3.12.*"
+pytorch = { version = "==2.7.1", build = "cuda129_*", channel = "conda-forge" }
+transformer-engine-torch = { version = "==2.3", channel = "conda-forge" }
+
+[feature.evo2.pypi-dependencies]
+evo2 = "==0.6.0"
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.0.post2/flash_attn-2.8.0.post2%2Bcu12torch2.7cxx11abiTRUE-cp312-cp312-linux_x86_64.whl" }
+
+[feature.evo2.pypi-options.dependency-overrides]
+einops = "==0.8.1"
+
+[feature.evo2.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published evo2"
+predict = "bash baselines/Evo/score_evo2.sh"
+
+[feature.genslm.dependencies]
+cudatoolkit = "11.3.*"
+numpy = "1.23.*"
+pandas = "==1.4.4"
+python = "3.9.*"
+pytorch = { version = "==1.12.1", channel = "pytorch" }
+
+[feature.genslm.pypi-dependencies]
+biopython = "==1.79"
+genslm = { git = "https://github.com/ramanathanlab/genslm.git", rev = "6622c47e8d9f00a1e8b8c4e30b78e6d702d2b883" }
+h5py = "==3.7.0"
+jinja2 = "==3.1.2"
+lightning-transformers = "==0.2.1"
+natsort = "==8.2.0"
+pydantic = "==1.10.2"
+pytorch-lightning = "==1.6.5"
+transformers = "==4.21.1"
+triton = "==1.0.0"
+wandb = "==0.13.3"
+
+[feature.genslm.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published genslm"
+predict = "bash baselines/GenSLM/run_model.sh"
+
+[feature.ntv3.dependencies]
+python = "3.11.*"
+
+[feature.ntv3.pypi-dependencies]
+torch = "==2.6.0"
+transformers = "==4.55.4"
+
+[feature.ntv3.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published ntv3"
+predict = "bash baselines/Nucleotide_Transformer/run.sh"
+
+[feature.orthrus.dependencies]
+numpy = "1.26.*"
+python = "3.10.*"
+pytorch = { version = "==2.2.2", channel = "pytorch" }
+pytorch-cuda = { version = "==11.8", channel = "pytorch" }
+
+[feature.orthrus.pypi-dependencies]
+causal-conv1d = { url = "https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.2.0.post2/causal_conv1d-1.2.0.post2%2Bcu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl" }
+mamba-ssm = { url = "https://github.com/state-spaces/mamba/releases/download/v1.2.0.post1/mamba_ssm-1.2.0.post1%2Bcu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl" }
+transformers = "==4.45.2"
+
+[feature.orthrus.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published orthrus"
+predict = "bash baselines/Orthrus/score_orthrus.sh"
+
+[feature.rna-ernie.dependencies]
+numpy = "==1.23.1"
+pandas = "==1.4.4"
+protobuf = "==3.20.0"
+python = "3.9.*"
+pytorch = { version = "==1.13.1", channel = "pytorch" }
+pytorch-cuda = { version = "==11.7", channel = "pytorch" }
+
+[feature.rna-ernie.pypi-dependencies]
+paddlenlp = "==2.4.0"
+paddlepaddle-gpu = "==2.3.2"
+sentencepiece = "==0.1.97"
+
+[feature.rna-ernie.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published rna-ernie"
+predict = "bash baselines/RNAERNIE/run.sh"
+
+[feature.rna-fm.dependencies]
+numpy = "==1.26.4"
+python = "3.11.*"
+
+[feature.rna-fm.pypi-dependencies]
+rna-fm = "==0.2.2"
+torch = "==2.6.0"
+
+[feature.rna-fm.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published rna-fm"
+predict = "bash baselines/RNA_FM/score_rna_fm.sh"
+
+[feature.rnagenesis.dependencies]
+numpy = "==1.26.4"
+python = "3.11.*"
+setuptools = "==83.0.0"
+
+[feature.rnagenesis.pypi-dependencies]
+deepspeed = "==0.19.4"
+huggingface-hub = "==0.36.2"
+torch = "==2.6.0"
+transformers = "==4.45.2"
+
+[feature.rnagenesis.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published rnagenesis"
+predict = "bash baselines/RNAGenesis/score_rnagenesis.sh"
+
+[feature.rinalmo.dependencies]
+einops = "==0.7.0"
+ml-collections = "==0.1.1"
+numpy = "==1.26.4"
+python = "3.11.*"
+scipy = "==1.17.1"
+setuptools = "==83.0.0"
+
+[feature.rinalmo.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+rinalmo = { git = "https://github.com/lbcb-sci/RiNALMo.git", rev = "2c2c5c14a5ae609d8c560a5d9ca32e51e0288955" }
+torch = "==2.6.0"
+
+[feature.rinalmo.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published rinalmo"
+predict = "bash baselines/RiNALMo/score_rinalmo.sh"
+
+[environments]
+default = { solve-group = "default" }
+aido-rna = { features = ["model", "aido-rna"], no-default-feature = true }
+evmutation = { features = ["model", "evmutation"], no-default-feature = true }
+evo = { features = ["model", "evo"], no-default-feature = true }
+evo2 = { features = ["model", "evo2"], no-default-feature = true }
+genslm = { features = ["model", "genslm"], no-default-feature = true }
+ntv3 = { features = ["model", "ntv3"], no-default-feature = true }
+orthrus = { features = ["model", "orthrus"], no-default-feature = true }
+rna-ernie = { features = ["model", "rna-ernie"], no-default-feature = true }
+rna-fm = { features = ["model", "rna-fm"], no-default-feature = true }
+rnagenesis = { features = ["model", "rnagenesis"], no-default-feature = true }
+rinalmo = { features = ["model", "rinalmo"], no-default-feature = true }

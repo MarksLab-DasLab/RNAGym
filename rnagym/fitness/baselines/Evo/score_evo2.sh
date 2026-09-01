@@ -14,6 +14,17 @@ extra_args=()
 if [[ -n "$local_path" ]]; then
 	extra_args+=(--local_path "$local_path")
 fi
+case "$model_name" in
+evo2_1b_base)
+	extra_args+=(--max_tokens_per_batch 32768 --require_fp8)
+	;;
+evo2_20b)
+	extra_args+=(--max_tokens_per_batch 16384 --require_fp8)
+	;;
+evo2_40b)
+	extra_args+=(--require_fp8)
+	;;
+esac
 
 cd "$repository"
 python -m rnagym.fitness.baselines.Evo.score_evo2_single_dms \

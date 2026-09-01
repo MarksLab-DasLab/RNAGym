@@ -1,5 +1,4 @@
 import argparse
-import os
 from pathlib import Path
 
 import numpy as np
@@ -68,36 +67,32 @@ def get_sequences(wt_sequence, df):
 
 
 def process_single_row(row, model, device, base_dir, results_dir, score_column):
-    dataset = row["fitness filename"]
-    if "snoRNA" in dataset:
-        return
-    df_path = os.path.join(base_dir, f"{dataset}.csv")
+    dataset = row["DMS_ID"]
+    df_path = base_dir / f"{dataset}.csv"
     df = pd.read_csv(df_path)
     df.columns = df.columns.str.lower()
-    df.dropna(inplace=True)
+    df.dropna(subset=["mutant", "sequence"], inplace=True)
     df = df.loc[:, ~df.columns.duplicated()]
-    wt_seq = row["Raw Construct Sequence"].upper()
+    wt_seq = row["RAW_CONSTRUCT_SEQ"].upper()
     try:
         sequences = get_sequences(wt_seq, df)
-    except AssertionError as e:
-        print("assertion error", e, "in", dataset)
-        return
+    except AssertionError as error:
+        raise ValueError(f"Invalid mutation {error} in {dataset}") from error
 
-    output_file = os.path.join(results_dir, f"{dataset}.csv")
+    output_file = results_dir / f"{dataset}.csv"
 
     seq_length = min(
         model.seq_length, sequences["mutated_sequence"].str.len().max() + 2
     )
     if model.seq_length < sequences["mutated_sequence"].str.len().max() + 2:
         print("warning: max str length exceeded")
-    dataset = SequenceDataset(
+    sequence_dataset = SequenceDataset(
         sequences["mutated_sequence"], seq_length, model.tokenizer
     )
-    dataloader = DataLoader(dataset, batch_size=4)
+    dataloader = DataLoader(sequence_dataset, batch_size=4)
 
     loss_fn = nn.CrossEntropyLoss(reduction="none")
     losses = []
-    lengths = []
     with torch.no_grad():
         for batch in tqdm(dataloader):
             outputs = model(
@@ -110,9 +105,7 @@ def process_single_row(row, model, device, base_dir, results_dir, score_column):
                 * batch["attention_mask"].squeeze(1)
             ).sum(1)
             losses.append(loss)
-            lengths.append(batch["attention_mask"].squeeze(1).sum(1))
     losses = np.concatenate(losses)
-    lengths = np.concatenate(lengths)
 
     sequences[score_column] = losses
     sequences.to_csv(output_file, index=False)
@@ -121,8 +114,23 @@ def process_single_row(row, model, device, base_dir, results_dir, score_column):
 def main(args):
     Path(args.output_directory).mkdir(parents=True, exist_ok=True)
 
+    reference = pd.read_csv(args.reference_sheet, encoding="utf-8-sig")
+    required = {"DMS_ID", "RAW_CONSTRUCT_SEQ"}
+    missing = sorted(required - set(reference.columns))
+    if missing:
+        raise ValueError(f"{args.reference_sheet} is missing columns: {missing}")
+    if not 0 <= args.task_id < len(reference):
+        raise ValueError(
+            f"Task ID {args.task_id} is outside the reference sheet's "
+            f"0..{len(reference) - 1} range"
+        )
+    row = reference.iloc[args.task_id]
+    if row[list(required)].isna().any():
+        raise ValueError(f"Reference row {args.task_id} has missing required values")
+
     model = GenSLM(
-        "genslm_2.5B_patric", model_cache_dir=os.path.join(args.checkpoint_dir, "2.5B")
+        "genslm_2.5B_patric",
+        model_cache_dir=str(args.checkpoint_dir / "2.5B"),
     )
     model.eval()
 
@@ -130,19 +138,14 @@ def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
 
-    base_dir = args.dms_directory
-    results_dir = args.output_directory
-    score_column = "logit_scores"
-    wt_seqs = pd.read_csv(args.reference_sheet, encoding="latin-1")
-    wt_seqs.dropna(inplace=True)
-    wt_seqs["Year"] = wt_seqs["Year"].astype(int)
-    wt_seqs["First Author Last Name"] = wt_seqs["First Author Last Name"].astype(str)
-    wt_seqs["Molecule Type"] = wt_seqs["Molecule Type"].astype(str)
-
-    # Select the row corresponding to the task ID
-    row = wt_seqs.iloc[args.task_id]
-
-    process_single_row(row, model, device, base_dir, results_dir, score_column)
+    process_single_row(
+        row,
+        model,
+        device,
+        args.dms_directory,
+        args.output_directory,
+        "logit_scores",
+    )
 
 
 if __name__ == "__main__":

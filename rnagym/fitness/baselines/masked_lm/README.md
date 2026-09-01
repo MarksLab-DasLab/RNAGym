@@ -78,8 +78,9 @@ existing commands keep producing the files they used to.
 `tests/test_fitness.py` runs the scorer, manifest writer, prediction merge,
 fill-strategy analysis and benchmark aggregation on three complete released
 ribozyme, tRNA and aptamer assays. A deterministic stand-in model keeps the test
-CPU-only and checkpoint-free. The concrete checkpoint environments remain
-model-specific and are tracked as a TODO in `rnagym/fitness/pixi.toml`.
+CPU-only and checkpoint-free. Checkpoint-backed `predict` and
+`check-published` tasks run in the model environments defined in
+`rnagym/fitness/pixi.toml`.
 
 [0]: https://papers.nips.cc/paper_files/paper/2021/hash/f51338d736f95dd42427296047067694-Abstract.html
 [1]: https://github.com/facebookresearch/esm/blob/2b369911bb5b4b0dda914521b9475cad1656b2ac/examples/variant-prediction/predict.py#L186-L225
