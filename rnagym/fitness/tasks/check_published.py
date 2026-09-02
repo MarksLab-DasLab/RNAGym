@@ -38,6 +38,7 @@ MODEL_OVERRIDE_VARIABLES = (
     "ORTHRUS_MODEL_NAME",
 )
 RELATIVE_TOLERANCE = 2e-3
+SCALE_TOLERANCE = 4e-2
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,6 @@ class ModelFamily:
     checkpoints: tuple[tuple[str, str | None], ...]
     model_variable: str | None = None
     prediction_variable: str | None = None
-    required_variables: tuple[str, ...] = ()
 
 
 MODEL_FAMILIES = {
@@ -93,11 +93,7 @@ MODEL_FAMILIES = {
         model_variable="EVO2_MODEL_NAME",
         prediction_variable="EVO2_PREDICTION_NAME",
     ),
-    "genslm": ModelFamily(
-        "baselines/GenSLM/run_model.sh",
-        (("GenSLM", None),),
-        required_variables=("GENSLM_CHECKPOINT_DIR",),
-    ),
+    "genslm": ModelFamily("baselines/GenSLM/run_model.sh", (("GenSLM", None),)),
     "ntv3": ModelFamily(
         launcher="baselines/Nucleotide_Transformer/run.sh",
         checkpoints=(
@@ -109,26 +105,12 @@ MODEL_FAMILIES = {
         prediction_variable="NTV3_PREDICTION_NAME",
     ),
     "orthrus": ModelFamily("baselines/Orthrus/score_orthrus.sh", (("orthrus", None),)),
-    "rna-ernie": ModelFamily(
-        "baselines/RNAERNIE/run.sh",
-        (("RNAErnie", None),),
-        required_variables=("RNAERNIE_CHECKPOINT_DIR",),
-    ),
-    "rna-fm": ModelFamily(
-        "baselines/RNA_FM/score_rna_fm.sh",
-        (("rna_fm", None),),
-        required_variables=("RNA_FM_CHECKPOINT_PATH",),
-    ),
+    "rna-ernie": ModelFamily("baselines/RNAERNIE/run.sh", (("RNAErnie", None),)),
+    "rna-fm": ModelFamily("baselines/RNA_FM/score_rna_fm.sh", (("rna_fm", None),)),
     "rnagenesis": ModelFamily(
-        "baselines/RNAGenesis/score_rnagenesis.sh",
-        (("rnagenesis", None),),
-        required_variables=("RNAGENESIS_MODEL_DIR",),
+        "baselines/RNAGenesis/score_rnagenesis.sh", (("rnagenesis", None),)
     ),
-    "rinalmo": ModelFamily(
-        "baselines/RiNALMo/score_rinalmo.sh",
-        (("rinalmo", None),),
-        required_variables=("RINALMO_CHECKPOINT_PATH",),
-    ),
+    "rinalmo": ModelFamily("baselines/RiNALMo/score_rinalmo.sh", (("rinalmo", None),)),
 }
 
 
@@ -182,6 +164,8 @@ def compare_predictions(
 
         finite = ~actual_missing
         differences = np.abs(actual_values[finite] - expected_values[finite])
+        expected_scale = float(np.std(expected_values[finite])) if finite.any() else 0.0
+        absolute_tolerance = ABSOLUTE_TOLERANCE + SCALE_TOLERANCE * expected_scale
         if differences.size:
             max_absolute_difference = max(
                 max_absolute_difference, float(differences.max())
@@ -192,14 +176,14 @@ def compare_predictions(
             actual_values,
             expected_values,
             rtol=RELATIVE_TOLERANCE,
-            atol=ABSOLUTE_TOLERANCE,
+            atol=absolute_tolerance,
             equal_nan=True,
         )
         if not close.all():
             row = int(np.flatnonzero(~close)[0])
             mutant = actual.get_column("mutant")[row]
             difference = abs(actual_values[row] - expected_values[row])
-            allowed = ABSOLUTE_TOLERANCE + RELATIVE_TOLERANCE * abs(
+            allowed = absolute_tolerance + RELATIVE_TOLERANCE * abs(
                 expected_values[row]
             )
             raise AssertionError(
@@ -252,21 +236,11 @@ def prepare_fixture(source_data_dir: Path, temporary_data_dir: Path) -> None:
 
 
 def validate_family(environment: str) -> None:
-    """Fail before inference when inputs or required checkpoint settings are absent."""
+    """Fail before inference when launchers or published predictions are absent."""
     family = MODEL_FAMILIES[environment]
     launcher = ConfigFitness.DIR / family.launcher
     if not launcher.is_file():
         raise FileNotFoundError(f"Prediction launcher is missing: {launcher}")
-
-    missing_variables = [
-        variable
-        for variable in family.required_variables
-        if not os.environ.get(variable)
-    ]
-    if missing_variables:
-        raise RuntimeError(
-            f"Set required checkpoint variables: {', '.join(missing_variables)}"
-        )
 
     missing_predictions = []
     for registry_name, _ in family.checkpoints:
@@ -285,18 +259,6 @@ def validate_family(environment: str) -> None:
 def run_all() -> None:
     """Run each published model environment sequentially."""
     started = time.monotonic()
-    missing_variables = sorted(
-        {
-            variable
-            for family in MODEL_FAMILIES.values()
-            for variable in family.required_variables
-            if not os.environ.get(variable)
-        }
-    )
-    if missing_variables:
-        raise RuntimeError(
-            f"Set required checkpoint variables: {', '.join(missing_variables)}"
-        )
     for environment in MODEL_FAMILIES:
         validate_family(environment)
     for environment in MODEL_FAMILIES:

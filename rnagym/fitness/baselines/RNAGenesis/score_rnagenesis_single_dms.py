@@ -15,19 +15,16 @@ MASK_TOKEN = "tMASK"
 UNK_TOKEN = "N"
 
 
-def load_vocab(model_path: str) -> dict:
+def load_vocab(model_path: Path) -> dict:
     """
     Read the model's own vocabulary file and return a token to id mapping.
 
     The HuggingFace tokenizer wrapper is bypassed on purpose, see the module
     docstring.
     """
-    vocab_file = Path(model_path) / "tokenizer.model"
+    vocab_file = model_path / "tokenizer.model"
     if not vocab_file.exists():
-        raise FileNotFoundError(
-            f"Vocabulary file not found: {vocab_file}. Point --model_name at a "
-            f"local copy of the RNAGenesis checkpoint."
-        )
+        raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
     tokens = vocab_file.read_text().splitlines()
     return {token: index for index, token in enumerate(tokens)}
 
@@ -46,10 +43,9 @@ class RNAGenesisAdapter(MaskedLMAdapter):
     def add_arguments(parser):
         parser.add_argument(
             "--model_name",
-            type=str,
+            type=Path,
             required=True,
-            help="Local path of the RNAGenesis encoder checkpoint directory, "
-            "which must contain tokenizer.model",
+            help="Local RNAGenesis checkpoint directory",
         )
         parser.add_argument(
             "--dtype",

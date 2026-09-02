@@ -1,7 +1,7 @@
 [workspace]
 name = "rnagym-fitness"
 description = "RNAGym fitness benchmark environment"
-channels = ["conda-forge", "pytorch", "nvidia", "bioconda"]
+channels = ["conda-forge", "pytorch", "nvidia", "bioconda", "Paddle"]
 platforms = [
   { name = "linux-64-cuda-12-9", platform = "linux-64", cuda = "12.9" },
 ]
@@ -40,6 +40,7 @@ test = "python -m pytest -q ../../tests/test_fitness.py"
 channel-priority = "flexible"
 
 [feature.model.dependencies]
+curl = "8.*"
 git = "2.*"
 numpy = "*"
 pandas = "*"
@@ -134,8 +135,15 @@ triton = "==1.0.0"
 wandb = "==0.13.3"
 
 [feature.genslm.tasks]
-check-published = "python -m rnagym.fitness.tasks.check_published genslm"
-predict = "bash baselines/GenSLM/run_model.sh"
+weights = "bash sh/fetch-weight.sh genslm"
+
+[feature.genslm.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published genslm"
+depends-on = ["weights"]
+
+[feature.genslm.tasks.predict]
+cmd = "bash baselines/GenSLM/run_model.sh"
+depends-on = ["weights"]
 
 [feature.ntv3.dependencies]
 python = "3.11.*"
@@ -165,20 +173,25 @@ predict = "bash baselines/Orthrus/score_orthrus.sh"
 
 [feature.rna-ernie.dependencies]
 numpy = "==1.23.1"
-pandas = "==1.4.4"
-protobuf = "==3.20.0"
+paddlepaddle = { version = "==2.5.2", build = "py39_cpu_many_linux", channel = "Paddle" }
+pip = "25.*"
+protobuf = "==3.20.2"
 python = "3.9.*"
-pytorch = { version = "==1.13.1", channel = "pytorch" }
-pytorch-cuda = { version = "==11.7", channel = "pytorch" }
 
 [feature.rna-ernie.pypi-dependencies]
-paddlenlp = "==2.4.0"
-paddlepaddle-gpu = "==2.3.2"
+paddlenlp = "==2.5.2"
 sentencepiece = "==0.1.97"
 
 [feature.rna-ernie.tasks]
-check-published = "python -m rnagym.fitness.tasks.check_published rna-ernie"
-predict = "bash baselines/RNAERNIE/run.sh"
+weights = "bash sh/fetch-weight.sh rna-ernie"
+
+[feature.rna-ernie.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rna-ernie"
+depends-on = ["weights"]
+
+[feature.rna-ernie.tasks.predict]
+cmd = "bash baselines/RNAERNIE/run.sh"
+depends-on = ["weights"]
 
 [feature.rna-fm.dependencies]
 numpy = "==1.26.4"
@@ -189,8 +202,15 @@ rna-fm = "==0.2.2"
 torch = "==2.6.0"
 
 [feature.rna-fm.tasks]
-check-published = "python -m rnagym.fitness.tasks.check_published rna-fm"
-predict = "bash baselines/RNA_FM/score_rna_fm.sh"
+weights = "bash sh/fetch-weight.sh rna-fm"
+
+[feature.rna-fm.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rna-fm"
+depends-on = ["weights"]
+
+[feature.rna-fm.tasks.predict]
+cmd = "bash baselines/RNA_FM/score_rna_fm.sh"
+depends-on = ["weights"]
 
 [feature.rnagenesis.dependencies]
 numpy = "==1.26.4"
@@ -204,25 +224,40 @@ torch = "==2.6.0"
 transformers = "==4.45.2"
 
 [feature.rnagenesis.tasks]
-check-published = "python -m rnagym.fitness.tasks.check_published rnagenesis"
-predict = "bash baselines/RNAGenesis/score_rnagenesis.sh"
+weights = "bash sh/fetch-weight.sh rnagenesis"
+
+[feature.rnagenesis.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rnagenesis"
+depends-on = ["weights"]
+
+[feature.rnagenesis.tasks.predict]
+cmd = "bash baselines/RNAGenesis/score_rnagenesis.sh"
+depends-on = ["weights"]
 
 [feature.rinalmo.dependencies]
 einops = "==0.7.0"
 ml-collections = "==0.1.1"
-numpy = "==1.26.4"
+numpy = "==1.26.0"
 python = "3.11.*"
-scipy = "==1.17.1"
-setuptools = "==83.0.0"
+scipy = "==1.11.3"
+setuptools = "<81"
+pytorch = { version = "==2.1.0", channel = "pytorch" }
+pytorch-cuda = { version = "==11.8", channel = "pytorch" }
 
 [feature.rinalmo.pypi-dependencies]
-flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
-rinalmo = { git = "https://github.com/lbcb-sci/RiNALMo.git", rev = "2c2c5c14a5ae609d8c560a5d9ca32e51e0288955" }
-torch = "==2.6.0"
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.2/flash_attn-2.3.2%2Bcu118torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
 
 [feature.rinalmo.tasks]
-check-published = "python -m rnagym.fitness.tasks.check_published rinalmo"
-predict = "bash baselines/RiNALMo/score_rinalmo.sh"
+source = "bash sh/fetch-source.sh rinalmo"
+weights = "bash sh/fetch-weight.sh rinalmo"
+
+[feature.rinalmo.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rinalmo"
+depends-on = ["source", "weights"]
+
+[feature.rinalmo.tasks.predict]
+cmd = "bash baselines/RiNALMo/score_rinalmo.sh"
+depends-on = ["source", "weights"]
 
 [environments]
 default = { solve-group = "default" }

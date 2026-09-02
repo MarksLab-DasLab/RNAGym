@@ -3,19 +3,20 @@
 import argparse
 import os
 import re
-import shlex
-import subprocess
 import tempfile
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import polars as pl
-import yaml
 from evcouplings.couplings import CouplingsModel
-from evcouplings.mutate import extract_mutations
+from evcouplings.mutate import extract_mutations, predict_mutation_table
+from evcouplings.utils import BailoutException
+from evcouplings.utils.pipeline import execute
 from rnagym.config import ConfigFitness
 
 MUTATION_PATTERN = re.compile(r"^[ACGU]\d+[ACGU](?:,[ACGU]\d+[ACGU])*$")
+RNA_TO_DNA = str.maketrans("Uu", "Tt")
 SCORE_COLUMN = "prediction_epistatic"
 
 
@@ -32,7 +33,7 @@ def build_config(
         "stages": ["align", "couplings"],
         "pipeline": "protein_monomer",
         "global": {
-            "alphabet": "rna",
+            "alphabet": "dna",
             "prefix": str(work_dir / name),
             "theta": 0.9,
             "cpu": cpu_count,
@@ -41,7 +42,7 @@ def build_config(
             "sequence_file": str(query_file),
         },
         "align": {
-            "alphabet": "rna",
+            "alphabet": "dna",
             "protocol": "existing",
             "input_alignment": str(alignment_file),
             "first_index": 1,
@@ -57,7 +58,7 @@ def build_config(
         "couplings": {
             "protocol": "standard",
             "iterations": "100",
-            "alphabet": "rna",
+            "alphabet": "dna",
             "ignore_gaps": True,
             "lambda_J": 0.01,
             "lambda_J_times_Lq": True,
@@ -119,6 +120,17 @@ def normalize_sequence(sequence: str) -> str:
     return sequence.upper().replace("T", "U").replace("-", "").replace(".", "")
 
 
+def write_dna_fasta(source: Path, destination: Path) -> None:
+    """Write a FASTA copy with uracil represented as thymine."""
+    # Existing-alignment parsing uses the protein alphabet, which omits U
+    # https://github.com/debbiemarkslab/EVcouplings/blob/14c83457c6cfca8156aabe0615067447a2169791/evcouplings/align/protocol.py#L702
+    with source.open() as input_handle, destination.open("w") as output_handle:
+        for line in input_handle:
+            output_handle.write(
+                line if line.startswith(">") else line.translate(RNA_TO_DNA)
+            )
+
+
 def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, str]]:
     """Parse one variant and verify its reference bases and positions."""
     if mutant is None or not mutant.strip() or mutant.strip().lower() in {"wt", "wild"}:
@@ -143,30 +155,10 @@ def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, 
     return mutations
 
 
-def infer_model(config_file: Path, work_dir: Path) -> CouplingsModel:
-    """Run EVcouplings and load the inferred model.
-
-    EVcouplings may reject its downstream contact report when an alignment has
-    no significant couplings. Mutation scoring only requires the Potts model,
-    which PLMC has already saved at that point.
-    """
-    command = f"evcouplings_runcfg {shlex.quote(str(config_file))}"
-    process = subprocess.run(
-        shlex.split(command),
-        capture_output=True,
-        text=True,
-    )
-    detail = process.stderr.strip() or process.stdout.strip()
-    expected_bailout = "No couplings identified" in detail
-    if process.returncode and not expected_bailout:
-        raise RuntimeError(f"EVcouplings exited {process.returncode}: {detail}")
-    model_files = list(work_dir.glob("**/*.model"))
-    if len(model_files) != 1:
-        raise RuntimeError(
-            f"EVcouplings exited {process.returncode} and produced "
-            f"{len(model_files)} models: {detail}"
-        )
-    return CouplingsModel(str(model_files[0]))
+def infer_model(config: dict) -> CouplingsModel:
+    """Run the EVcouplings pipeline and load its accepted Potts model."""
+    output = execute(**config)
+    return CouplingsModel(output["model_file"])
 
 
 def score_assay(
@@ -178,7 +170,7 @@ def score_assay(
     work_dir: Path,
     cpu_count: int,
 ) -> pl.DataFrame:
-    """Infer one Potts model and score every covered assay variant."""
+    """Infer one accepted Potts model and score every assay variant."""
     sequence_id, aligned_query = first_fasta_record(alignment_file)
     query_id, query_sequence = first_fasta_record(query_file)
     if sequence_id != query_id:
@@ -188,18 +180,19 @@ def score_assay(
     if aligned_query != wild_type or query_sequence != wild_type:
         raise ValueError(f"The Riboseek MSA query does not match {name}")
 
+    dna_alignment_file = work_dir / "alignment.a3m"
+    dna_query_file = work_dir / "query.fa"
+    write_dna_fasta(alignment_file, dna_alignment_file)
+    write_dna_fasta(query_file, dna_query_file)
     config = build_config(
         name,
-        alignment_file.resolve(),
-        query_file.resolve(),
+        dna_alignment_file,
+        dna_query_file,
         sequence_id,
         work_dir,
         cpu_count,
     )
-    config_file = work_dir / "config.yaml"
-    config_file.write_text(yaml.safe_dump(config, sort_keys=False))
-    model = infer_model(config_file, work_dir)
-    covered_positions = set(model.index_list)
+    model = infer_model(config)
 
     assay = pl.read_csv(assay_file)
     required_columns = {"mutant", "sequence"}
@@ -207,7 +200,7 @@ def score_assay(
     if missing_columns:
         raise ValueError(f"{assay_file} is missing columns: {missing_columns}")
 
-    scores = []
+    normalized_mutants = []
     for row, (mutant, sequence) in enumerate(
         assay.select("mutant", "sequence").iter_rows()
     ):
@@ -217,15 +210,23 @@ def score_assay(
             variant[position - 1] = target
         if sequence is None or normalize_sequence(sequence) != "".join(variant):
             raise ValueError(f"{assay_file} row {row} sequence disagrees with mutant")
-        if any(position not in covered_positions for position, _, _ in mutations):
-            scores.append(float("nan"))
-            continue
-        score = float(model.delta_hamiltonian(mutations)[0])
-        if not np.isfinite(score):
-            raise FloatingPointError(
-                f"{assay_file} row {row} produced a nonfinite score"
-            )
-        scores.append(score)
+        normalized_mutants.append(
+            (
+                ",".join(
+                    f"{source}{position}{target}"
+                    for position, source, target in mutations
+                )
+                or "wt"
+            ).translate(RNA_TO_DNA)
+        )
+
+    # predict_mutation_table is the upstream scoring API and requires pandas
+    prediction_input = pd.DataFrame({"mutant": normalized_mutants})
+    predictions = predict_mutation_table(model, prediction_input, SCORE_COLUMN)
+    scores = predictions[SCORE_COLUMN].to_numpy(dtype=float)
+    if not np.isfinite(scores).all():
+        count = int((~np.isfinite(scores)).sum())
+        raise FloatingPointError(f"{assay_file} produced {count} non-finite scores")
     return assay.with_columns(pl.Series(SCORE_COLUMN, scores))
 
 
@@ -269,6 +270,7 @@ def main() -> None:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     args.tmp_dir.mkdir(parents=True, exist_ok=True)
     completed = 0
+    rejected = 0
     for name, raw_sequence in reference.select(
         "DMS_ID", "RAW_CONSTRUCT_SEQ"
     ).iter_rows():
@@ -288,16 +290,23 @@ def main() -> None:
             raise ValueError(f"{name} has no reference sequence")
 
         print(f"Scoring {name}", flush=True)
-        with tempfile.TemporaryDirectory(prefix=f"{name}-", dir=args.tmp_dir) as path:
-            result = score_assay(
-                assay_file,
-                alignment_file,
-                query_file,
-                normalize_sequence(raw_sequence),
-                name,
-                Path(path),
-                args.cpu,
-            )
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=f"{name}-", dir=args.tmp_dir
+            ) as path:
+                result = score_assay(
+                    assay_file,
+                    alignment_file,
+                    query_file,
+                    normalize_sequence(raw_sequence),
+                    name,
+                    Path(path),
+                    args.cpu,
+                )
+        except BailoutException as error:
+            print(f"Skipped {name}: {error}", flush=True)
+            rejected += 1
+            continue
         with tempfile.TemporaryDirectory(
             prefix=f".{name}.{os.getpid()}-", dir=args.out_dir
         ) as output_staging_dir:
@@ -305,7 +314,7 @@ def main() -> None:
             result.write_csv(temporary_output)
             temporary_output.replace(output_file)
         completed += 1
-    print(f"Scored {completed} assay(s)")
+    print(f"Scored {completed} assay(s); EVcouplings rejected {rejected}")
 
 
 if __name__ == "__main__":

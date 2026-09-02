@@ -31,23 +31,9 @@ class RiNALMoAdapter(MaskedLMAdapter):
         )
 
     def load(self, args):
-        # The released checkpoint stores the flash-attention module layout, so
-        # flash attention must stay enabled
-        from flash_attn import bert_padding
-
-        original_unpad_input = bert_padding.unpad_input
-
-        # FlashAttention 2.7 adds a fifth return value that RiNALMo does not use
-        def four_value_unpad_input(*call_args, **call_kwargs):
-            return original_unpad_input(*call_args, **call_kwargs)[:4]
-
-        bert_padding.unpad_input = four_value_unpad_input
-        try:
-            from rinalmo.config import model_config
-            from rinalmo.data.alphabet import Alphabet
-            from rinalmo.model.model import RiNALMo
-        finally:
-            bert_padding.unpad_input = original_unpad_input
+        from rinalmo.config import model_config
+        from rinalmo.data.alphabet import Alphabet
+        from rinalmo.model.model import RiNALMo
 
         config = model_config("giga")
         self.model = RiNALMo(config)

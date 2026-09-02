@@ -75,8 +75,8 @@ conda env create -f rnagym_env.yml
 conda activate rnagym
 python -m pip install -e .
 ```
-Fitness code is installed with `rnagym`. Downloaded and generated tables stay
-under the repository's data directory:
+Fitness code is installed with `rnagym` (see the [fitness benchmark guide][2]).
+Downloaded and generated tables stay under the repository's data directory:
 ```
 rnagym/fitness/          # Scoring and evaluation package
 data/fitness/
@@ -85,9 +85,6 @@ data/fitness/
 ├── merged/
 └── reports/
 ```
-
-The fitness scripts resolve these paths from the repository and do not require
-working-directory-specific path edits. See the [fitness benchmark guide][2].
 
 For the structure prediction task, the data processing and scoring scripts expect the following folder structure:
 ```

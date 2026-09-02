@@ -112,52 +112,26 @@ Key flags:
 
 ### 5. Run model inference
 
-Every model environment exposes the same `predict` task:
-
 ```bash
 cd rnagym/fitness
 SLURM_ARRAY_TASK_ID=12 pixi run -e ntv3 predict
 ```
 
-Available environments are `aido-rna`, `evmutation`, `evo`, `evo2`, `genslm`,
-`ntv3`, `orthrus`, `rna-ernie`, `rna-fm`, `rnagenesis` and `rinalmo`. The
-launchers use checkpoints downloaded by the model library when possible. Set
-the following variables for checkpoints that are not distributed that way:
+`SLURM_ARRAY_TASK_ID` defaults to 0. Checkpoints are fetched when needed.
+GenSLM is the exception because its checkpoint is distributed through
+authenticated Globus; its `weights` task prints the fixed destination.
+Gated Hugging Face checkpoints require prior access and an authenticated login.
+EVmutation processes every assay with a Riboseek MSA in one run.
 
-| Environment | Variable |
-|-------------|----------|
-| `genslm` | `GENSLM_CHECKPOINT_DIR` |
-| `rna-ernie` | `RNAERNIE_CHECKPOINT_DIR` |
-| `rna-fm` | `RNA_FM_CHECKPOINT_PATH` |
-| `rnagenesis` | `RNAGENESIS_MODEL_DIR` |
-| `rinalmo` | `RINALMO_CHECKPOINT_PATH` |
-
-`SLURM_ARRAY_TASK_ID` is the zero-based reference-sheet row and defaults to 0.
-EVmutation processes the reference sheet in one run using the Riboseek
-`data/fitness/msa/by_assay/*.a3m` alignments and matching `.fa` query files. It
-does not require a separate database download, so there is no `init-db` task.
-
-### 6. Reproduce published predictions
-
-The published check reruns the complete 255-variant
-`Kobori_2015_ribozyme_p4` assay. It requires identical rows, sequences and
-missing-value locations, rejects infinite scores, and compares finite scores
-with `rtol=2e-3` and `atol=5e-3`. These tolerances cover small differences
-between GPU architectures without accepting materially different outputs.
-Each result reports whether scores match exactly or within tolerance. Using a
-complete small assay preserves the released batching while bounding inference
-time.
+### 6. Check published predictions
 
 ```bash
-cd rnagym/fitness
 pixi run -e ntv3 check-published
 pixi run check-published
 ```
 
-The first command checks all three released NTv3 checkpoints in their shared
-environment. The second checks all 20 leaderboard checkpoints, sequentially.
-Both read the released files from `data/fitness/model_predictions` and write
-inference output only to a temporary directory.
+The first checks one model family. The second checks every leaderboard
+checkpoint on one complete assay, allowing only small numerical drift.
 
 ## Quality checks
 
@@ -169,12 +143,5 @@ pixi run coverage
 pixi run lint
 pixi run fmt
 ```
-
-## Models
-
-The default merge registry includes Evo 1, Evo 1.5, Evo 2 (1B base, 7B, 20B and
-40B), GenSLM, Nucleotide Transformer v3, RNA-ERNIE, RNA-FM, RiNALMo, RNAGenesis,
-Orthrus and the five released AIDO.RNA checkpoints. EVmutation is merged
-separately with `--assays_with_MSAs_only` because it only covers assays with an MSA.
 
 [0]: https://marks.hms.harvard.edu/rnagym/fitness_prediction
