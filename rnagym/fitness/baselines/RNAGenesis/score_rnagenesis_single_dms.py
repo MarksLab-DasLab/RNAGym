@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Score RNAGenesis with the shared masked-marginal engine.
+
+The checkpoint uses an RNA alphabet, one token per nucleotide, no special
+tokens, and ``tMASK``. Its vocabulary is read directly from ``tokenizer.model``
+because the shipped tokenizer does not expose the model's mask ID.
+"""
+
+import argparse
+from pathlib import Path
+
+import torch
+from typing_extensions import override
+
+from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
+
+MASK_TOKEN = "tMASK"
+UNK_TOKEN = "N"
+
+
+def load_vocab(model_path: Path) -> dict[str, int]:
+    """
+    Read the model's own vocabulary file and return a token to id mapping.
+
+    The HuggingFace tokenizer wrapper is bypassed on purpose, see the module
+    docstring.
+    """
+    vocab_file = model_path / "tokenizer.model"
+    if not vocab_file.exists():
+        raise FileNotFoundError(f"Vocabulary file not found: {vocab_file}")
+    tokens = vocab_file.read_text().splitlines()
+    return {token: index for index, token in enumerate(tokens)}
+
+
+class RNAGenesisAdapter(MaskedLMAdapter):
+    """RNAGenesis: RNA alphabet, no special tokens, attention mask."""
+
+    name = "RNAGenesis"
+    bases = "ACGU"
+    score_column = "rnagenesis_score"
+    n_special_tokens = 0  # the reference usage adds none
+    default_batch_size = 256
+    default_max_batch_tokens = 32768
+
+    @staticmethod
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--model",
+            dest="model_name",
+            type=Path,
+            required=True,
+            help="Local RNAGenesis checkpoint directory",
+        )
+
+    @override
+    def load(self, args: argparse.Namespace) -> None:
+        from transformers import AutoModelForMaskedLM
+
+        vocab = load_vocab(args.model_name)
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            args.model_name,
+            trust_remote_code=True,
+            torch_dtype=torch.bfloat16,
+        )
+        self.model = self.model.to(args.device).eval()
+        self.device = args.device
+
+        self.base_ids = {b: vocab[b] for b in self.bases}
+        self.mask_id = vocab[MASK_TOKEN]
+        self.unk_id = vocab[UNK_TOKEN]
+        self.pad_id = vocab.get("<pad>", self.unk_id)
+        self.prefix_ids = []  # the reference usage adds no special tokens
+        self.suffix_ids = []
+
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        return outputs.logits[rows, cols]
+
+
+if __name__ == "__main__":
+    main(RNAGenesisAdapter())

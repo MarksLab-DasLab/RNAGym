@@ -2,20 +2,11 @@
 
 set -euo pipefail
 
-checkpoint_root=${RNAGYM_CHECKPOINT_DIR:-/n/lw_groups/marks/ckpt}
+# shellcheck source=../sh/weights.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../sh/weights.sh"
+
 download_root=.pixi/downloads
 source_root=.pixi/model-sources
-
-download() {
-	local url=$1 destination=$2 checksum=$3
-
-	mkdir -p "$(dirname "$destination")"
-	if ! echo "$checksum  $destination" | sha256sum --check --status 2>/dev/null; then
-		curl -L --fail --retry 3 --output "$destination.tmp" "$url"
-		echo "$checksum  $destination.tmp" | sha256sum --check --status
-		mv "$destination.tmp" "$destination"
-	fi
-}
 
 link_latest() {
 	local model=$1 version=$2
@@ -56,7 +47,7 @@ rhofold)
 	;;
 rf2na)
 	root="$checkpoint_root/rosettafold2na/0.2"
-	archive="$download_root/RF2NA_apr23.tgz"
+	archive="$root/RF2NA_apr23.tgz"
 	download https://files.ipd.uw.edu/dimaio/RF2NA_apr23.tgz \
 		"$archive" \
 		1a5e9f6dc6fde298f883e4d58d7766d464053f200c5247ccf18f5cc8dfdb3809
@@ -73,10 +64,10 @@ trrna)
 	source="$source_root/trRosettaRNA_v1.1"
 	download \
 		https://yanglab.qd.sdu.edu.cn/trRosettaRNA/download/trRosettaRNA_v1.1.zip \
-		"$download_root/trRosettaRNA_v1.1.zip" \
+		"$root/trRosettaRNA_v1.1.zip" \
 		31b1a889819b1f04ebdf6857f521bf10750d49b59c3ad1b407fa43b204f608c4
 	[[ -f "$source/predict.py" ]] || unzip -q \
-		"$download_root/trRosettaRNA_v1.1.zip" -d "$source_root"
+		"$root/trRosettaRNA_v1.1.zip" -d "$source_root"
 	if [[ ! -d "$root/params" ]]; then
 		mkdir -p "$root"
 		mv "$source/params" "$root/params"

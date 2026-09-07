@@ -1,0 +1,292 @@
+[workspace]
+name = "rnagym-fitness"
+description = "RNAGym fitness benchmark environment"
+channels = ["conda-forge", "pytorch", "nvidia", "bioconda", "Paddle"]
+platforms = [
+  { name = "linux-64-cuda-12-9", platform = "linux-64", cuda = "12.9" },
+]
+
+[dependencies]
+coverage = "==7.10.7"
+cpuonly = { version = "*", channel = "pytorch" }
+go-shfmt = "==3.13.1"
+numpy = "2.*"
+polars = "1.*"
+pytest = "==8.4.2"
+pytest-cov = "==7.0.0"
+python = "3.11.*"
+pytorch = { version = "2.*", channel = "pytorch" }
+ruff = "==0.15.21"
+scikit-learn = "1.*"
+scipy = "1.*"
+shellcheck = "==0.11.0"
+taplo = "==0.10.0"
+tqdm = "==4.69.0"
+typing_extensions = ">=4.6"
+
+[pypi-dependencies]
+pyrefly = "==1.2.0"
+rnagym = { path = "../..", editable = true }
+
+[tasks]
+analyze-fill-strategies = "python -m rnagym.fitness.tasks.analyze_fill_strategies"
+check-published = "python -m rnagym.fitness.tasks.check_published"
+coverage = "bash sh/coverage.sh"
+fmt = "bash sh/format.sh"
+leaderboard = "python -m rnagym.fitness.tasks.leaderboard"
+lint = "bash sh/lint.sh"
+merge = "python -m rnagym.fitness.tasks.merge_scoring_files"
+test = "python -m pytest -q ../../tests/test_fitness.py"
+
+[feature.model]
+channel-priority = "flexible"
+
+[feature.model.activation.env]
+# Triton's cached C launchers must use the current Python ABI
+TRITON_CACHE_DIR = "$PIXI_PROJECT_ROOT/.pixi/triton-cache/$PIXI_ENVIRONMENT_NAME"
+
+[feature.model.dependencies]
+curl = "8.*"
+git = "2.*"
+numpy = "*"
+polars = "1.*"
+scipy = "*"
+tqdm = "4.*"
+typing_extensions = ">=4.6"
+
+[feature.model.pypi-dependencies]
+coverage = { version = "==7.10.7", extras = ["toml"] }
+rnagym = { path = "../..", editable = true }
+
+[feature.aido-rna.dependencies]
+numpy = "1.26.*"
+pandas = "2.*"
+python = "3.11.*"
+scipy = "1.14.*"
+
+[feature.aido-rna.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+modelgenerator = "==0.1.3.post0"
+torch = "==2.6.0"
+
+[feature.aido-rna.pypi-options.dependency-overrides]
+transformers = "==4.45.2"
+
+[feature.aido-rna.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published aido-rna"
+predict = "bash baselines/AIDO_RNA/score_aido_rna.sh"
+
+[feature.evmutation.dependencies]
+hhsuite = "3.*"
+plmc = "==20221105"
+pytest = "8.*"
+python = "3.11.*"
+scikit-learn = "==1.7.2"
+setuptools = "<81"
+
+[feature.evmutation.pypi-dependencies]
+evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
+
+[feature.evmutation.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published evmutation"
+predict = "bash baselines/EVmutation/run.sh"
+
+[feature.evo.dependencies]
+python = "3.11.*"
+
+[feature.evo.pypi-dependencies]
+evo-model = "==0.5"
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.7cxx11abiTRUE-cp311-cp311-linux_x86_64.whl" }
+torch = "==2.7.1"
+
+[feature.evo.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published evo"
+predict = "bash baselines/Evo/score_evo.sh"
+
+[feature.evo2.dependencies]
+cuda-cudart-dev = "12.9.*"
+cuda-driver-dev = "12.9.*"
+cuda-version = "12.9.*"
+einops = "==0.8.1"
+python = "3.12.*"
+pytorch = { version = "==2.7.1", build = "cuda129_*", channel = "conda-forge" }
+transformer-engine-torch = { version = "==2.3", channel = "conda-forge" }
+
+[feature.evo2.pypi-dependencies]
+evo2 = "==0.6.0"
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.0.post2/flash_attn-2.8.0.post2%2Bcu12torch2.7cxx11abiTRUE-cp312-cp312-linux_x86_64.whl" }
+
+[feature.evo2.pypi-options.dependency-overrides]
+einops = "==0.8.1"
+
+[feature.evo2.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published evo2"
+predict = "bash baselines/Evo/score_evo2.sh"
+
+[feature.genslm.activation.env]
+# Keep the historical CUDA runtime's compiled H100 kernels between runs
+CUDA_CACHE_MAXSIZE = "4294967296"
+CUDA_CACHE_PATH = "$PIXI_PROJECT_ROOT/.pixi/cuda-cache/genslm"
+
+[feature.genslm.dependencies]
+cudatoolkit = "11.3.*"
+mkl = "<2024.1"
+numpy = "1.23.*"
+pandas = "==1.4.4"
+pytest = "8.*"
+python = "3.9.*"
+pytorch = { version = "==1.12.1", channel = "pytorch" }
+
+[feature.genslm.pypi-dependencies]
+biopython = "==1.79"
+# Preserve the released inference before the PyTorch and Pydantic API changes
+genslm = { git = "https://github.com/ramanathanlab/genslm.git", rev = "96340d48bf6ecbee5bf7ec67ad1e6aa4c4b46590" }
+h5py = "==3.7.0"
+jinja2 = "==3.1.2"
+lightning-transformers = "==0.2.1"
+natsort = "==8.2.0"
+pydantic = "==1.10.2"
+pytorch-lightning = "==1.6.5"
+transformers = "==4.21.1"
+triton = "==1.0.0"
+wandb = "==0.13.3"
+
+[feature.genslm.tasks]
+weights = "bash sh/fetch-weight.sh genslm"
+
+[feature.genslm.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published genslm"
+depends-on = ["weights"]
+
+[feature.genslm.tasks.predict]
+cmd = "bash baselines/GenSLM/run_model.sh"
+depends-on = ["weights"]
+
+[feature.ntv3.dependencies]
+python = "3.11.*"
+
+[feature.ntv3.pypi-dependencies]
+torch = "==2.6.0"
+transformers = "==4.55.4"
+
+[feature.ntv3.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published ntv3"
+predict = "bash baselines/Nucleotide_Transformer/run.sh"
+
+[feature.orthrus.dependencies]
+numpy = "1.26.*"
+python = "3.10.*"
+pytorch = { version = "==2.2.2", channel = "pytorch" }
+pytorch-cuda = { version = "==11.8", channel = "pytorch" }
+
+[feature.orthrus.pypi-dependencies]
+causal-conv1d = { url = "https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.2.0.post2/causal_conv1d-1.2.0.post2%2Bcu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl" }
+mamba-ssm = { url = "https://github.com/state-spaces/mamba/releases/download/v1.2.0.post1/mamba_ssm-1.2.0.post1%2Bcu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl" }
+transformers = "==4.45.2"
+
+[feature.orthrus.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published orthrus"
+predict = "bash baselines/Orthrus/score_orthrus.sh"
+
+[feature.rna-ernie.dependencies]
+# Avoid loading NumPy's MKL alongside Paddle's bundled MKL runtime
+libblas = { version = "*", build = "*openblas" }
+numpy = "==1.23.1"
+paddlepaddle = { version = "==2.5.2", build = "py39_cpu_many_linux", channel = "Paddle" }
+pip = "25.*"
+protobuf = "==3.20.2"
+python = "3.9.*"
+
+[feature.rna-ernie.pypi-dependencies]
+paddlenlp = "==2.5.2"
+sentencepiece = "==0.1.97"
+
+[feature.rna-ernie.tasks]
+weights = "bash sh/fetch-weight.sh rna-ernie"
+
+[feature.rna-ernie.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rna-ernie"
+depends-on = ["weights"]
+
+[feature.rna-ernie.tasks.predict]
+cmd = "bash baselines/RNAERNIE/run.sh"
+depends-on = ["weights"]
+
+[feature.rna-fm.dependencies]
+numpy = "==1.26.4"
+python = "3.11.*"
+
+[feature.rna-fm.pypi-dependencies]
+rna-fm = "==0.2.2"
+torch = "==2.6.0"
+
+[feature.rna-fm.tasks]
+weights = "bash sh/fetch-weight.sh rna-fm"
+
+[feature.rna-fm.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rna-fm"
+depends-on = ["weights"]
+
+[feature.rna-fm.tasks.predict]
+cmd = "bash baselines/RNA_FM/score_rna_fm.sh"
+depends-on = ["weights"]
+
+[feature.rnagenesis.dependencies]
+numpy = "==1.26.4"
+python = "3.11.*"
+setuptools = "==83.0.0"
+
+[feature.rnagenesis.pypi-dependencies]
+deepspeed = "==0.19.4"
+huggingface-hub = "==0.36.2"
+torch = "==2.6.0"
+transformers = "==4.45.2"
+
+[feature.rnagenesis.tasks]
+weights = "bash sh/fetch-weight.sh rnagenesis"
+
+[feature.rnagenesis.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rnagenesis"
+depends-on = ["weights"]
+
+[feature.rnagenesis.tasks.predict]
+cmd = "bash baselines/RNAGenesis/score_rnagenesis.sh"
+depends-on = ["weights"]
+
+[feature.rinalmo.dependencies]
+einops = "==0.7.0"
+ml-collections = "==0.1.1"
+numpy = "1.26.*"
+python = "3.11.*"
+scipy = "1.14.*"
+setuptools = "<81"
+
+[feature.rinalmo.pypi-dependencies]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+torch = "==2.6.0"
+
+[feature.rinalmo.tasks]
+source = "bash sh/fetch-source.sh rinalmo"
+weights = "bash sh/fetch-weight.sh rinalmo"
+
+[feature.rinalmo.tasks.check-published]
+cmd = "python -m rnagym.fitness.tasks.check_published rinalmo"
+depends-on = ["source", "weights"]
+
+[feature.rinalmo.tasks.predict]
+cmd = "bash baselines/RiNALMo/score_rinalmo.sh"
+depends-on = ["source", "weights"]
+
+[environments]
+default = { solve-group = "default" }
+aido-rna = { features = ["model", "aido-rna"], no-default-feature = true }
+evmutation = { features = ["model", "evmutation"], no-default-feature = true }
+evo = { features = ["model", "evo"], no-default-feature = true }
+evo2 = { features = ["model", "evo2"], no-default-feature = true }
+genslm = { features = ["model", "genslm"], no-default-feature = true }
+ntv3 = { features = ["model", "ntv3"], no-default-feature = true }
+orthrus = { features = ["model", "orthrus"], no-default-feature = true }
+rna-ernie = { features = ["model", "rna-ernie"], no-default-feature = true }
+rna-fm = { features = ["model", "rna-fm"], no-default-feature = true }
+rnagenesis = { features = ["model", "rnagenesis"], no-default-feature = true }
+rinalmo = { features = ["model", "rinalmo"], no-default-feature = true }

@@ -13,7 +13,7 @@ from rnagym.config import Config2D
 from .utils import Prediction, decode_pair_probabilities, dot_bracket
 
 MODEL_SOURCE = Config2D.MODEL_SOURCE_DIR / "RiNALMo"
-MODEL_WEIGHTS = Config2D.MODEL_WEIGHT_DIR / "rinalmo" / "rinalmo_giga_ss_bprna_ft.pt"
+MODEL_WEIGHTS = Config2D.CHECKPOINT_DIR / "rinalmo" / "rinalmo_giga_ss_bprna_ft.pt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MAX_BATCH_PAIR_CELLS = 2_000_000
 MAX_BATCH_SIZE = 256

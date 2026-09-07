@@ -6,9 +6,8 @@ probabilities (`1 − Σj Pij`). For neural models, highly confident residues ar
 clipped to 1 following
 [Arnie's official RibonanzaNet inference](https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L111-L116)
 when summed pair probabilities exceed one at any given residue. DMS is scored
-over A/C, CMCT over G/U, and other modalities over all bases. Spearman avoids
-directly comparing reactivity magnitudes with probabilities or choosing a
-classification threshold. The headline score averages 1M7, 2A3, DMS, and NMIA.
+over A/C, CMCT over G/U, and other modalities over all bases. The headline score
+averages 1M7, 2A3, DMS, and NMIA.
 BzCN (low replicate agreement), CMCT (only 11 replicate-bearing clusters), and
 degradation assays are reported only in [`leaderboard.csv`](leaderboard.csv).
 Constant predictions receive zero.

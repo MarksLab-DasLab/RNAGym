@@ -13,7 +13,7 @@ from .utils import Prediction, decode_pair_probabilities
 MODEL_SOURCE = Config2D.MODEL_SOURCE_DIR / "rnet-inference" / "src"
 
 sys.path.insert(0, str(MODEL_SOURCE))
-# Official model definition and checkpoint loading
+# Official model definition, with the checkpoint path patched by the source task
 # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L12-L31
 from rnet_2d import RNA_Dataset  # noqa: E402
 from rnet_2d import model as MODEL  # noqa: E402

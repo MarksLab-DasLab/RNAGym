@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 _REPO_DIR = Path(__file__).resolve().parents[1]
-_DATA_DIR = _REPO_DIR / "data"
+_DATA_DIR = Path(os.environ.get("RNAGYM_DATA_DIR", _REPO_DIR / "data"))
 _DATABASE_DIR = Path(
     os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
 )
@@ -42,7 +42,6 @@ class Config2D(_Config):
     EFOLD_VIRAL_FILE = RAW_DIR / "viral_fragments.json"
     PSEUDOBASE_FILE = RAW_DIR / "pseudobase.csv"
     MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
-    MODEL_WEIGHT_DIR = DIR / ".pixi" / "model-weights"
     MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 
     MIN_SEQUENCE_IDENTITY = 0.40
@@ -69,10 +68,15 @@ class Config2D(_Config):
 class ConfigFitness(_Config):
     """Fitness benchmark configuration."""
 
-    DIR = _REPO_DIR / "fitness"
+    DIR = _REPO_DIR / "rnagym" / "fitness"
+    LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "fitness"
     DATA_DIR = _DATA_DIR / "fitness"
+    ASSAY_DIR = DATA_DIR / "assays"
+    COMBINED_DIR = DATA_DIR / "merged"
     MSA_DIR = DATA_DIR / "msa"
-    REFERENCE_FILE = DIR / "reference_sheet_final.csv"
+    PREDICTION_DIR = DATA_DIR / "model_predictions"
+    REFERENCE_FILE = DATA_DIR / "reference_sheet_final.csv"
+    REPORT_DIR = DATA_DIR / "reports"
 
 
 class ConfigRiboseek(_Config):

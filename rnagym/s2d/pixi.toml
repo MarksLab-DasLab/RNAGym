@@ -64,17 +64,19 @@ make = "4.*"
 
 [feature.eternafold.tasks]
 source = "bash sh/fetch-source.sh eternafold"
+weights = "bash sh/fetch-weight.sh eternafold"
 
 [feature.eternafold.tasks.build]
 cmd = "make -C .pixi/model-sources/EternaFold/src contrafold CXX=\"$CXX\""
 depends-on = ["source"]
 
 [feature.eternafold.tasks.test]
-depends-on = ["build", "test-model"]
+cmd = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
+depends-on = ["build", "weights"]
 
 [feature.eternafold.tasks.predict]
 cmd = "bash sh/predict.sh eternafold"
-depends-on = ["build"]
+depends-on = ["build", "weights"]
 
 [feature.rnastructure.dependencies]
 rnastructure = "==6.4"
@@ -109,13 +111,15 @@ rev = "c82a30460684c7301086d84185a1927b1c256afa"
 
 [feature.ribonanzanet.tasks]
 source = "bash sh/fetch-source.sh ribonanzanet"
+weights = "bash sh/fetch-weight.sh ribonanzanet"
 
 [feature.ribonanzanet.tasks.test]
-depends-on = ["source", "test-model"]
+cmd = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
+depends-on = ["source", "weights"]
 
 [feature.ribonanzanet.tasks.predict]
 cmd = "bash sh/predict.sh ribonanzanet"
-depends-on = ["source"]
+depends-on = ["source", "weights"]
 
 [feature.rinalmo.dependencies]
 python = "3.11.*"
@@ -164,7 +168,8 @@ source = "bash sh/fetch-source.sh ufold"
 weights = "bash sh/fetch-weight.sh ufold"
 
 [feature.ufold.tasks.test]
-depends-on = ["source", "weights", "test-model"]
+cmd = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
+depends-on = ["source", "weights"]
 
 [feature.ufold.tasks.predict]
 cmd = "bash sh/predict.sh ufold"
@@ -186,7 +191,8 @@ scipy = "==1.13.1"
 weights = "bash sh/fetch-weight.sh rna-fm"
 
 [feature.rna-fm.tasks.test]
-depends-on = ["weights", "test-model"]
+cmd = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
+depends-on = ["weights"]
 
 [feature.rna-fm.tasks.predict]
 cmd = "bash sh/predict.sh rna-fm"
@@ -204,8 +210,15 @@ polars = "==1.43.0"
 mxfold2 = { url = "https://github.com/mxfold/mxfold2/releases/download/v0.1.2/mxfold2-0.1.2-cp310-cp310-manylinux_2_17_x86_64.whl" }
 
 [feature.mxfold2.tasks]
-test = { depends-on = ["test-model"] }
-predict = "bash sh/predict.sh mxfold2"
+weights = "bash sh/fetch-weight.sh mxfold2"
+
+[feature.mxfold2.tasks.test]
+cmd = "CUDA_VISIBLE_DEVICES='' python -m pytest -q ../../tests/test_s2d.py"
+depends-on = ["weights"]
+
+[feature.mxfold2.tasks.predict]
+cmd = "bash sh/predict.sh mxfold2"
+depends-on = ["weights"]
 
 [environments]
 default = { features = ["shared"] }

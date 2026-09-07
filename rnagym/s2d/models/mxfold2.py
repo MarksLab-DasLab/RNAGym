@@ -9,6 +9,8 @@ import numpy as np
 import torch
 from mxfold2.predict import Predict
 
+from rnagym.config import Config2D
+
 from .utils import Prediction, decode_pair_probabilities, warn_out_of_range
 
 MODEL_DIR = Path(mxfold2.__file__).parent / "models"
@@ -24,7 +26,9 @@ def _model():
 
     predictor = Predict()
     model, _ = predictor.build_model(args)
-    weights = torch.load(MODEL_DIR / args.param, map_location="cpu")
+    weights = torch.load(
+        Config2D.CHECKPOINT_DIR / "mxfold2" / args.param, map_location="cpu"
+    )
     model.load_state_dict(weights)
     model.eval()
     return model

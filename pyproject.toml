@@ -8,8 +8,12 @@ version = "0.2.0"
 requires-python = ">=3.9"
 
 [tool.setuptools]
-packages = [
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = [
   "rnagym",
+  "rnagym.fitness*",
   "rnagym.s2d",
   "rnagym.s2d.models",
   "rnagym.s2d.tasks",
@@ -21,5 +25,47 @@ packages = [
   "rnagym.tasks",
 ]
 
+[tool.setuptools.package-data]
+"rnagym.fitness" = [
+  "README.md",
+  "baselines/*/*.sh",
+  "baselines/masked_lm/README.md",
+  "pixi.lock",
+  "pixi.toml",
+  "sh/*.sh",
+]
+"rnagym.fitness.baselines.RNAERNIE.src" = ["*.json", "*.txt"]
+
 [tool.distutils.egg_info]
 egg-base = "rnagym/.egg"
+
+[tool.ruff.lint.isort]
+known-first-party = ["rnagym"]
+
+[tool.coverage.run]
+parallel = true
+patch = ["subprocess"]
+source = ["rnagym.fitness"]
+
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["rnagym/fitness"]
+python-interpreter-path = "rnagym/fitness/.pixi/envs/default/bin/python"
+# Model libraries live in separate Pixi environments and are tested by reproduction
+ignore-missing-imports = [
+  "evcouplings.*",
+  "evo.*",
+  "evo2",
+  "flash_attn.*",
+  "fm",
+  "genslm",
+  "huggingface_hub",
+  "modelgenerator.*",
+  "paddle",
+  "paddlenlp.*",
+  "pandas",
+  "rinalmo.*",
+  "safetensors.*",
+  "stripedhyena.*",
+  "transformers",
+]

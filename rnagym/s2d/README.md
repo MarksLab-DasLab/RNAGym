@@ -1,62 +1,40 @@
-# RNAGym secondary structure benchmark
+# Secondary structure benchmark
 
-## Getting started
+RNA secondary structure prediction on the RNAGym datasets in `data/2d/`.
+See the [leaderboard][0] for results.
 
-The datasets are stored under [`../../data/2d/`](../../data/2d/). See the
-[repository-level instructions](../../README.md#resources) to download and extract
-them.
+## Run
 
-## Environments
-
-This directory has isolated [Pixi](https://pixi.sh) environments for the
-secondary structure baselines in RNAGym:
-
-| Environment | Tool |
-| --- | --- |
-| `(default)` | Default env for scripts and processing |
-| `ribonanzanet` | RibonanzaNet |
-| `rinalmo` | RiNALMo |
-| `eternafold` | EternaFold |
-| `contrafold` | CONTRAfold |
-| `vienna` | ViennaRNA |
-| `rnastructure` | RNAstructure |
-| `rna-fm` | RNA-FM |
-| `ufold` | UFold |
-| `mxfold2` | MXfold2 |
-
-Install the environments with `pixi install --all`, then enter an environment
-with `pixi shell -e <name>`, or run a command directly with `pixi run -e <name>
-<command>`.
-
-### Note on source-only neural models
-
-RibonanzaNet, RiNALMo, and UFold use pinned upstream source. Their `source` task
-checks out a pinned upstream commit under `.pixi/model-sources/`, and `test`
-runs this task automatically. For example:
+Complete the [shared data setup][3], then run from `rnagym/s2d/`:
 
 ```bash
-pixi run -e ufold source
-pixi run -e ufold test
-```
-
-Neural model tests fetch verified public weights automatically. RiNALMo requires
-a GPU. The other adapters test one short sequence on CPU.
-
-## Reproducing the predictions
-
-After verifying the contents of `sh/predict.sh` for your cluster, generate
-predictions with a model and save them to
-`../../data/2d/predictions/<model>` with:
-
-```bash
+pixi install
+pixi run -e <env> test
 pixi run -e <env> predict
 ```
 
-To generate the leaderboard from the saved predictions:
+Replace `<env>` with a model environment from [pixi.toml][1]:
 
-```bash
-pixi run leaderboard
-```
+| Environment | Model |
+| --- | --- |
+| `contrafold` | CONTRAfold |
+| `eternafold` | EternaFold |
+| `mxfold2` | MXfold2 |
+| `ribonanzanet` | RibonanzaNet |
+| `rinalmo` | RiNALMo |
+| `rna-fm` | RNA-FM |
+| `rnastructure` | RNAstructure |
+| `ufold` | UFold |
+| `vienna` | ViennaRNA |
 
-This writes the [2D leaderboard](../../leaderboard/2d/README.md) and its
-[detailed scores](../../leaderboard/2d/leaderboard.csv).
+Model sources and public weights are fetched automatically. Checkpoints use
+`RNAGYM_CHECKPOINT_DIR`. RiNALMo tests require a GPU.
+
+Prediction jobs use the Slurm settings in [sh/predict.sh][2]. Outputs go to
+`data/2d/predictions/<model>/`. Once the jobs finish, run `pixi run leaderboard`
+to score the predictions and update the leaderboard CSV and README.
+
+[0]: ../../leaderboard/2d/
+[1]: pixi.toml
+[2]: sh/predict.sh
+[3]: ../../README.md#getting-started
