@@ -1,4 +1,4 @@
-"""Score Evo 1 and 1.5 with a BOS token and mean log probability."""
+"""Score Evo 1 and 1.5 in float32 with a BOS token and mean log probability."""
 
 from __future__ import annotations
 
@@ -38,6 +38,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def prepare_model(model: Any) -> Any:
+    """Use float32 inference to preserve small score differences across GPUs."""
+    from flash_attn.modules.mha import CrossAttention, SelfAttention
+
+    # BF16 rounding changes variant rankings, and FP16 overflows for both checkpoints
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    model.float()
+    for block in model.blocks:
+        if hasattr(block, "inner_mha_cls"):
+            attention = block.inner_mha_cls
+            attention.use_flash_attn = False
+            attention.inner_attn = SelfAttention(causal=True)
+            attention.inner_cross_attn = CrossAttention(causal=True)
+    return model
+
+
 def run(
     args: argparse.Namespace, model_factory: Callable[..., Any] | None = None
 ) -> None:
@@ -69,7 +86,7 @@ def run(
 
                 model_factory = load_evo
             checkpoint = model_factory(args.model_name)
-            checkpoint.model.to(device).eval()
+            prepare_model(checkpoint.model.to(device)).eval()
         model = checkpoint.model
         scores = run_inference(
             model, checkpoint.tokenizer, sequences, device, 128
@@ -87,9 +104,11 @@ def run(
 def run_inference(
     model: Any, tokenizer: Any, sequences: list[str], device: str, batch_size: int
 ) -> np.ndarray:
-    """Return nucleotide log probabilities in input order, excluding BOS."""
+    """Return float32 nucleotide log probabilities in input order, excluding BOS."""
     from evo.scoring import logits_to_logprobs, prepare_batch
 
+    # Bound unfused attention memory for the longer coding assays
+    batch_size = min(batch_size, max(1, 4096 // (len(sequences[0]) + 1)))
     batches = []
     for start in tqdm(range(0, len(sequences), batch_size), desc="Scoring"):
         inputs, _ = prepare_batch(

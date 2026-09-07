@@ -722,3 +722,116 @@ def test_checkpoint_download(tmp_path, monkeypatch):
     with pytest.raises(FileNotFoundError):
         checkpoints.evo2_checkpoint("evo2_40b")
     assert list(merged.parent.iterdir()) == [merged.with_suffix(".lock")]
+
+
+def test_genslm_causal_likelihood(tmp_path, monkeypatch):
+    """Check causal targets, score direction, padding and validation independently."""
+    from scipy.special import logsumexp
+
+    from rnagym.fitness.baselines.GenSLM import compute_fitness as genslm
+
+    class TokenDataset(torch.utils.data.Dataset):
+        def __init__(self, sequences, length, tokenizer):
+            self.sequences = sequences
+            self.length = length
+
+        def __getitem__(self, index):
+            sequence = self.sequences[index]
+            ids = [
+                sum("ACGT".index(base) for base in sequence[start : start + 3])
+                for start in range(0, len(sequence), 3)
+            ]
+            return {
+                "input_ids": torch.tensor(ids + [0] * (self.length - len(ids))),
+                "attention_mask": torch.tensor(
+                    [1] * len(ids) + [0] * (self.length - len(ids))
+                ),
+            }
+
+        def __len__(self):
+            return len(self.sequences)
+
+    class TokenModel(torch.nn.Module):
+        seq_length = 40
+        tokenizer = SimpleNamespace(num_special_tokens_to_add=lambda: 0)
+
+        def forward(self, input_ids, attention_mask, output_hidden_states):
+            assert not output_hidden_states
+            logits = torch.sin(input_ids[..., None] + torch.arange(10).float())
+            return SimpleNamespace(logits=logits)
+
+    monkeypatch.setitem(
+        sys.modules, "genslm", SimpleNamespace(SequenceDataset=TokenDataset)
+    )
+    assay_dir = tmp_path / "assays"
+    assay_dir.mkdir()
+    name = "Tome_2014_GFP_aptamer"
+    assay_file = assay_dir / f"{name}.csv"
+    assay = pl.read_csv(ASSAY_DIR / assay_file.name)
+    assay.write_csv(assay_file)
+    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", assay_dir)
+    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", REFERENCE_FILE)
+    args = genslm.parse_args(shlex.split(f"--rows 2 --output {tmp_path / 'scores'}"))
+    shutil.copy2(ASSAY_DIR / ASSAY_NAMES[1], assay_dir / ASSAY_NAMES[1])
+    loads = []
+
+    def load_model(*args, **kwargs):
+        loads.append(TokenModel())
+        return loads[-1]
+
+    args.rows = "1-2"
+    genslm.main(args, load_model)
+    assert len(loads) == 1
+    assert pl.read_csv(args.output / ASSAY_NAMES[1]).height == 4175
+    args.rows = "2"
+    result_file = args.output / assay_file.name
+    result = pl.read_csv(result_file)
+    expected = []
+    for sequence in assay["sequence"]:
+        ids = np.array(
+            [
+                sum("ACGU".index(base) for base in sequence[start : start + 3])
+                for start in range(0, len(sequence), 3)
+            ]
+        )
+        logits = np.sin(ids[:, None] + np.arange(10))
+        expected.append(
+            np.mean(
+                logits[np.arange(len(ids) - 1), ids[1:]]
+                - logsumexp(logits[:-1], axis=1)
+            )
+        )
+    np.testing.assert_allclose(result["logit_scores"], expected, rtol=3e-7)
+    assert_frame_equal(result.select(assay.columns), assay)
+    assert not result["mutated_sequence"].str.contains("U").any()
+
+    # Real assay sequences with different lengths exercise padding in the same batch
+    sequences = [
+        pl.read_csv(ASSAY_DIR / name)["sequence"][0].replace("U", "T")
+        for name in ASSAY_NAMES
+    ]
+    TokenModel.seq_length = 512
+    individual = np.concatenate(
+        [
+            genslm.sequence_log_likelihoods(TokenModel(), [sequence], "cpu")
+            for sequence in sequences
+        ]
+    )
+    batched = genslm.sequence_log_likelihoods(TokenModel(), sequences, "cpu")
+    np.testing.assert_allclose(batched, individual, rtol=2e-7)
+    for short in (["ACG"], [sequences[0], "ACG"]):
+        with pytest.raises(ValueError, match="at least two tokens"):
+            genslm.sequence_log_likelihoods(TokenModel(), short, "cpu")
+    with pytest.raises(ValueError, match="only A, C, G and T"):
+        genslm.sequence_log_likelihoods(TokenModel(), ["ACGTNN"], "cpu")
+    original = result_file.read_bytes()
+    TokenModel.seq_length = 2
+    with pytest.raises(ValueError, match="input length limit"):
+        genslm.main(args, lambda *args, **kwargs: TokenModel())
+    assert result_file.read_bytes() == original
+    assay.with_columns(pl.lit(None, dtype=pl.String).alias("sequence")).write_csv(
+        assay_file
+    )
+    with pytest.raises(ValueError, match="missing or empty sequences"):
+        genslm.main(args, lambda *args, **kwargs: TokenModel())
+    assert result_file.read_bytes() == original

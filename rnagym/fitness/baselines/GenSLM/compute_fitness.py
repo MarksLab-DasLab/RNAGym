@@ -1,177 +1,137 @@
+"""Score GenSLM with mean next-codon log likelihood, excluding padding."""
+
+from __future__ import annotations
+
 import argparse
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import torch
-import torch.nn as nn
-from genslm import GenSLM, SequenceDataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from rnagym.config import ConfigFitness
+from rnagym.fitness.data import (
+    parse_row_ids,
+    read_assay,
+    read_reference,
+    write_csv_atomically,
+)
 
 
-def get_sequences(wt_sequence, df):
-    # Function to apply a single mutation
-    def apply_mutation(sequence, mutation):
-        sequence = sequence.replace("U", "T")
-        possible_bases = ["A", "T", "C", "G", "N", ""]
-        mutation = mutation.replace(" ", "")
-        pos = int(mutation[1:-1]) - 1  # Get the position, 1-based to 0-based index
-        new_base = mutation[-1]  # Get the new base
-        old_base = mutation[0]
-        old_base = "T" if old_base == "U" else old_base
-        new_base = "T" if new_base == "U" else new_base
+def main(
+    args: argparse.Namespace | None = None,
+    model_factory: Callable[..., Any] | None = None,
+) -> None:
+    """Load GenSLM once and score the selected assays."""
+    args = args or parse_args()
+    reference = read_reference(ConfigFitness.REFERENCE_FILE)
+    row_ids = parse_row_ids(args.rows)
+    if any(row >= reference.height for row in row_ids):
+        raise ValueError(f"Rows {row_ids} fall outside the reference sheet")
+    if model_factory is None:
+        from genslm import GenSLM
 
-        assert old_base in possible_bases, mutation
-        assert new_base in possible_bases, mutation
-
-        if old_base == "N":
-            # This is going to be an insertion
-            mutated_sequence = sequence[: pos + 1] + new_base + sequence[pos + 1 :]
-        elif new_base == "":
-            # This is going to be a deletion
-            mutated_sequence = sequence[:pos] + sequence[pos + 1 :]
-        else:
-            # This is a substitution
-            assert old_base == sequence[pos], mutation
-            mutated_sequence = sequence[:pos] + new_base + sequence[pos + 1 :]
-
-        return mutated_sequence
-
-    # Function to apply multiple mutations
-    def apply_mutations(sequence, mutations):
-        for mutation in mutations.split(","):
-            sequence = apply_mutation(sequence, mutation)
-        return sequence
-
-    # Determine which column to use for mutations
-    mutation_column = (
-        "mutant"
-        if "mutant" in df.columns
-        else "mutation"
-        if "mutation" in df.columns
-        else "mutations"
-        if "mutations" in df.columns
-        else None
-    )
-    if mutation_column:
-        # Apply the mutations to create a new column with mutated sequences
-        df["mutated_sequence"] = df[mutation_column].apply(
-            lambda x: apply_mutations(wt_sequence, x)
-        )
-    else:
-        raise ValueError("No 'mutant' or 'mutation' column found in the DataFrame")
-
-    return df
-
-
-def process_single_row(row, model, device, base_dir, results_dir, score_column):
-    dataset = row["DMS_ID"]
-    df_path = base_dir / f"{dataset}.csv"
-    df = pd.read_csv(df_path)
-    df.columns = df.columns.str.lower()
-    df.dropna(subset=["mutant", "sequence"], inplace=True)
-    df = df.loc[:, ~df.columns.duplicated()]
-    wt_seq = row["RAW_CONSTRUCT_SEQ"].upper()
-    try:
-        sequences = get_sequences(wt_seq, df)
-    except AssertionError as error:
-        raise ValueError(f"Invalid mutation {error} in {dataset}") from error
-
-    output_file = results_dir / f"{dataset}.csv"
-
-    seq_length = min(
-        model.seq_length, sequences["mutated_sequence"].str.len().max() + 2
-    )
-    if model.seq_length < sequences["mutated_sequence"].str.len().max() + 2:
-        print("warning: max str length exceeded")
-    sequence_dataset = SequenceDataset(
-        sequences["mutated_sequence"], seq_length, model.tokenizer
-    )
-    dataloader = DataLoader(sequence_dataset, batch_size=4)
-
-    loss_fn = nn.CrossEntropyLoss(reduction="none")
-    losses = []
-    with torch.no_grad():
-        for batch in tqdm(dataloader):
-            outputs = model(
-                batch["input_ids"].to(device),
-                batch["attention_mask"].to(device),
-                output_hidden_states=True,
-            )
-            loss = (
-                loss_fn(outputs.logits.cpu().permute((0, 2, 1)), batch["input_ids"])
-                * batch["attention_mask"].squeeze(1)
-            ).sum(1)
-            losses.append(loss)
-    losses = np.concatenate(losses)
-
-    sequences[score_column] = losses
-    sequences.to_csv(output_file, index=False)
-
-
-def main(args):
-    Path(args.output_directory).mkdir(parents=True, exist_ok=True)
-
-    reference = pd.read_csv(args.reference_sheet, encoding="utf-8-sig")
-    required = {"DMS_ID", "RAW_CONSTRUCT_SEQ"}
-    missing = sorted(required - set(reference.columns))
-    if missing:
-        raise ValueError(f"{args.reference_sheet} is missing columns: {missing}")
-    if not 0 <= args.task_id < len(reference):
-        raise ValueError(
-            f"Task ID {args.task_id} is outside the reference sheet's "
-            f"0..{len(reference) - 1} range"
-        )
-    row = reference.iloc[args.task_id]
-    if row[list(required)].isna().any():
-        raise ValueError(f"Reference row {args.task_id} has missing required values")
-
-    model = GenSLM(
+        model_factory = GenSLM
+    model = model_factory(
         "genslm_2.5B_patric",
-        model_cache_dir=str(args.checkpoint_dir / "2.5B"),
+        model_cache_dir=str(ConfigFitness.CHECKPOINT_DIR / "genslm/2.5B"),
     )
-    model.eval()
-
-    # Select GPU device if it is available, else use CPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
+    model = model.to(device).eval()
+    for row in row_ids:
+        process_single_row(
+            reference.row(row, named=True),
+            model,
+            device,
+            ConfigFitness.ASSAY_DIR,
+            args.output,
+            "logit_scores",
+        )
 
-    process_single_row(
-        row,
-        model,
-        device,
-        args.dms_directory,
-        args.output_directory,
-        "logit_scores",
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse the assays and output directory."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
     )
+    parser.add_argument(
+        "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "GenSLM"
+    )
+    return parser.parse_args(argv)
+
+
+def process_single_row(
+    row: dict[str, str],
+    model: Any,
+    device: str,
+    base_dir: Path,
+    results_dir: Path,
+    score_column: str,
+) -> None:
+    """Score an assay with higher values indicating greater sequence likelihood."""
+    name = row["DMS_ID"]
+    assay = read_assay(base_dir / f"{name}.csv").drop_nulls("mutant")
+    raw = assay["sequence"]
+    if assay.is_empty() or raw.is_null().any() or raw.str.strip_chars().eq("").any():
+        raise ValueError(f"{name} has missing or empty sequences")
+    sequences = (
+        raw.str.strip_chars().str.to_uppercase().str.replace_all("U", "T").to_list()
+    )
+    scores = sequence_log_likelihoods(model, sequences, device)
+    result = assay.with_columns(
+        pl.Series("mutated_sequence", sequences), pl.Series(score_column, scores)
+    )
+    write_csv_atomically(result, results_dir / f"{name}.csv")
+
+
+def sequence_log_likelihoods(
+    model: Any, sequences: list[str], device: str, batch_size: int = 4
+) -> np.ndarray:
+    """Return mean causal log likelihoods using the official codon tokenizer.
+
+    Each logit predicts the following token. The first token has no prediction,
+    and padding is excluded from both the loss and its denominator. This equals
+    the negative native model loss for an unpadded sequence.
+    """
+    from genslm import SequenceDataset
+
+    if batch_size < 1 or not sequences:
+        raise ValueError("Scoring requires sequences and a positive batch size")
+    if any(not sequence or set(sequence) - set("ACGT") for sequence in sequences):
+        raise ValueError("GenSLM sequences must contain only A, C, G and T")
+    max_length = max(map(len, sequences))
+    token_count = (max_length + 2) // 3 + model.tokenizer.num_special_tokens_to_add()
+    if token_count > model.seq_length:
+        raise ValueError("Sequence exceeds the published GenSLM input length limit")
+    if token_count < 2:
+        raise ValueError("GenSLM requires at least two tokens per sequence")
+    dataset = SequenceDataset(sequences, token_count, model.tokenizer)
+    batches = []
+    with torch.inference_mode():
+        for batch in tqdm(DataLoader(dataset, batch_size=batch_size), desc="Scoring"):
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].squeeze(1).to(device)
+            targets = input_ids[:, 1:].masked_fill(~attention_mask[:, 1:].bool(), -100)
+            counts = attention_mask[:, 1:].sum(1)
+            if (counts == 0).any():
+                raise ValueError("GenSLM requires at least two tokens per sequence")
+            output = model(input_ids, attention_mask, output_hidden_states=False)
+            loss = torch.nn.functional.cross_entropy(
+                output.logits[:, :-1].float().permute(0, 2, 1),
+                targets,
+                reduction="none",
+            )
+            batches.append((-loss.sum(1) / counts).cpu().numpy())
+    scores = np.concatenate(batches)
+    if not np.isfinite(scores).all():
+        raise FloatingPointError("GenSLM produced nonfinite model scores")
+    return scores
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--reference_sheet", type=Path, default=ConfigFitness.REFERENCE_FILE
-    )
-    parser.add_argument("--task_id", type=int, required=True)
-    parser.add_argument(
-        "--checkpoint_dir",
-        type=Path,
-        required=True,
-        help="GenSLM checkpoints directory",
-    )
-    parser.add_argument(
-        "--dms_directory",
-        type=Path,
-        default=ConfigFitness.ASSAY_DIR,
-        help="Directory containing the mutational datasets to be scored",
-    )
-    parser.add_argument(
-        "--output_directory",
-        type=Path,
-        default=ConfigFitness.PREDICTION_DIR / "GenSLM",
-        help="Directory for scored fitness files",
-    )
-    args = parser.parse_args()
-    main(args)
+    main()

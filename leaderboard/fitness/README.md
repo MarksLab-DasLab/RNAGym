@@ -17,15 +17,15 @@ equally. Higher is better.
 | 9 | RiNALMo | -0.0243 | 0.4856 | 0.0459 | 0.1690 |
 | 10 | AIDO.RNA (300M) | -0.0256 | 0.4551 | 0.0372 | 0.1556 |
 | 11 | AIDO.RNA (25M) | -0.0299 | 0.4569 | 0.0348 | 0.1540 |
-| 12 | Evo 1.5 | 0.0278 | 0.3850 | 0.0007 | 0.1378 |
+| 12 | Evo 1.5 | 0.0291 | 0.3849 | -0.0010 | 0.1377 |
 | 13 | Nucleotide Transformer v3 (8M) | -0.0111 | 0.3053 | 0.0988 | 0.1310 |
 | 14 | RNA-FM | -0.0225 | 0.4147 | -0.0043 | 0.1293 |
 | 15 | Nucleotide Transformer v3 (650M) | -0.0240 | 0.3518 | 0.0436 | 0.1238 |
 | 16 | Nucleotide Transformer v3 (100M) | -0.0174 | 0.2544 | 0.1001 | 0.1124 |
 | 17 | AIDO.RNA (1M) | 0.0014 | 0.1777 | 0.0626 | 0.0806 |
 | 18 | Orthrus | -0.0349 | 0.0922 | 0.1578 | 0.0717 |
-| 19 | Evo 1 | -0.0216 | 0.0948 | 0.0058 | 0.0263 |
-| 20 | GenSLM | -0.0045 | -0.0934 | -0.0036 | -0.0338 |
+| 19 | GenSLM (2.5B) | -0.0134 | 0.1002 | 0.0620 | 0.0496 |
+| 20 | Evo 1 | -0.0275 | 0.0989 | 0.0300 | 0.0338 |
 
 [Full precision CSV][0]. Small differences should be read cautiously, especially
 with only three tRNA and two aptamer assays. Coding and splicing assays are
@@ -37,8 +37,11 @@ Masked language models use `wt-fill`: mask each mutated position in the wild-typ
 sequence and sum `log p(mutant) - log p(wild type)`. This follows the [ESM][1]
 and [ProteinGym][2] implementations. All four [fill strategies][3] are available
 in the prediction files. RNA-ERNIE uses unmasked wild-type probability changes.
+GenSLM uses mean next-codon log likelihood, excluding padding.
 
-Evo2 FP8 scores can vary slightly across GPUs.
+GenSLM 2.5B, Evo 1 and Evo 1.5 were regenerated on September 6, 2026.
+The public archive still contains earlier scores. Evo2 FP8 scores can vary
+slightly across GPUs.
 
 ## Reproduce
 

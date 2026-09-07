@@ -22,6 +22,9 @@ Data defaults to `data/fitness/`. Set `RNAGYM_DATA_DIR` to another parent data
 directory if needed. Checkpoints are shared under `/n/lw_groups/marks/ckpt/<model>`.
 Set `RNAGYM_CHECKPOINT_DIR` to use another location.
 
+GenSLM 2.5B, Evo 1 and Evo 1.5 were regenerated on September 6, 2026.
+The public prediction archive still contains their earlier scores.
+
 ## Run
 
 From `rnagym/fitness/`:
@@ -44,8 +47,9 @@ Gated checkpoints require access. Download the [GenSLM 2.5B checkpoint][3] to
 `genslm/2.5B/` under the checkpoint root. EVmutation uses Riboseek MSAs under
 `data/fitness/msa/by_assay/` and leaves uncovered variants unscored.
 
-Evo2 FP8 scores can vary slightly across GPUs.
-Masked models compute all four [fill strategies][4], with
+Evo2 FP8 scores can vary slightly across GPUs. GenSLM, Evo1 and Evo1.5 use
+float32 for reproducibility. GenSLM reports mean next-codon log likelihood,
+excluding padding. Masked models compute all four [fill strategies][4], with
 `wt-fill` used for the leaderboard.
 
 ## Quality checks
