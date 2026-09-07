@@ -336,7 +336,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             family = MODEL_FAMILIES[args.environment]
             if family.native_test:
                 run_command(
-                    f"{shlex.quote(sys.executable)} -m pytest -q tests/fitness_model_checks.py::{family.native_test}",
+                    f"{shlex.quote(sys.executable)} -m pytest -q tests/test_fitness.py::{family.native_test}",
                     ConfigFitness.REPO_DIR,
                     deadline,
                 )

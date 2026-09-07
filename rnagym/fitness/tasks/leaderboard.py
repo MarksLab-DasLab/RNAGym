@@ -58,7 +58,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Wrote fitness tables to {args.output}")
 
 
-def render_table(table: pl.DataFrame, coverage: pl.DataFrame, partial: bool) -> str:
+def render_table(table: pl.DataFrame, coverage: pl.DataFrame) -> str:
     """Format category means, marking the baseline's partial coverage in the main table."""
     headers = [
         f"{name} (n={coverage.filter(pl.col('RNA_TYPE') == name).height})"
@@ -70,7 +70,7 @@ def render_table(table: pl.DataFrame, coverage: pl.DataFrame, partial: bool) -> 
     ]
     for rank, row in enumerate(table.iter_rows(named=True), 1):
         model = MODEL_LABELS[row["model"]]
-        if partial and row["model"] == "EVmutation":
+        if row["model"] == "EVmutation":
             model += "*"
         values = [
             "-" if row[column] is None else f"{row[column]:.4f}"
@@ -87,11 +87,11 @@ def write_tables(reports: Path, output: Path) -> None:
     covered = coverage.filter(pl.col("evaluated_variants") > 0)
     variants = int(coverage["evaluated_variants"].sum())
     total = int(coverage["variants"].sum())
-    blocks = []
+    generated = ""
     output.mkdir(parents=True, exist_ok=True)
-    for directory, filename, subset in (
-        (reports, "leaderboard_signed_3ncRNA.csv", coverage),
-        (reports / "evmutation", "leaderboard_evmutation.csv", covered),
+    for directory, filename in (
+        (reports, "leaderboard_signed_3ncRNA.csv"),
+        (reports / "evmutation", "leaderboard_evmutation.csv"),
     ):
         table = (
             pl.read_csv(directory / "results_by_rna_type.csv")
@@ -103,17 +103,14 @@ def write_tables(reports: Path, output: Path) -> None:
             .sort("macro_3ncRNA", descending=True, nulls_last=True)
         )
         table.write_csv(output / filename)
-        blocks.append(render_table(table, subset, partial=directory == reports))
+        if directory == reports:
+            generated = render_table(table, coverage)
     coverage.write_csv(output / "evmutation_coverage.csv")
-    generated = (
-        blocks[0]
-        + f"\n\n\\* EVmutation scores {covered.height}/{coverage.height} assays and "
+    generated += (
+        f"\n\n\\* EVmutation scores {covered.height}/{coverage.height} assays and "
         + f"{variants:,}/{total:,} variants ({variants / total:.1%}). "
-        + "Its row uses those variants. [Coverage by assay][5].\n\n"
-        + "### EVmutation-covered variants\n\n"
-        + f"All models use the same {variants:,} variants from {covered.height} assays. "
-        + "[Full precision CSV][6].\n\n"
-        + blocks[1]
+        + "Its row uses those variants. [Coverage by assay][5]. "
+        + "[Compare all models on those variants][6]."
     )
     readme = output / "README.md"
     start, end = "<!-- BEGIN GENERATED TABLES -->", "<!-- END GENERATED TABLES -->"

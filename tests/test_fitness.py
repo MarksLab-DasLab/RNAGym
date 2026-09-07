@@ -1,1218 +1,174 @@
-"""Reproduce the fitness workflow on complete released assays."""
+"""Reproduce fitness evaluation and model scoring on real assay variants."""
 
-import hashlib
-import json
 import os
 import shlex
-import subprocess
 import sys
-import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import polars as pl
 import pytest
-import torch
-from fitness_fixtures import (
-    ASSAY_DIR,
-    ASSAY_NAMES,
-    FIXTURE_DIR,
-    PREDICTION_DIR,
-    REFERENCE_FILE,
-    REPOSITORY,
-)
-from fitness_fixtures import (
-    fitness_data as fitness_data,
-)
 from polars.testing import assert_frame_equal
 
 from rnagym.config import ConfigFitness
-from rnagym.fitness.baselines.Evo import score_evo2_single_dms as evo2
-from rnagym.fitness.baselines.masked_lm import (
-    MASK_CHAR,
-    MaskedLMAdapter,
-    accumulate_scores,
-    build_tasks,
-    parse_mutations,
-    runner,
-    window_contexts,
-)
-from rnagym.fitness.baselines.masked_lm.engine import pad_contexts
-from rnagym.fitness.baselines.masked_lm.strategies import validate_table
-from rnagym.fitness.baselines.Nucleotide_Transformer.compute_fitness import NTv3Adapter
-from rnagym.fitness.data import read_reference
-from rnagym.fitness.tasks import (
-    analyze_fill_strategies,
-    check_published,
-    leaderboard,
-    merge_scoring_files,
-    performance_fitness,
-)
-from rnagym.fitness.tasks.merge_scoring_files import combine_csv_data
-from rnagym.fitness.tasks.model_registry import (
-    CHECKPOINT_REVISIONS,
-    SCORE_COLS,
-    checkpoint_revision,
-)
-from rnagym.fitness.tasks.performance_fitness import get_performance_dataset
+from rnagym.fitness.tasks.model_registry import SCORE_COLS, resolve_source
 
-EXPECTED_FILES = (
-    "results_by_rna_type.csv",
-    "results_by_mutation_depth.csv",
-    "results_by_rna_type_and_depth.csv",
-    "assay_level_results.csv",
-    "assay_level_results_transposed.csv",
-    "fill_strategy_per_assay.csv",
-    "fill_strategy_macro.csv",
-)
-MODEL_NAMES = tuple(f"rna_fm_{strategy}" for strategy in runner.STRATEGIES)
-PREDICTION_COLUMNS = {
-    f"rna_fm_{strategy}_score": f"RNA_FM_scores_{strategy}"
-    for strategy in runner.STRATEGIES
-}
-VOCAB = {
-    token: index
-    for index, token in enumerate(
-        ("<pad>", "<cls>", "<eos>", "<mask>", "A", "C", "G", "U", "N")
-    )
-}
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "fitness"
+MODEL = os.environ.get("PIXI_ENVIRONMENT_NAME")
 
 
-class FixtureAdapter(MaskedLMAdapter):
-    """Checkpoint-free adapter whose logits depend on the complete context."""
-
-    name = "fixture masked LM"
-    bases = "ACGU"
-    n_special_tokens = 2
-    score_column = "RNA_FM_scores"
-
-    def __init__(self):
-        self.base_ids = {base: VOCAB[base] for base in self.bases}
-        self.device = "cpu"
-        self.mask_id = VOCAB["<mask>"]
-        self.pad_id = VOCAB["<pad>"]
-        self.prefix_ids = [VOCAB["<cls>"]]
-        self.suffix_ids = [VOCAB["<eos>"]]
-        self.unk_id = VOCAB["N"]
-
-    @staticmethod
-    def add_arguments(parser):
-        """The fixture has no model-specific arguments."""
-
-    def load(self, args):
-        """Use the device selected by the shared runner."""
-        self.device = args.device
-        self.loads = getattr(self, "loads", 0) + 1
-
-    def logits_at(self, input_ids, attention_mask, rows, cols):
-        """Return deterministic context- and base-dependent logits."""
-        positions = torch.arange(1, input_ids.shape[1] + 1, device=self.device)
-        context = (input_ids * positions).sum(dim=1)[rows, None]
-        vocab = torch.arange(len(VOCAB), device=self.device)[None, :]
-        logits = context * (vocab + 1) + cols[:, None] * (vocab + 2)
-        return torch.remainder(logits, 23).float() / 4
-
-
-class NonfiniteAdapter(FixtureAdapter):
-    """Adapter that simulates a numerically failed model forward pass."""
-
-    def logits_at(self, input_ids, attention_mask, rows, cols):
-        logits = super().logits_at(input_ids, attention_mask, rows, cols)
-        return torch.full_like(logits, torch.nan)
-
-
-class LimitedFixtureAdapter(FixtureAdapter):
-    """Fixture adapter with a deliberately small position limit."""
-
-    max_tokens = 20
-
-
-class PaddedFixtureAdapter(FixtureAdapter):
-    """Fixture adapter that requires 128-position contexts."""
-
-    context_pad_char = "N"
-
-    def context_length_for(self, length):
-        return 128
-
-
-def run_cli(entry_point, command):
-    """Run a package command line entry point in the current process."""
-    entry_point(shlex.split(command))
-
-
-def fixture_log_probs(adapter, context, position):
-    """Score one masked position without the shared batching engine."""
-    input_ids = torch.tensor([adapter.encode_context(context, MASK_CHAR)])
-    logits = adapter.logits_at(
-        input_ids,
-        torch.ones_like(input_ids),
-        torch.tensor([0]),
-        torch.tensor([adapter.token_position(position)]),
-    )
-    return torch.log_softmax(logits.float(), dim=-1)[0].numpy()
-
-
-def masked(sequence, positions):
-    """Replace selected sequence positions with the fixture mask."""
-    context = list(sequence)
-    for position in positions:
-        context[position] = MASK_CHAR
-    return "".join(context)
-
-
-def test_checkpoint_download(tmp_path, monkeypatch):
-    for model in CHECKPOINT_REVISIONS:
-        revision = checkpoint_revision(model)
-        assert revision is not None and len(revision) == 40
-        assert set(revision) <= set("0123456789abcdef")
-    with pytest.raises(ValueError, match="Unpinned checkpoint"):
-        checkpoint_revision("unregistered/model")
-    local_model = tmp_path / "local checkpoint"
-    local_model.mkdir()
-    assert checkpoint_revision(str(local_model)) is None
-
-    source = ASSAY_DIR / ASSAY_NAMES[0]
-    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
-    destination = tmp_path / "shared checkpoints" / "model" / "weights.csv"
-    helper = REPOSITORY / "rnagym/sh/weights.sh"
-    shell = 'source "$1" && download "$2" "$3" "$4"'
-    command = (
-        f"bash -c {shlex.quote(shell)} checkpoint-download {shlex.quote(str(helper))} "
-        f"{shlex.quote(source.resolve().as_uri())} {shlex.quote(str(destination))} {checksum}"
-    )
-    environment = {**os.environ, "RNAGYM_CHECKPOINT_DIR": str(destination.parents[1])}
-    with subprocess.Popen(shlex.split(command), env=environment) as first:
-        with subprocess.Popen(shlex.split(command), env=environment) as second:
-            assert first.wait(timeout=20) == second.wait(timeout=20) == 0
-    assert destination.read_bytes() == source.read_bytes()
-    assert destination.stat().st_mode & 0o044 == 0o044
-    failed = subprocess.run(
-        shlex.split(command.replace(checksum, "0" * 64)),
-        env=environment,
-        check=False,
-        timeout=20,
-    )
-    assert failed.returncode != 0
-    assert destination.read_bytes() == source.read_bytes()
-    assert list(destination.parent.iterdir()) == [destination]
-
-    from rnagym.fitness.baselines.Evo import checkpoints
-
-    content = source.read_bytes()
-    split = len(content) // 2
-    parts = [tmp_path / f"part{index}" for index in range(2)]
-    for path, data in zip(parts, (content[:split], content[split:])):
-        path.write_bytes(data)
-    monkeypatch.setattr(
-        checkpoints,
-        "EVO2_40B_PARTS",
-        tuple(
-            (p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest())
-            for p in parts
-        ),
-    )
-    monkeypatch.setattr(ConfigFitness, "CHECKPOINT_DIR", tmp_path / "checkpoints")
-    downloads = []
-
-    def download_part(repo_id, filename, revision):
-        assert repo_id == "arcinstitute/evo2_40b"
-        assert revision == "d529aa57c30771814217ad89baaeaf6e2315c7d7"
-        downloads.append(filename)
-        return str(parts[int(filename.rsplit("part", 1)[1])])
-
-    monkeypatch.setitem(
-        sys.modules,
-        "huggingface_hub",
-        SimpleNamespace(hf_hub_download=download_part),
-    )
-    merged = Path(checkpoints.evo2_checkpoint("evo2_40b"))
-    assert merged.read_bytes() == content
-    assert downloads == ["evo2_40b.pt.part0", "evo2_40b.pt.part1"]
-    assert checkpoints.evo2_checkpoint("evo2_40b") == str(merged)
-    assert len(downloads) == 2
-    for corrupted in (b"X" + content[1:], content[:-1], content + b"X"):
-        merged.write_bytes(corrupted)
-        with pytest.raises(ValueError, match="checksum|Truncated|trailing"):
-            checkpoints.evo2_checkpoint("evo2_40b")
-        assert merged.read_bytes() == corrupted
-    merged.unlink()
-    parts[1].unlink()
-    with pytest.raises(FileNotFoundError):
-        checkpoints.evo2_checkpoint("evo2_40b")
-    assert list(merged.parent.iterdir()) == [merged.with_suffix(".lock")]
-
-
-@pytest.mark.filterwarnings("ignore:An input array is constant")
-@pytest.mark.filterwarnings("ignore:Only one class is present in y_true")
-def test_fitness_workflow(fitness_data, tmp_path):
-    """Reproduce the benchmark workflow from released RNA-FM predictions."""
-    merged_dir = tmp_path / "merged"
-    performance_dir = tmp_path / "performance"
-    analysis_dir = tmp_path / "analysis"
-    merged_dir.mkdir()
-    (merged_dir / "stale.csv").write_text("stale\n")
-
-    models = " ".join(MODEL_NAMES)
-    run_cli(
-        merge_scoring_files.main,
-        f"--output {merged_dir} --models {models}",
-    )
-    assert not (merged_dir / "stale.csv").exists()
-
-    # Missing assays and partial predictions must leave existing results intact
-    saved_merged = {path: path.read_bytes() for path in merged_dir.glob("*.csv")}
-    prediction_file = fitness_data / "model_predictions/rna_fm_4fill" / ASSAY_NAMES[1]
-    predictions = pl.read_csv(prediction_file)
-    for error in (FileNotFoundError, ValueError):
-        if error is FileNotFoundError:
-            prediction_file.unlink()
-        else:
-            predictions.head(-1).write_csv(prediction_file)
-        with pytest.raises(error):
-            run_cli(
-                merge_scoring_files.main, f"--output {merged_dir} --models {models}"
-            )
-        assert all(
-            path.read_bytes() == content for path, content in saved_merged.items()
-        )
-    predictions.write_csv(prediction_file)
-    run_cli(
-        performance_fitness.cli,
-        f"--input {merged_dir} --output {performance_dir} --models {models}",
-    )
-
-    for assay_name in ASSAY_NAMES:
-        assay = pl.read_csv(ASSAY_DIR / assay_name).drop_nulls("mutant")
-        prediction = pl.read_csv(PREDICTION_DIR / assay_name).drop_nulls("mutant")
-        merged = pl.read_csv(merged_dir / assay_name)
-        assert_frame_equal(merged.select(assay.columns), assay, check_exact=True)
-        for merged_column, prediction_column in PREDICTION_COLUMNS.items():
-            np.testing.assert_allclose(
-                merged[merged_column], prediction[prediction_column], rtol=0, atol=1e-14
-            )
-    run_cli(
-        analyze_fill_strategies.main,
-        f"--output {analysis_dir}",
-    )
-    for result_file in EXPECTED_FILES:
-        result_dir = (
-            analysis_dir if result_file.startswith("fill_strategy") else performance_dir
-        )
-        observed = pl.read_csv(result_dir / result_file)
-        expected = pl.read_csv(FIXTURE_DIR / "expected" / result_file)
-        assert_frame_equal(
-            observed, expected, check_exact=False, rel_tol=0, abs_tol=1e-10
-        )
-
-    leaderboard_models = set(
-        pl.read_csv(
-            REPOSITORY / "leaderboard" / "fitness" / "leaderboard_signed_3ncRNA.csv"
-        )["model"]
-    )
-    assert leaderboard_models <= set(SCORE_COLS)
-
-    # Undefined assay correlations must not disappear from the category average
-    assay_file = merged_dir / ASSAY_NAMES[0]
-    original = pl.read_csv(assay_file)
-    saved_results = {path: path.read_bytes() for path in performance_dir.glob("*.csv")}
-    score_column = next(iter(PREDICTION_COLUMNS))
-    for invalid in (
-        original.with_columns(pl.lit(0.0).alias(score_column)),
-        *(
-            original.with_columns(original[score_column].scatter([0], value))
-            for value in (np.inf, np.nan, None)
-        ),
-        original.with_columns(pl.lit(0.0).alias("DMS_score")),
-        original.head(0),
-        original.drop(score_column),
+@pytest.fixture
+def fitness_data(tmp_path, monkeypatch):
+    """Write the fixture tables in the format used by the prediction commands."""
+    for name, path in {
+        "DATA_DIR": tmp_path,
+        "ASSAY_DIR": tmp_path / "assays",
+        "COMBINED_DIR": tmp_path / "merged",
+        "LEADERBOARD_DIR": tmp_path / "leaderboard",
+        "MSA_DIR": tmp_path / "msa",
+        "PREDICTION_DIR": tmp_path / "predictions",
+        "REFERENCE_FILE": FIXTURE_DIR / "reference.csv",
+    }.items():
+        monkeypatch.setattr(ConfigFitness, name, path)
+    ConfigFitness.ASSAY_DIR.mkdir()
+    for (name,), assay in pl.read_parquet(FIXTURE_DIR / "assays.parquet").group_by(
+        "DMS_ID"
     ):
-        invalid.write_csv(assay_file)
-        with pytest.raises((ValueError, KeyError)):
-            run_cli(
-                performance_fitness.cli,
-                f"--input {merged_dir} --output {performance_dir} --models {models}",
-            )
-        assert all(
-            path.read_bytes() == content for path, content in saved_results.items()
+        assay.drop("DMS_ID").write_csv(ConfigFitness.ASSAY_DIR / f"{name}.csv")
+    for (model, name), predictions in pl.read_parquet(
+        FIXTURE_DIR / "predictions.parquet"
+    ).group_by("model", "DMS_ID"):
+        folder, column = resolve_source(SCORE_COLS, model)
+        destination = ConfigFitness.PREDICTION_DIR / folder / f"{name}.csv"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        predictions.select("mutant", pl.col("score").alias(column)).write_csv(
+            destination
         )
-    original.write_csv(assay_file)
+    return tmp_path
 
 
-def test_masked_lm_scoring_and_guards(fitness_data, tmp_path, monkeypatch):
-    """Score a complete real assay and reject corrupt scoring states."""
-    assay = pl.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv", n_rows=1)
-    reference = pl.read_csv(FIXTURE_DIR / "reference.csv")
-    wild_type = reference.filter(pl.col("DMS_ID") == "Domingo_2018_tRNA")[
-        "RAW_CONSTRUCT_SEQ"
-    ][0]
-    adapter = NonfiniteAdapter()
-    table = build_tasks(
-        assay["mutant"],
-        assay["sequence"],
-        wild_type,
-        adapter.bases,
-        ("wt_fill",),
-        verbose=False,
+def test_evmutation_scoring(fitness_data, monkeypatch) -> None:
+    """Compare real MSA predictions with the native model's sequence energies."""
+    if MODEL != "evmutation":
+        pytest.skip("Run through the EVmutation environment")
+    from rnagym.fitness.baselines.EVmutation import compute_fitness as scorer
+
+    name = "Domingo_2018_tRNA"
+    alignment = ConfigFitness.MSA_DIR / "by_assay" / f"{name}.a3m"
+    alignment.parent.mkdir(parents=True)
+    alignment.symlink_to((FIXTURE_DIR / alignment.name).resolve())
+    alignment.with_suffix(".fa").write_text(
+        "\n".join(alignment.read_text().splitlines()[:2]) + "\n"
     )
-    position = table.pos[0]
-    table.pos[0] = len(table.contexts[table.ctx_id[0]])
-    with pytest.raises(ValueError, match="falls outside"):
-        validate_table(table)
-    table.pos[0] = position
+    models = []
+    infer = scorer.infer_model
 
-    with pytest.raises(FloatingPointError, match="non-finite log probability"):
-        accumulate_scores(adapter, table, 1, 1, 256, progress=False)
+    def capture_model(config):
+        model = infer(config)
+        models.append(model)
+        return model
 
-    with pytest.raises(ValueError, match="cannot hold one encoded context"):
-        accumulate_scores(FixtureAdapter(), table, 1, 1, 1, progress=False)
-
-    window_contexts(table, budget=20)
-    assert table.contexts[0][table.pos[0]] == MASK_CHAR
-    assert np.isfinite(
-        accumulate_scores(FixtureAdapter(), table, 1, 1, 64, progress=False)
-    ).all()
-
-    variant = pl.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv").row(
-        -1, named=True
-    )
-    mutations = parse_mutations(variant["mutant"], FixtureAdapter.bases)
-    formula_table = build_tasks(
-        [variant["mutant"]],
-        [variant["sequence"]],
-        wild_type,
-        FixtureAdapter.bases,
-        runner.STRATEGIES,
-        verbose=False,
-    )
-    formula_scores = accumulate_scores(
-        FixtureAdapter(), formula_table, 1, 16, 4096, progress=False
-    )[:, 0]
-    expected = np.zeros(len(runner.STRATEGIES))
-    positions = [position for position, _, _ in mutations]
-    joint_context = masked(wild_type, positions)
-    fixture_adapter = FixtureAdapter()
-    for position, wild_base, mutant_base in mutations:
-        wild_context = masked(wild_type, [position])
-        mutant_context = masked(variant["sequence"], [position])
-        wild_probs = fixture_log_probs(fixture_adapter, wild_context, position)
-        joint_probs = fixture_log_probs(fixture_adapter, joint_context, position)
-        mutant_probs = fixture_log_probs(fixture_adapter, mutant_context, position)
-        wild_id = fixture_adapter.base_ids[wild_base]
-        mutant_id = fixture_adapter.base_ids[mutant_base]
-        expected += [
-            wild_probs[mutant_id] - wild_probs[wild_id],
-            joint_probs[mutant_id] - joint_probs[wild_id],
-            mutant_probs[mutant_id] - mutant_probs[wild_id],
-            mutant_probs[mutant_id] - wild_probs[wild_id],
-        ]
-    assert formula_scores == pytest.approx(expected, abs=1e-6)
-
-    padded_table = build_tasks(
-        [variant["mutant"]],
-        [variant["sequence"]],
-        wild_type,
-        PaddedFixtureAdapter.bases,
-        ("wt_fill",),
-        verbose=False,
-    )
-    positions = padded_table.pos.copy()
-    pad_contexts(padded_table, PaddedFixtureAdapter())
-    assert {len(context) for context in padded_table.contexts} == {128}
-    assert np.array_equal(padded_table.pos, positions)
-    assert all(
-        context.endswith("N" * (128 - len(wild_type)))
-        for context in padded_table.contexts
-    )
-
-    ntv3 = NTv3Adapter()
-    ntv3.num_downsamples = 7
-    assert [ntv3.context_length_for(n) for n in (45, 128, 129, 425)] == [
-        128,
-        128,
-        256,
-        512,
-    ]
-
-    nan_table = build_tasks(
-        [None, variant["mutant"]],
-        [wild_type, variant["sequence"]],
-        wild_type,
-        FixtureAdapter.bases,
-        ("wt_fill",),
-        verbose=False,
-    )
-    nan_scores = accumulate_scores(
-        FixtureAdapter(), nan_table, 2, 16, 4096, progress=False
-    )
-    assert np.isnan(nan_scores[0, 0])
-    assert np.isfinite(nan_scores[0, 1])
-
-    assay_dir = fitness_data / "assays"
-    output_dir = tmp_path / "predictions"
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    pl.read_csv(ASSAY_DIR / ASSAY_NAMES[0]).head(32).write_csv(
-        assay_dir / ASSAY_NAMES[0]
-    )
+    monkeypatch.setattr(scorer, "infer_model", capture_model)
+    output = fitness_data / "scored"
     monkeypatch.setattr(
-        sys,
-        "argv",
-        shlex.split(f"fitness-fixture --output {output_dir}"),
+        sys, "argv", shlex.split(f"evmutation --output {output} --cpu 2")
     )
-    adapter = FixtureAdapter()
-    runner.main(adapter)
-    assert adapter.loads == 1
-    assert {path.name for path in output_dir.glob("*.csv")} == set(ASSAY_NAMES)
-    assert pl.read_csv(output_dir / ASSAY_NAMES[2]).height == 417
-    scored = pl.read_csv(output_dir / "Domingo_2018_tRNA.csv")
-    score_columns = [f"RNA_FM_scores_{strategy}" for strategy in runner.STRATEGIES]
-    assert np.isfinite(scored.select(score_columns).to_numpy()).all()
-    single = ~scored["mutant"].str.contains(",")
-    assert np.allclose(
-        scored.filter(single).select(score_columns).to_numpy(),
-        scored.filter(single)[score_columns[0]].to_numpy()[:, None],
-    )
-    assert np.ptp(scored.filter(~single).select(score_columns).to_numpy(), axis=1).any()
-    manifest = json.loads((output_dir / "Domingo_2018_tRNA.manifest.json").read_text())
-    assert (
-        manifest["prediction_sha256"]
-        == hashlib.sha256(
-            (output_dir / "Domingo_2018_tRNA.csv").read_bytes()
-        ).hexdigest()
-    )
-
-    invalid_output_dir = tmp_path / "invalid_predictions"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        shlex.split(f"fitness-fixture --rows 1 --output {invalid_output_dir}"),
-    )
-    with pytest.raises(SystemExit):
-        runner.main(LimitedFixtureAdapter())
-    assert not list(invalid_output_dir.glob("*.csv"))
-
-    def inconsistent_scores(adapter, table, n_rows, **kwargs):
-        scores = np.tile(np.arange(n_rows), (len(table.strategies), 1)).astype(float)
-        scores[1] += 1.0
-        return scores
-
-    domingo = pl.read_csv(assay_dir / "Domingo_2018_tRNA.csv")
-    domingo.filter(~pl.col("mutant").str.contains(",")).write_csv(
-        assay_dir / "Domingo_2018_tRNA.csv"
-    )
-    monkeypatch.setattr(runner, "accumulate_scores", inconsistent_scores)
-    with pytest.raises(SystemExit):
-        runner.main(FixtureAdapter())
-    assert not list(invalid_output_dir.glob("*.csv"))
-    assert not list(invalid_output_dir.glob("*.manifest.json"))
-
-
-def test_published_comparison_tolerance(tmp_path):
-    """Reject structural errors, nonfinite scores and plausible-looking wrong rankings."""
-    expected_file = PREDICTION_DIR / "Tome_2014_GFP_aptamer.csv"
-    expected = pl.read_csv(expected_file)
-    columns = tuple(PREDICTION_COLUMNS.values())
-    actual_file = tmp_path / "actual.csv"
-    exact = check_published.compare_predictions(expected_file, expected_file, columns)
-    assert exact.exact and exact.max_absolute_difference == 0
-    expected.with_columns(
-        pl.col("mutant").str.replace_all("U", "T").str.replace_all(",", ", ")
-    ).write_csv(actual_file)
-    assert check_published.compare_predictions(
-        actual_file, expected_file, columns
-    ).exact
-    shifted = expected.with_columns(pl.col(*columns) + 1e-5)
-    shifted.write_csv(actual_file)
-    close = check_published.compare_predictions(actual_file, expected_file, columns)
-    assert not close.exact and close.minimum_correlation > 0.999
-    assert close.max_absolute_difference == pytest.approx(1e-5)
-    expected.with_columns(pl.col(*columns) * 2 + 10).write_csv(actual_file)
-    rescaled = check_published.compare_predictions(actual_file, expected_file, columns)
-    assert rescaled.minimum_correlation == pytest.approx(1.0)
-    assert rescaled.max_metric_difference == 0
-    shifted.write_csv(actual_file)
-    lowercase = tmp_path / "lowercase.csv"
-    expected.rename({"DMS_score": "dms_score"}).write_csv(lowercase)
-    assert check_published.compare_predictions(actual_file, lowercase, columns) == close
-    for corrupted in (
-        expected.head(-1),
-        expected.reverse(),
-        expected.drop(columns[0]),
-        expected.with_columns(pl.lit(float("inf")).alias(columns[0])),
-        expected.with_columns(pl.lit(None, dtype=pl.Float64).alias(columns[0])),
-        expected.with_columns(-pl.col(columns[0])),
-        expected.with_columns(pl.lit(0.0).alias(columns[0])),
-    ):
-        corrupted.write_csv(actual_file)
-        with pytest.raises((AssertionError, ValueError)):
-            check_published.compare_predictions(actual_file, expected_file, columns)
-    expected.drop("DMS_score").write_csv(lowercase)
-    with pytest.raises(ValueError, match="measured fitness"):
-        check_published.compare_predictions(expected_file, lowercase, columns)
-    for scale in (0.0, 1e200):
-        expected.with_columns(pl.col(*columns) * scale).write_csv(lowercase)
-        with np.errstate(over="ignore", invalid="ignore"):
-            with pytest.raises(AssertionError, match="no variation|normalized error"):
-                check_published.compare_predictions(expected_file, lowercase, columns)
-
-    # Small scores can pass an absolute tolerance despite losing all signal
-    scaled_file = tmp_path / "scaled.csv"
-    scaled = expected.with_columns(pl.col(*columns) * 1e-5)
-    scaled.write_csv(scaled_file)
-    scaled.with_columns(pl.lit(0.0).alias(columns[0])).write_csv(actual_file)
-    with pytest.raises(AssertionError, match="normalized error"):
-        check_published.compare_predictions(actual_file, scaled_file, columns)
-
-
-def test_evmutation_comparison(fitness_data, tmp_path, monkeypatch):
-    """Compare every model on the baseline's actual coverage, retaining full-data results."""
-    from scipy.stats import spearmanr
-
-    monkeypatch.setattr(performance_fitness, "ALL_MODELS", ("RNA-FM", "EVmutation"))
-    merged, output = tmp_path / "merged", tmp_path / "leaderboard"
-    run_cli(merge_scoring_files.main, f"--output {merged} --models RNA-FM EVmutation")
-    command = f"--input {merged} --output {output}"
-    run_cli(leaderboard.main, command)
-    main = pl.read_csv(output / "leaderboard_signed_3ncRNA.csv")
-    shared = pl.read_csv(output / "leaderboard_evmutation.csv")
-    coverage = pl.read_csv(output / "evmutation_coverage.csv")
-    name = ASSAY_NAMES[0]
-    baseline = pl.read_csv(
-        fitness_data / "model_predictions/EVmutation" / name
-    ).drop_nulls("mutant")
-    predictions = pl.read_csv(PREDICTION_DIR / name).drop_nulls("mutant")
-    assay = pl.read_csv(ASSAY_DIR / name).drop_nulls("mutant")
-    assert baseline["mutant"].to_list() == assay["mutant"].to_list()
-    assert predictions["mutant"].to_list() == assay["mutant"].to_list()
-    covered = baseline["prediction_epistatic"].is_not_null().to_numpy()
-    fitness = assay["DMS_score"].to_numpy()
-    for model, scores in (
-        ("RNA-FM", predictions["RNA_FM_scores_wt_fill"].to_numpy()),
-        ("EVmutation", baseline["prediction_epistatic"].to_numpy()),
-    ):
-        expected = spearmanr(fitness[covered], scores[covered]).statistic
-        actual = shared.filter(pl.col("model") == model).row(0, named=True)
-        assert actual["Ribozyme"] == pytest.approx(expected)
-        assert actual["tRNA"] is actual["Aptamer"] is actual["macro_3ncRNA"] is None
-        expected_main = (
-            expected if model == "EVmutation" else spearmanr(fitness, scores).statistic
-        )
-        assert main.filter(pl.col("model") == model)["Ribozyme"][0] == pytest.approx(
-            expected_main
-        )
-    assert coverage["variants"].sum() == sum(
-        pl.read_csv(ASSAY_DIR / name).drop_nulls("mutant").height
-        for name in ASSAY_NAMES
-    )
-    assert coverage["scored_variants"].sum() == covered.sum()
-    assert coverage["evaluated_variants"].sum() == covered.sum()
-    assert "EVmutation*" in (output / "README.md").read_text()
-
-    path = merged / name
-    table = pl.read_csv(path)
-    selected = np.flatnonzero(covered)[:8].tolist()
-    table.with_columns(
-        pl.when(pl.int_range(pl.len()).is_in(selected))
-        .then(pl.col("EVmutation_score"))
-        .otherwise(None)
-        .alias("EVmutation_score")
-    ).write_csv(path)
-    run_cli(leaderboard.main, command)
-    assert (
-        pl.read_csv(output / "evmutation_coverage.csv")["evaluated_variants"].sum() == 8
-    )
-
-    # Invalid scores and unevaluable subsets must not replace the last valid tables
-    original = {path: path.read_bytes() for path in output.iterdir()}
-    table.with_columns(
-        table["EVmutation_score"].scatter([selected[0]], np.nan)
-    ).write_csv(path)
-    with pytest.raises(ValueError, match="nonfinite EVmutation"):
-        run_cli(leaderboard.main, command)
-    assert all(path.read_bytes() == content for path, content in original.items())
-    table.with_columns(
-        pl.when(pl.int_range(pl.len()) == 0)
-        .then(pl.col("EVmutation_score"))
-        .otherwise(None)
-        .alias("EVmutation_score")
-    ).write_csv(path)
-    with pytest.raises(ValueError, match="enough scored variants"):
-        run_cli(leaderboard.main, command)
-    assert all(path.read_bytes() == content for path, content in original.items())
-
-
-def test_evo_precision_comparison(tmp_path):
-    """Accept stable GPU rankings and reject the observed Evo1 BF16 failures."""
-    fixture = pl.read_csv(FIXTURE_DIR / "evo.csv")
-    actual_file, expected_file = tmp_path / "actual.csv", tmp_path / "expected.csv"
-    comparisons = []
-    for table in fixture.partition_by("model", "assay", maintain_order=True):
-        for precision in ("float32", "bfloat16"):
-            table.select(
-                "mutant",
-                "sequence",
-                "DMS_score",
-                pl.col(f"{precision}_h100").alias("score"),
-            ).write_csv(expected_file)
-            table.select(
-                "mutant",
-                "sequence",
-                "DMS_score",
-                pl.col(f"{precision}_l40s").alias("score"),
-            ).write_csv(actual_file)
-            if (
-                precision == "bfloat16"
-                and table["model"][0] == "evo1"
-                and table["assay"][0] != "Domingo_2018_tRNA"
-            ):
-                with pytest.raises(AssertionError):
-                    check_published.compare_predictions(
-                        actual_file, expected_file, ("score",)
-                    )
-            else:
-                comparison = check_published.compare_predictions(
-                    actual_file, expected_file, ("score",)
-                )
-                if precision == "float32":
-                    comparisons.append(comparison)
-    assert sum(row.rows for row in comparisons) == fixture.height
-    assert max(row.normalized_error for row in comparisons) < 0.001
-    assert min(row.minimum_correlation for row in comparisons) > 0.9999
-    assert max(row.max_metric_difference for row in comparisons) < 0.001
-
-
-def test_fp8_comparison(tmp_path):
-    """Accept measured Evo2 variation and reject rank agreement below 0.95."""
-    fixture = pl.read_csv(FIXTURE_DIR / "fp8.csv")
-    actual_file, expected_file = tmp_path / "actual.csv", tmp_path / "expected.csv"
-    comparisons = []
-    for table in fixture.partition_by("model", "assay", maintain_order=True):
-        expected = table.select(
-            "mutant", "sequence", "DMS_score", pl.col("published_score").alias("score")
-        )
-        expected.write_csv(expected_file)
-        expected.with_columns(table["h100_score"].alias("score")).write_csv(actual_file)
-        comparison = check_published.compare_predictions(
-            actual_file, expected_file, ("score",)
-        )
-        assert not comparison.exact
-        comparisons.append(comparison)
-    assert sum(row.rows for row in comparisons) == fixture.height
-    assert max(row.max_metric_difference for row in comparisons) < 0.005
-
-    # Perturb real scores on either side of the accepted rank agreement
-    for amplitude in (0.2, 0.4):
-        expected.with_columns(
-            pl.col("score")
-            + amplitude * (pl.col("score").shuffle(seed=0) - pl.col("score").mean())
-        ).write_csv(actual_file)
-        if amplitude == 0.2:
-            check_published.compare_predictions(actual_file, expected_file, ("score",))
-        else:
-            with pytest.raises(AssertionError, match="rank correlation"):
-                check_published.compare_predictions(
-                    actual_file, expected_file, ("score",)
-                )
-
-    # Fitness drift remains visible even when the score ranks agree
-    measured = pl.col("DMS_score").rank()
-    expected.with_columns(
-        pl.col("score")
-        + 0.1
-        * pl.col("score").std(ddof=0)
-        * (measured - measured.mean())
-        / measured.std(ddof=0)
-    ).write_csv(actual_file)
-    comparison = check_published.compare_predictions(
-        actual_file, expected_file, ("score",)
-    )
-    assert comparison.max_metric_difference > 0.01
-
-
-def test_evo2_workflow_and_guards(fitness_data, tmp_path):
-    """Score complete assays in one model load and reject failed inference."""
-
-    class FixtureEvo2:
-        calls = []
-        fp8 = True
-        loads = 0
-        nonfinite = False
-
-        def __init__(self, model_name, local_path=None):
-            type(self).loads += 1
-            self.model = SimpleNamespace(
-                config={"use_fp8_input_projections": type(self).fp8}
-            )
-
-        def score_sequences(self, sequences, **kwargs):
-            type(self).calls.append((sequences[0], kwargs))
-            scores = np.array(
-                [sequence.count("T") / len(sequence) for sequence in sequences]
-            )
-            if type(self).nonfinite:
-                scores[0] = np.nan
-            return scores
-
-    assay_dir = fitness_data / "assays"
-    domingo_file = assay_dir / "Domingo_2018_tRNA.csv"
-    output_dir = tmp_path / "evo2"
-    command = f"--output {output_dir} --model evo2_1b_base"
-    args = evo2.parse_args(shlex.split(command))
-
-    evo2.run(args, FixtureEvo2)
-    assert FixtureEvo2.loads == 1
-    assert len(FixtureEvo2.calls) == 3
-    for sequence, options in FixtureEvo2.calls:
-        assert options == {
-            "batch_size": max(
-                1, 32768 // evo2.effective_length(len(sequence), False, True)
-            ),
-            "prepend_bos": False,
-            "reduce_method": "mean",
-            "average_reverse_complement": True,
-        }
-    for assay_file in sorted(assay_dir.glob("*.csv")):
-        output_file = output_dir / assay_file.name
-        observed = pl.read_csv(output_file)
-        source = pl.read_csv(assay_file)
-        score_column = "evo2_1b_base_score"
-        expected = (
-            source["sequence"]
-            .str.to_uppercase()
-            .str.replace_all("U", "T")
-            .str.count_matches("T")
-            / source["sequence"].str.len_chars()
-        )
-        np.testing.assert_allclose(observed[score_column], expected)
-        assert output_file.stat().st_mode & 0o777 == 0o644
-    assert not list(output_dir.glob("*.tmp"))
-
-    args.rows = "0"
-    args.output = tmp_path / "invalid_evo2"
-    FixtureEvo2.fp8 = False
-    with pytest.raises(RuntimeError, match="does not use FP8"):
-        evo2.run(args, FixtureEvo2)
-
-    FixtureEvo2.fp8 = True
-    FixtureEvo2.nonfinite = True
-    with pytest.raises(FloatingPointError, match="nonfinite model scores"):
-        evo2.run(args, FixtureEvo2)
-    assert not list(args.output.glob("*.csv"))
-
-    FixtureEvo2.nonfinite = False
-    domingo = pl.read_csv(domingo_file)
-    domingo.with_columns(domingo["sequence"].scatter([0], None)).write_csv(domingo_file)
-    args.rows = "1"
-    with pytest.raises(ValueError, match="missing or empty sequences"):
-        evo2.run(args, FixtureEvo2)
-
-
-def test_repeated_predictions(tmp_path):
-    """Preserve repeated measurements and reproduce the published first-score convention."""
-    from rnagym.fitness.tasks.merge_scoring_files import merge_predictions
-
-    assay = pl.read_csv(FIXTURE_DIR / "repeated" / "assay.csv")
-    prediction = pl.read_csv(FIXTURE_DIR / "repeated" / "prediction.csv")
-    merged = merge_predictions(assay, prediction, "evo2_7b_score", "evo2")
-    assert_frame_equal(merged.select(assay.columns), assay)
-    assert merged.height == 186
-    repeated = merged.filter(pl.col("mutant") == "A48C")
-    assert repeated["evo2_score"].to_list() == [-1.1337192, -1.1337192]
-    rho = get_performance_dataset(merged, "DMS_score", ["evo2_score"])["evo2_score"][
-        "Spearman"
-    ]
-    assert rho == pytest.approx(-0.017426406587199662, abs=1e-14)
-    corrupted = (
-        prediction.with_row_index()
-        .with_columns(
-            pl.when(
-                (pl.col("mutant") == "A48C")
-                & (
-                    pl.col("index")
-                    == pl.col("index").filter(pl.col("mutant") == "A48C").max()
-                )
-            )
-            .then(pl.col("evo2_7b_score") + 0.1)
-            .otherwise(pl.col("evo2_7b_score"))
-            .alias("evo2_7b_score")
-        )
-        .drop("index")
-    )
-    with pytest.raises(ValueError, match="conflicting scores"):
-        merge_predictions(assay, corrupted, "evo2_7b_score", "evo2")
-    with pytest.raises(ValueError, match="Row count mismatch"):
-        merge_predictions(
-            assay,
-            prediction.filter(pl.col("mutant") != "A48C"),
-            "evo2_7b_score",
-            "evo2",
-        )
-    with pytest.raises(ValueError, match="sequence disagrees"):
-        merge_predictions(
-            assay,
-            prediction.with_columns(pl.lit("ACGU").alias("sequence")),
-            "evo2_7b_score",
-            "evo2",
-        )
-
-    coding = pl.read_csv(FIXTURE_DIR / "repeated" / "coding.csv")
-    assert coding.height == 106
-    assays = tmp_path / "assays"
-    predictions = tmp_path / "predictions" / "GenSLM"
-    assays.mkdir()
-    predictions.mkdir(parents=True)
-    for (name,), group in coding.group_by("DMS_ID", maintain_order=True):
-        group.select("mutant", "sequence", "DMS_score").write_csv(
-            assays / f"{name}.csv"
-        )
-        group.drop("DMS_ID").write_csv(predictions / f"{name}.csv")
-    combine_csv_data(
-        assays, predictions.parent, tmp_path / "merged", ["GenSLM"], SCORE_COLS
-    )
-    for path in assays.glob("*.csv"):
-        assay = pl.read_csv(path).with_columns(
-            merge_scoring_files.standardize_mutation("mutant")
-        )
-        result = pl.read_csv(tmp_path / "merged" / path.name)
-        assert_frame_equal(result.select(assay.columns), assay)
-        assert (
-            result.group_by("mutant")
-            .agg(pl.col("GenSLM_score").n_unique())["GenSLM_score"]
-            .eq(1)
-            .all()
-        )
-
-
-def test_launchers(tmp_path):
-    """Select all rows by default and preserve explicit rows and shared paths."""
-    reference = read_reference(REFERENCE_FILE)
-    for selection, indices in (("all", [0, 1, 2]), ("2", [2]), ("2,0-1,1", [0, 1, 2])):
-        assert_frame_equal(
-            read_reference(REFERENCE_FILE, selection), reference[indices]
-        )
-    for selection in ("", "-1", "3", "2-1", "all,1"):
-        with pytest.raises(ValueError):
-            read_reference(REFERENCE_FILE, selection)
-    empty_reference = tmp_path / "empty.csv"
-    reference.head(0).write_csv(empty_reference)
-    with pytest.raises(ValueError, match="no assays"):
-        read_reference(empty_reference)
-
-    executable = tmp_path / "python"
-    arguments_file, cache_file = tmp_path / "arguments", tmp_path / "cache"
-    executable.write_text(
-        """#!/bin/sh
-printf '%s\\n' "$@" > "$FITNESS_TEST_ARGUMENTS"
-printf '%s\\n' "${HF_HUB_CACHE:-}" > "$FITNESS_TEST_CACHE"
-"""
-    )
-    executable.chmod(0o755)
-    checkpoint_root, data_root = tmp_path / "shared checkpoints", tmp_path / "data"
-    environment = os.environ.copy()
-    for variable in ("HF_HUB_CACHE", "SLURM_ARRAY_TASK_ID"):
-        environment.pop(variable, None)
-    environment.update(
-        PATH=f"{tmp_path}:{environment['PATH']}",
-        RNAGYM_CHECKPOINT_DIR=str(checkpoint_root),
-        RNAGYM_DATA_DIR=str(data_root),
-        FITNESS_TEST_ARGUMENTS=str(arguments_file),
-        FITNESS_TEST_CACHE=str(cache_file),
-    )
-    cache_families = {"aido-rna", "evo", "evo2", "ntv3", "orthrus"}
-    for name, family in check_published.MODEL_FAMILIES.items():
-        command = f"bash {shlex.quote(str(ConfigFitness.DIR / family.launcher))}"
-        for selection, overrides, expected in (
-            ("", {}, "all"),
-            ("", {"SLURM_ARRAY_TASK_ID": "24"}, "24"),
-            ("1-2,5", {"SLURM_ARRAY_TASK_ID": "24"}, "1-2,5"),
-            ("all", {"SLURM_ARRAY_TASK_ID": "24"}, "all"),
-        ):
-            subprocess.run(
-                shlex.split(f"{command} {selection}"),
-                env=environment | overrides,
-                check=True,
-            )
-            args = arguments_file.read_text().splitlines()
-            assert args[args.index("--rows") + 1] == expected
-        if "--output" in args:
-            assert Path(args[args.index("--output") + 1]).is_relative_to(data_root)
-        if name in cache_families:
-            assert cache_file.read_text().strip() == str(checkpoint_root / name / "hub")
-            cache = str(tmp_path / "custom cache")
-            subprocess.run(
-                shlex.split(command),
-                env=environment | {"HF_HUB_CACHE": cache},
-                check=True,
-            )
-            assert cache_file.read_text().strip() == cache
-        elif "--checkpoint" in args:
-            assert Path(args[args.index("--checkpoint") + 1]).is_relative_to(
-                checkpoint_root
-            )
-
-
-def test_reproduction(fitness_data, tmp_path, monkeypatch):
-    """Replay released scores through the checker and reject a launcher stuck on assay 0."""
-    from rnagym.fitness.tasks.check_published import ModelFamily
-
-    monkeypatch.setattr(check_published, "CHECK_ROWS", 32)
-    selections = check_published.prepare_fixture(fitness_data, tmp_path / "selected")
-    assert_frame_equal(
-        pl.read_csv(tmp_path / "selected/reference_sheet_final.csv"),
-        read_reference(REFERENCE_FILE),
-    )
-    assert [row for row, _ in selections.values()] == [0, 1, 2]
-    frozen = tmp_path / "published"
-    frozen.mkdir()
-    for name, (_, rows) in selections.items():
-        table = pl.read_csv(PREDICTION_DIR / f"{name}.csv").drop_nulls("mutant")
-        table[rows].write_csv(frozen / f"{name}.csv")
-    launcher = tmp_path / "predict.sh"
-    launcher.write_text(
-        "#!/bin/sh\nset -eu\n"
-        'output="$RNAGYM_DATA_DIR/fitness/model_predictions/rna_fm_4fill"\n'
-        'mkdir -p "$output"\n'
-        f'cp {shlex.quote(str(frozen))}/*.csv "$output/"\n'
-    )
-    monkeypatch.setattr(
-        check_published,
-        "MODEL_FAMILIES",
-        {"rna-fm": ModelFamily(str(launcher), (("rna_fm", None),))},
-    )
-    report_file = tmp_path / "reproduction.json"
-    command = f"rna-fm --timeout 30 --report {report_file}"
-    run_cli(check_published.main, command)
-    report = json.loads(report_file.read_text())
-    assert report["status"] == "passed"
-    assert {row["assay"] for row in report["checks"]} == set(selections)
-    assert all(row["exact"] for row in report["checks"])
-    for name in list(selections)[1:]:
-        (frozen / f"{name}.csv").unlink()
-    with pytest.raises(FileNotFoundError, match="selected assay"):
-        run_cli(check_published.main, command)
-    report = json.loads(report_file.read_text())
-    assert report["status"] == "failed"
-    assert len(report["checks"]) == 1
-    for options in ("--timeout 0", "--timeout nan", "rna-fm --leaderboard-only"):
-        with pytest.raises(ValueError):
-            run_cli(check_published.main, options)
-
-
-def test_reproduction_report_failure(tmp_path, monkeypatch):
-    """Failed native scoring, omitted models or changed code cannot leave a passing report."""
-    report_file = tmp_path / "reproduction.json"
-    report_file.write_text('{"status": "passed"}\n')
-
-    def reject_native_scoring(command, cwd, deadline):
-        raise AssertionError("Native scoring failed")
-
-    def reject_inference(*args):
-        pytest.fail("Inference must not run after native scoring fails")
-
-    with monkeypatch.context() as native:
-        native.setattr(check_published, "run_command", reject_native_scoring)
-        native.setattr(check_published, "run_one", reject_inference)
-        for environment in ("evmutation", "genslm"):
-            with pytest.raises(AssertionError, match="Native scoring failed"):
-                run_cli(check_published.main, f"{environment} --report {report_file}")
-            report = json.loads(report_file.read_text())
-            assert report["status"] == "failed"
-            assert "scoring" not in report
-
-    def run_family(command, cwd, deadline):
-        arguments = shlex.split(command)
-        environment = arguments[arguments.index("-e") + 1]
-        child_report = Path(arguments[arguments.index("--report") + 1])
-        calls.append(environment)
-        child = {"status": "passed", "checks": [], "scoring": {environment: "passed"}}
-        if fail and environment == "genslm":
-            child.update(status="failed", scoring={})
-        child_report.write_text(json.dumps(child))
-        if child["status"] == "failed":
-            raise subprocess.CalledProcessError(1, command)
-
-    with monkeypatch.context() as suite:
-        suite.setattr(check_published, "CHECKPOINT_MODELS", ("GenSLM",))
-        suite.setattr(
-            check_published,
-            "MODEL_FAMILIES",
-            {
-                name: check_published.MODEL_FAMILIES[name]
-                for name in ("evmutation", "genslm")
-            },
-        )
-        suite.setattr(check_published, "check_leaderboard", lambda *args: None)
-        suite.setattr(check_published, "validate_family", lambda *args: None)
-        suite.setattr(check_published, "run_command", run_family)
-        for fail in (False, True):
-            calls = []
-            if fail:
-                with pytest.raises(subprocess.CalledProcessError):
-                    run_cli(check_published.main, f"--report {report_file}")
-            else:
-                run_cli(check_published.main, f"--report {report_file}")
-            report = json.loads(report_file.read_text())
-            assert sorted(calls) == ["evmutation", "genslm"]
-            assert report["status"] == ("failed" if fail else "passed")
-            assert report["scoring"] == (
-                {"evmutation": "passed"}
-                if fail
-                else {"evmutation": "passed", "genslm": "passed"}
-            )
-            assert report["families"]["genslm"]["status"] == report["status"]
-
-    monkeypatch.setattr(check_published, "MODEL_FAMILIES", {})
-    with pytest.raises(AssertionError, match="every leaderboard checkpoint"):
-        run_cli(check_published.main, f"--report {report_file}")
-    assert json.loads(report_file.read_text())["status"] == "failed"
-
-    fingerprints = iter(("before", "after"))
-    monkeypatch.setattr(check_published, "fingerprint", lambda: next(fingerprints))
-    monkeypatch.setattr(
-        check_published, "check_leaderboard", lambda directory, deadline: None
-    )
-    with pytest.raises(AssertionError, match="changed during reproduction"):
-        run_cli(check_published.main, f"--leaderboard-only --report {report_file}")
-    report = json.loads(report_file.read_text())
-    assert report["status"] == "failed"
-    assert report["scope"] == "leaderboard"
-
-    def broken_runtime():
-        raise ImportError("fixture CUDA library")
-
-    report_file.write_text('{"status": "passed"}\n')
-    monkeypatch.setattr(check_published, "fingerprint", lambda: "before")
-    monkeypatch.setattr(check_published, "runtime_versions", broken_runtime)
-    with pytest.raises(ImportError, match="fixture CUDA library"):
-        run_cli(check_published.main, f"--leaderboard-only --report {report_file}")
-    report = json.loads(report_file.read_text())
-    assert report["status"] == "failed"
-    assert report["checks"] == []
-
-
-def test_genslm_causal_likelihood(fitness_data, tmp_path, monkeypatch):
-    """Check causal targets, score direction, padding and validation independently."""
-    from scipy.special import logsumexp
-
-    from rnagym.fitness.baselines.GenSLM import compute_fitness as genslm
-
-    class TokenDataset(torch.utils.data.Dataset):
-        def __init__(self, sequences, length, tokenizer):
-            self.sequences = sequences
-            self.length = length
-
-        def __getitem__(self, index):
-            sequence = self.sequences[index]
-            ids = [
-                sum("ACGT".index(base) for base in sequence[start : start + 3])
-                for start in range(0, len(sequence), 3)
-            ]
-            return {
-                "input_ids": torch.tensor(ids + [0] * (self.length - len(ids))),
-                "attention_mask": torch.tensor(
-                    [1] * len(ids) + [0] * (self.length - len(ids))
-                ),
-            }
-
-        def __len__(self):
-            return len(self.sequences)
-
-    class TokenModel(torch.nn.Module):
-        seq_length = 512
-        tokenizer = SimpleNamespace(num_special_tokens_to_add=lambda: 0)
-
-        def forward(self, input_ids, attention_mask, output_hidden_states):
-            assert not output_hidden_states
-            logits = torch.sin(input_ids[..., None] + torch.arange(10).float())
-            return SimpleNamespace(logits=logits)
-
-    monkeypatch.setitem(
-        sys.modules, "genslm", SimpleNamespace(SequenceDataset=TokenDataset)
-    )
-    assay_dir = fitness_data / "assays"
-    name = "Tome_2014_GFP_aptamer"
-    assay_file = assay_dir / f"{name}.csv"
-    assay = pl.read_csv(ASSAY_DIR / assay_file.name)
-    args = genslm.parse_args(shlex.split(f"--output {tmp_path / 'scores'}"))
-    pl.read_csv(ASSAY_DIR / ASSAY_NAMES[0]).head(32).write_csv(
-        assay_dir / ASSAY_NAMES[0]
-    )
-    loads = []
-
-    def load_model(*args, **kwargs):
-        loads.append(TokenModel())
-        return loads[-1]
-
-    genslm.main(args, load_model)
-    assert len(loads) == 1
-    assert {path.name for path in args.output.glob("*.csv")} == set(ASSAY_NAMES)
-    assert pl.read_csv(args.output / ASSAY_NAMES[1]).height == 4175
-    args.rows = "2"
-    result_file = args.output / assay_file.name
-    result = pl.read_csv(result_file)
-    expected = []
-    for sequence in assay["sequence"]:
-        ids = np.array(
-            [
-                sum("ACGU".index(base) for base in sequence[start : start + 3])
-                for start in range(0, len(sequence), 3)
-            ]
-        )
-        logits = np.sin(ids[:, None] + np.arange(10))
-        expected.append(
-            np.mean(
-                logits[np.arange(len(ids) - 1), ids[1:]]
-                - logsumexp(logits[:-1], axis=1)
-            )
-        )
-    np.testing.assert_allclose(result["logit_scores"], expected, rtol=3e-7)
+    scorer.main()
+    model = models[0]
+    assay = pl.read_csv(ConfigFitness.ASSAY_DIR / f"{name}.csv")
+    result = pl.read_csv(output / f"{name}.csv")
     assert_frame_equal(result.select(assay.columns), assay)
-    assert not result["mutated_sequence"].str.contains("U").any()
-
-    # Real assay sequences with different lengths exercise padding in the same batch
-    sequences = [
-        pl.read_csv(ASSAY_DIR / name)["sequence"][0].replace("U", "T")
-        for name in ASSAY_NAMES
-    ]
-    individual = np.concatenate(
+    reference = pl.read_csv(ConfigFitness.REFERENCE_FILE)
+    wt = reference.filter(pl.col("DMS_ID") == name)["RAW_CONSTRUCT_SEQ"][0]
+    positions = model.index_list - 1
+    covered = np.array(
         [
-            genslm.sequence_log_likelihoods(TokenModel(), [sequence], "cpu")
-            for sequence in sequences
+            all(i in positions for i, (a, b) in enumerate(zip(wt, sequence)) if a != b)
+            for sequence in assay["sequence"]
         ]
     )
-    batched = genslm.sequence_log_likelihoods(TokenModel(), sequences, "cpu")
-    np.testing.assert_allclose(batched, individual, rtol=2e-7)
-    for short in (["ACG"], [sequences[0], "ACG"]):
-        with pytest.raises(ValueError, match="at least two tokens"):
-            genslm.sequence_log_likelihoods(TokenModel(), short, "cpu")
-    with pytest.raises(ValueError, match="only A, C, G and T"):
-        genslm.sequence_log_likelihoods(TokenModel(), ["ACGTNN"], "cpu")
-    original = result_file.read_bytes()
-    TokenModel.seq_length = 2
-    with pytest.raises(ValueError, match="input length limit"):
-        genslm.main(args, lambda *args, **kwargs: TokenModel())
-    assert result_file.read_bytes() == original
-    assay.with_columns(pl.lit(None, dtype=pl.String).alias("sequence")).write_csv(
-        assay_file
+    np.testing.assert_array_equal(result[scorer.SCORE_COLUMN].is_not_null(), covered)
+    sequences = [wt, *assay.filter(pl.Series(covered))["sequence"]]
+    energies = model.hamiltonians(
+        ["".join(s[i] for i in positions).replace("U", "T") for s in sequences]
+    )[:, 0]
+    np.testing.assert_allclose(
+        result.filter(pl.Series(covered))[scorer.SCORE_COLUMN],
+        energies[1:] - energies[0],
+        atol=1e-6,
+        rtol=1e-6,
     )
-    with pytest.raises(ValueError, match="missing or empty sequences"):
-        genslm.main(args, lambda *args, **kwargs: TokenModel())
-    assert result_file.read_bytes() == original
 
 
-def test_reproduction_timeout_stops_inference(tmp_path):
-    """A parent deadline stops nested inference and leaves a failed report."""
-    worker = Path(__file__).with_name("fitness_process.py")
-    pid_file, report = tmp_path / "inference.pid", tmp_path / "family.json"
-    started = time.monotonic()
-    with pytest.raises(subprocess.TimeoutExpired):
-        check_published.run_command(
-            f"{shlex.quote(sys.executable)} {shlex.quote(str(worker))} {shlex.quote(str(pid_file))} {shlex.quote(str(report))}",
-            tmp_path,
-            started + 4,
+def test_fitness_workflow(fitness_data) -> None:
+    """Reproduce both leaderboards from released predictions for every model."""
+    if MODEL not in {None, "default"}:
+        pytest.skip("Run the shared workflow in the default environment")
+    from rnagym.fitness.tasks import leaderboard, merge_scoring_files
+
+    merge_scoring_files.main([])
+    leaderboard.main([])
+    for actual, expected in (
+        ("leaderboard_signed_3ncRNA.csv", "leaderboard.csv"),
+        ("leaderboard_evmutation.csv", "comparison.csv"),
+        ("evmutation_coverage.csv", "coverage.csv"),
+    ):
+        assert_frame_equal(
+            pl.read_csv(ConfigFitness.LEADERBOARD_DIR / actual),
+            pl.read_csv(FIXTURE_DIR / expected),
+            check_exact=False,
+            rel_tol=0,
+            abs_tol=1e-12,
         )
-    assert time.monotonic() - started < 10
-    with pytest.raises(ProcessLookupError):
-        os.kill(int(pid_file.read_text()), 0)
-    assert json.loads(report.read_text())["status"] == "failed"
+    assert (ConfigFitness.LEADERBOARD_DIR / "README.md").read_text() == (
+        FIXTURE_DIR / "leaderboard.md"
+    ).read_text()
+    for source in ConfigFitness.ASSAY_DIR.glob("*.csv"):
+        assay = pl.read_csv(source).drop_nulls("mutant")
+        merged = pl.read_csv(ConfigFitness.COMBINED_DIR / source.name)
+        assert_frame_equal(merged.select(assay.columns), assay)
+
+
+def test_genslm_scoring(fitness_data) -> None:
+    """Compare checkpoint predictions and padded batches with native causal losses."""
+    if MODEL != "genslm":
+        pytest.skip("Run through the GenSLM environment")
+    import genslm
+    import torch
+
+    from rnagym.fitness.baselines.GenSLM import compute_fitness as scorer
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = genslm.GenSLM(
+        "genslm_2.5B_patric",
+        model_cache_dir=str(ConfigFitness.CHECKPOINT_DIR / "genslm/2.5B"),
+    )
+    output = fitness_data / "scored"
+    scorer.main(
+        scorer.parse_args(shlex.split(f"--output {output}")),
+        lambda *args, **kwargs: model,
+    )
+    sequences, expected, observed = [], [], []
+    for source in sorted(ConfigFitness.ASSAY_DIR.glob("*.csv")):
+        assay = pl.read_csv(source).drop_nulls("mutant")
+        result = pl.read_csv(output / source.name)
+        assert_frame_equal(result.select(assay.columns), assay)
+        sequence = assay["sequence"][0].replace("U", "T")
+        encoded = genslm.SequenceDataset(
+            [sequence], (len(sequence) + 2) // 3, model.tokenizer, verbose=False
+        )[0]
+        with torch.inference_mode():
+            loss = model(
+                encoded["input_ids"][None].to(device),
+                encoded["attention_mask"].to(device),
+            ).loss.item()
+        sequences.append(sequence)
+        expected.append(-loss)
+        observed.append(result["logit_scores"][0])
+    np.testing.assert_allclose(observed, expected, atol=1e-5, rtol=1e-6)
+    np.testing.assert_allclose(
+        scorer.sequence_log_likelihoods(model, sequences, device),
+        expected,
+        atol=1e-5,
+        rtol=1e-6,
+    )

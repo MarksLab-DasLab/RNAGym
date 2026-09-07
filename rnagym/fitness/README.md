@@ -60,10 +60,8 @@ Download its checkpoint through authenticated Globus access to
 `$RNAGYM_CHECKPOINT_DIR/genslm/2.5B/`. EVmutation uses Riboseek MSAs under
 `data/fitness/msa/by_assay/` and leaves uncovered variants unscored.
 
-Evo2 FP8 scores can vary slightly across GPUs. GenSLM, Evo1 and Evo1.5 use
-float32 for reproducibility. GenSLM reports mean next-codon log likelihood,
-excluding padding. Masked models compute all four [fill strategies][4], with
-`wt-fill` used for the leaderboard.
+GenSLM reports mean next-codon log likelihood, excluding padding. Masked models
+compute all four [fill strategies][4], with `wt-fill` used for the leaderboard.
 
 ## Quality checks
 
@@ -74,23 +72,19 @@ pixi run --locked -e default check-published
 ```
 
 The fast tests use real assay fixtures and need no checkpoints. The full check
-rebuilds the leaderboard and reruns all 20 published checkpoints on 128 variants
-from each of the 31 ncRNA assays.
-It requires matching rows and missing values, finite scores, and old/new score
-Spearman of at least 0.95. Score-magnitude and fitness-correlation differences
-are reported separately. Install environments and weights first. The full run
-has a shared one-hour deadline and needs two 80 GB GPUs for Evo2 40B.
+rebuilds both tables and scores 128 variants from each of the 31 ncRNA assays
+with all 20 checkpoints. Score ranks must have Spearman correlation of at least
+0.95 with the stored predictions. Install environments and weights first.
+The full run has a one-hour limit and needs two 80 GB GPUs for Evo2 40B.
 
 Use `pixi run -e <env> check-published` to check one family, or add
-`--leaderboard-only` to the default command to check aggregates. Acceptance
-bounds are fixed in the [checker][5].
+`--leaderboard-only` to the default command to check aggregates.
 
-`pixi run coverage` runs the fast tests and full reproduction, requiring 80%
-coverage. Full reproduction remains a required check before merging.
+Run `pixi run coverage` before merging. It runs the tests and full reproduction
+and requires 80% coverage.
 
 [0]: ../../leaderboard/fitness/
 [1]: ../../README.md#getting-started
 [2]: pixi.toml
 [3]: https://g-e71d1.fd635.8443.data.globus.org/models/2.5B/patric_2.5b_epoch00_val_los_0.29_bias_removed.pt
 [4]: baselines/masked_lm/README.md
-[5]: tasks/check_published.py
