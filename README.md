@@ -15,47 +15,36 @@
 <p align="center">
   <a href="https://github.com/MarksLab-DasLab/RNAGym/stargazers"><img src="https://img.shields.io/github/stars/MarksLab-DasLab/RNAGym?style=social" alt="GitHub stars"></a>
   <a href="https://www.biorxiv.org/content/10.1101/2025.06.16.660049v1"><img src="https://img.shields.io/badge/bioRxiv-2025.06.16.660049v1-success.svg" alt="bioRxiv"></a>
-  <a href="https://doi.org/10.1101/2025.06.16.660049"><img src="https://img.shields.io/badge/DOI-10.1101/2025.06.16.660049-blue" alt="DOI"></a>
   <a href="https://github.com/MarksLab-DasLab/RNAGym/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MarksLab-DasLab/RNAGym" alt="License"></a>
+  <a href="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/fitness.yml"><img src="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/fitness.yml/badge.svg" alt="Fitness CI"></a>
+  <a href="rnagym/fitness/README.md#quality-checks"><img src="https://img.shields.io/badge/coverage-required_80%25-blue" alt="Full fitness coverage requires 80 percent"></a>
   <a href="https://rnagym.org"><img src="https://img.shields.io/badge/website-rnagym.org-orange" alt="Website"></a>
-  <a href="https://github.com/MarksLab-DasLab/RNAGym"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+"></a>
 </p>
 
-[RNAGym][rnagym] is a benchmark suite and resource for RNA fitness and
-structure prediction. This repository provides the datasets, baseline
-implementations, and evaluation workflows used to compare fitness, secondary
-structure, and tertiary structure prediction methods.
-
-RNAGym is under active development. See the [releases][releases] page for
-stable versions. Current results are available in the [leaderboards][leaderboards].
-
-> **Update (v0.1.1):** We updated the [fitness leaderboard][fitness-leaderboard].
-> Our [website][rnagym] will be updated shortly.
+[RNAGym][5] provides datasets, baseline models and evaluation workflows for RNA
+fitness, secondary structure and tertiary structure prediction.
+See the [leaderboards][3] for results and [releases][4] for stable versions.
 
 ## Getting started
 
-Download and extract the complete RNAGym v0.2 data from the repository root:
+Follow the setup, dataset preparation and reproduction instructions for the
+[fitness][0], [2D structure][6], and [3D structure][7] benchmarks.
 
-```bash
-wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
-tar -xJf data.tar.xz
-```
-
-Setup and reproduction instructions are provided for the [fitness][fitness],
-[2D structure][s2d], and [3D structure][s3d] benchmarks.
+Model checkpoints are shared across all three benchmarks under
+`/n/lw_groups/marks/ckpt/<model>`. Set `RNAGYM_CHECKPOINT_DIR` to use another
+location. Model environments and source checkouts stay under each benchmark's
+`.pixi/` directory.
 
 ## Contributing
 
-We welcome contributions of models, datasets, and benchmark improvements.
-Follow ongoing work, suggest additions, or report problems through the
-[issue tracker][issues].
+Contributions of models, datasets and fixes are welcome. Use the [issue tracker][2]
+to report a problem or propose a change. Run the relevant benchmark's tests and lint
+before submitting a pull request.
 
-[data]: rnagym/DATA.md
-[fitness]: rnagym/fitness/README.md
-[fitness-leaderboard]: leaderboard/fitness/
-[issues]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
-[leaderboards]: leaderboard/
-[releases]: https://github.com/MarksLab-DasLab/RNAGym/releases
-[rnagym]: https://rnagym.org/
-[s2d]: rnagym/s2d/README.md
-[s3d]: rnagym/s3d/README.md
+[0]: rnagym/fitness/README.md
+[2]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
+[3]: leaderboard/
+[4]: https://github.com/MarksLab-DasLab/RNAGym/releases
+[5]: https://rnagym.org/
+[6]: rnagym/s2d/README.md
+[7]: rnagym/s3d/README.md

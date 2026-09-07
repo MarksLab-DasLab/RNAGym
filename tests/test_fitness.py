@@ -1,5 +1,6 @@
 """Reproduce the fitness workflow on complete released assays."""
 
+import hashlib
 import json
 import shlex
 import shutil
@@ -8,9 +9,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 import torch
+from polars.testing import assert_frame_equal
+
 from rnagym.config import ConfigFitness
 from rnagym.fitness.baselines.Evo import score_evo2_single_dms as evo2
 from rnagym.fitness.baselines.masked_lm import (
@@ -32,7 +35,11 @@ from rnagym.fitness.tasks import (
     performance_fitness,
 )
 from rnagym.fitness.tasks.merge_scoring_files import combine_csv_data
-from rnagym.fitness.tasks.model_registry import ALL_MODELS, SCORE_COLS, resolve_source
+from rnagym.fitness.tasks.model_registry import (
+    ALL_MODELS,
+    SCORE_COLS,
+    resolve_source,
+)
 from rnagym.fitness.tasks.performance_fitness import get_performance_dataset
 
 REPOSITORY = Path(__file__).parent.parent
@@ -55,6 +62,8 @@ EXPECTED_FILES = (
     "fill_strategy_macro.csv",
 )
 MODEL_NAMES = tuple(f"rna_fm_{strategy}" for strategy in runner.STRATEGIES)
+
+
 PREDICTION_COLUMNS = {
     f"rna_fm_{strategy}_score": f"RNA_FM_scores_{strategy}"
     for strategy in runner.STRATEGIES
@@ -91,6 +100,7 @@ class FixtureAdapter(MaskedLMAdapter):
     def load(self, args):
         """Use the device selected by the shared runner."""
         self.device = args.device
+        self.loads = getattr(self, "loads", 0) + 1
 
     def logits_at(self, input_ids, attention_mask, rows, cols):
         """Return deterministic context- and base-dependent logits."""
@@ -149,21 +159,23 @@ def masked(sequence, positions):
     return "".join(context)
 
 
-def runner_command(assay_dir, output_dir):
+def runner_command(output_dir):
     """Build the shared runner command for the Domingo fixture."""
-    return (
-        f"fitness-fixture --row_id 1 --ref_sheet {REFERENCE_FILE} "
-        f"--dms_dir_path {assay_dir} --output_dir_path {output_dir} "
-        "--device cpu --quiet_skips"
-    )
+    return f"fitness-fixture --rows 1 --output {output_dir}"
 
 
-def test_fitness_workflow(tmp_path):
+@pytest.mark.filterwarnings("ignore:An input array is constant")
+@pytest.mark.filterwarnings("ignore:Only one class is present in y_true")
+def test_fitness_workflow(tmp_path, monkeypatch):
     """Reproduce the benchmark workflow from released RNA-FM predictions."""
     assert (
         ConfigFitness.REFERENCE_FILE
         == REPOSITORY / "data" / "fitness" / "reference_sheet_final.csv"
     )
+
+    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", ASSAY_DIR)
+    monkeypatch.setattr(ConfigFitness, "PREDICTION_DIR", PREDICTION_DIR.parent)
+    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", REFERENCE_FILE)
 
     merged_dir = tmp_path / "merged"
     performance_dir = tmp_path / "performance"
@@ -174,32 +186,19 @@ def test_fitness_workflow(tmp_path):
     models = " ".join(MODEL_NAMES)
     run_cli(
         merge_scoring_files.main,
-        f"--processed_folder {ASSAY_DIR} "
-        f"--model_predictions_folder {PREDICTION_DIR.parent} "
-        f"--output_folder {merged_dir} --reference_file {REFERENCE_FILE} "
-        f"--models {models}",
+        f"--output {merged_dir} --models {models}",
     )
     assert not (merged_dir / "stale.csv").exists()
     run_cli(
         performance_fitness.cli,
-        f"--reference_file {REFERENCE_FILE} "
-        f"--combined_dir {merged_dir} --performance_dir {performance_dir} "
-        f"--models {models}",
+        f"--input {merged_dir} --output {performance_dir} --models {models}",
     )
 
     for assay_name in ASSAY_NAMES:
-        assay = (
-            pd.read_csv(ASSAY_DIR / assay_name)
-            .dropna(subset=["mutant"])
-            .reset_index(drop=True)
-        )
-        prediction = (
-            pd.read_csv(PREDICTION_DIR / assay_name)
-            .dropna(subset=["mutant"])
-            .reset_index(drop=True)
-        )
-        merged = pd.read_csv(merged_dir / assay_name)
-        pd.testing.assert_frame_equal(merged[assay.columns], assay, check_exact=True)
+        assay = pl.read_csv(ASSAY_DIR / assay_name).drop_nulls("mutant")
+        prediction = pl.read_csv(PREDICTION_DIR / assay_name).drop_nulls("mutant")
+        merged = pl.read_csv(merged_dir / assay_name)
+        assert_frame_equal(merged.select(assay.columns), assay, check_exact=True)
         for merged_column, prediction_column in PREDICTION_COLUMNS.items():
             np.testing.assert_allclose(
                 merged[merged_column], prediction[prediction_column], rtol=0, atol=1e-14
@@ -207,27 +206,28 @@ def test_fitness_workflow(tmp_path):
         score_columns = list(PREDICTION_COLUMNS.values())
         single = ~prediction["mutant"].str.contains(",")
         assert np.allclose(
-            prediction.loc[single, score_columns],
-            prediction.loc[single, score_columns[0]].to_numpy()[:, None],
+            prediction.filter(single).select(score_columns).to_numpy(),
+            prediction.filter(single)[score_columns[0]].to_numpy()[:, None],
         )
         if (~single).any():
             assert np.count_nonzero(
-                np.ptp(prediction.loc[~single, score_columns].to_numpy(), axis=1)
+                np.ptp(
+                    prediction.filter(~single).select(score_columns).to_numpy(), axis=1
+                )
             )
 
     run_cli(
         analyze_fill_strategies.main,
-        f"--predictions_folder {PREDICTION_DIR.parent} "
-        f"--ref_sheet {REFERENCE_FILE} --output_folder {analysis_dir}",
+        f"--output {analysis_dir}",
     )
     for result_file in EXPECTED_FILES:
         result_dir = (
             analysis_dir if result_file.startswith("fill_strategy") else performance_dir
         )
-        observed = pd.read_csv(result_dir / result_file)
-        expected = pd.read_csv(FIXTURE_DIR / "expected" / result_file)
-        pd.testing.assert_frame_equal(
-            observed, expected, check_exact=False, rtol=0, atol=1e-10
+        observed = pl.read_csv(result_dir / result_file)
+        expected = pl.read_csv(FIXTURE_DIR / "expected" / result_file)
+        assert_frame_equal(
+            observed, expected, check_exact=False, rel_tol=0, abs_tol=1e-10
         )
 
     masked_models = [
@@ -238,18 +238,40 @@ def test_fitness_workflow(tmp_path):
         assert folder.endswith("_4fill")
         assert column.endswith("_wt_fill")
     leaderboard_models = set(
-        pd.read_csv(
+        pl.read_csv(
             REPOSITORY / "leaderboard" / "fitness" / "leaderboard_signed_3ncRNA.csv"
         )["model"]
     )
     assert leaderboard_models <= set(SCORE_COLS)
 
+    # Undefined assay correlations must not disappear from the category average
+    assay_file = merged_dir / ASSAY_NAMES[0]
+    original = pl.read_csv(assay_file)
+    saved_results = {path: path.read_bytes() for path in performance_dir.glob("*.csv")}
+    for invalid in (
+        original.with_columns(pl.lit(0.0).alias(next(iter(PREDICTION_COLUMNS)))),
+        original.with_columns(pl.lit(0.0).alias("DMS_score")),
+        original.head(0),
+    ):
+        invalid.write_csv(assay_file)
+        with pytest.raises(ValueError, match="undefined Spearman correlation"):
+            run_cli(
+                performance_fitness.cli,
+                f"--input {merged_dir} --output {performance_dir} --models {models}",
+            )
+        assert all(
+            path.read_bytes() == content for path, content in saved_results.items()
+        )
+    original.write_csv(assay_file)
+
 
 def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
     """Score a complete real assay and reject corrupt scoring states."""
-    assay = pd.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv", nrows=1)
-    reference = pd.read_csv(FIXTURE_DIR / "reference.csv").set_index("DMS_ID")
-    wild_type = reference.loc["Domingo_2018_tRNA", "RAW_CONSTRUCT_SEQ"]
+    assay = pl.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv", n_rows=1)
+    reference = pl.read_csv(FIXTURE_DIR / "reference.csv")
+    wild_type = reference.filter(pl.col("DMS_ID") == "Domingo_2018_tRNA")[
+        "RAW_CONSTRUCT_SEQ"
+    ][0]
     adapter = NonfiniteAdapter()
     table = build_tasks(
         assay["mutant"],
@@ -277,7 +299,9 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
         accumulate_scores(FixtureAdapter(), table, 1, 1, 64, progress=False)
     ).all()
 
-    variant = pd.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv").iloc[-1]
+    variant = pl.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv").row(
+        -1, named=True
+    )
     mutations = parse_mutations(variant["mutant"], FixtureAdapter.bases)
     formula_table = build_tasks(
         [variant["mutant"]],
@@ -357,22 +381,42 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
         FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv",
         assay_dir / "Domingo_2018_tRNA.csv",
     )
-    monkeypatch.setattr(sys, "argv", shlex.split(runner_command(assay_dir, output_dir)))
+    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", assay_dir)
+    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", REFERENCE_FILE)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(sys, "argv", shlex.split(runner_command(output_dir)))
 
-    runner.main(FixtureAdapter())
-    scored = pd.read_csv(output_dir / "Domingo_2018_tRNA.csv")
+    shutil.copy2(ASSAY_DIR / ASSAY_NAMES[2], assay_dir / ASSAY_NAMES[2])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        shlex.split(runner_command(output_dir).replace("--rows 1", "--rows 1-2")),
+    )
+    adapter = FixtureAdapter()
+    runner.main(adapter)
+    assert adapter.loads == 1
+    assert pl.read_csv(output_dir / ASSAY_NAMES[2]).height == 417
+    scored = pl.read_csv(output_dir / "Domingo_2018_tRNA.csv")
     score_columns = [f"RNA_FM_scores_{strategy}" for strategy in runner.STRATEGIES]
-    assert np.isfinite(scored[score_columns]).all().all()
+    assert np.isfinite(scored.select(score_columns).to_numpy()).all()
     single = ~scored["mutant"].str.contains(",")
     assert np.allclose(
-        scored.loc[single, score_columns],
-        scored.loc[single, score_columns[0]].to_numpy()[:, None],
+        scored.filter(single).select(score_columns).to_numpy(),
+        scored.filter(single)[score_columns[0]].to_numpy()[:, None],
     )
     assert (
-        np.count_nonzero(np.ptp(scored.loc[~single, score_columns].to_numpy(), axis=1))
+        np.count_nonzero(
+            np.ptp(scored.filter(~single).select(score_columns).to_numpy(), axis=1)
+        )
         > 3000
     )
     manifest = json.loads((output_dir / "Domingo_2018_tRNA.manifest.json").read_text())
+    assert (
+        manifest["prediction_sha256"]
+        == hashlib.sha256(
+            (output_dir / "Domingo_2018_tRNA.csv").read_bytes()
+        ).hexdigest()
+    )
     assert manifest["scorable_variants"] == len(scored)
     assert manifest["contexts"] == 19275
     assert manifest["environment"]["device"] == "cpu"
@@ -385,9 +429,7 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
     ]
 
     invalid_output_dir = tmp_path / "invalid_predictions"
-    monkeypatch.setattr(
-        sys, "argv", shlex.split(runner_command(assay_dir, invalid_output_dir))
-    )
+    monkeypatch.setattr(sys, "argv", shlex.split(runner_command(invalid_output_dir)))
     with pytest.raises(SystemExit):
         runner.main(LimitedFixtureAdapter())
     assert not list(invalid_output_dir.glob("*.csv"))
@@ -399,15 +441,16 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
 
     single_assay_dir = tmp_path / "single_assay"
     single_assay_dir.mkdir()
-    domingo = pd.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv")
-    domingo[~domingo["mutant"].str.contains(",")].to_csv(
-        single_assay_dir / "Domingo_2018_tRNA.csv", index=False
+    domingo = pl.read_csv(FIXTURE_DIR / "assays" / "Domingo_2018_tRNA.csv")
+    domingo.filter(~pl.col("mutant").str.contains(",")).write_csv(
+        single_assay_dir / "Domingo_2018_tRNA.csv"
     )
     monkeypatch.setattr(
         sys,
         "argv",
-        shlex.split(runner_command(single_assay_dir, invalid_output_dir)),
+        shlex.split(runner_command(invalid_output_dir)),
     )
+    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", single_assay_dir)
     monkeypatch.setattr(runner, "accumulate_scores", inconsistent_scores)
     with pytest.raises(SystemExit):
         runner.main(FixtureAdapter())
@@ -417,7 +460,7 @@ def test_masked_lm_scoring_and_guards(tmp_path, monkeypatch):
 
 def test_metrics_reject_nonfinite_predictions():
     """Reject incomplete predictions instead of changing the evaluation set."""
-    frame = pd.DataFrame(
+    frame = pl.DataFrame(
         {
             "mutant": ["A1C"] * 6,
             "DMS_score": np.arange(6, dtype=float),
@@ -466,8 +509,7 @@ def test_published_comparison_tolerance(tmp_path):
         check_published.compare_predictions(actual_file, expected_file, ("score",))
 
 
-# TODO(MCA): Clean up model tests
-def test_evo2_workflow_and_guards(tmp_path):
+def test_evo2_workflow_and_guards(tmp_path, monkeypatch):
     """Score complete assays in one model load and reject failed inference."""
 
     class FixtureEvo2:
@@ -495,11 +537,9 @@ def test_evo2_workflow_and_guards(tmp_path):
     shutil.copytree(ASSAY_DIR, assay_dir)
     domingo_file = assay_dir / "Domingo_2018_tRNA.csv"
     output_dir = tmp_path / "evo2"
-    command = (
-        f"--row_ids 0-2 --ref_sheet {REFERENCE_FILE} "
-        f"--dms_dir_path {assay_dir} --output_dir_path {output_dir} "
-        "--model_name evo2_1b_base --max_tokens_per_batch 4096 --require_fp8"
-    )
+    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", assay_dir)
+    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", REFERENCE_FILE)
+    command = f"--rows 0-2 --output {output_dir} --model evo2_1b_base"
     args = evo2.parse_args(shlex.split(command))
 
     evo2.run(args, FixtureEvo2)
@@ -508,7 +548,7 @@ def test_evo2_workflow_and_guards(tmp_path):
     for sequence, options in FixtureEvo2.calls:
         assert options == {
             "batch_size": max(
-                1, 4096 // evo2.effective_length(len(sequence), False, True)
+                1, 32768 // evo2.effective_length(len(sequence), False, True)
             ),
             "prepend_bos": False,
             "reduce_method": "mean",
@@ -516,22 +556,24 @@ def test_evo2_workflow_and_guards(tmp_path):
         }
     for assay_file in sorted(assay_dir.glob("*.csv")):
         output_file = output_dir / assay_file.name
-        observed = pd.read_csv(output_file)
-        source = pd.read_csv(assay_file)
+        observed = pl.read_csv(output_file)
+        source = pl.read_csv(assay_file)
         score_column = "evo2_1b_base_score"
-        expected = source["sequence"].map(
-            lambda sequence: (
-                sequence.upper().replace("U", "T").count("T") / len(sequence)
-            )
+        expected = (
+            source["sequence"]
+            .str.to_uppercase()
+            .str.replace_all("U", "T")
+            .str.count_matches("T")
+            / source["sequence"].str.len_chars()
         )
         np.testing.assert_allclose(observed[score_column], expected)
         assert output_file.stat().st_mode & 0o777 == 0o644
     assert not list(output_dir.glob("*.tmp"))
 
     evo2.run(args, FixtureEvo2)
-    assert FixtureEvo2.loads == 1
-    args.row_id, args.row_ids = 0, None
-    args.output_dir_path = tmp_path / "invalid_evo2"
+    assert FixtureEvo2.loads == 2
+    args.rows = "0"
+    args.output = tmp_path / "invalid_evo2"
     FixtureEvo2.fp8 = False
     with pytest.raises(RuntimeError, match="does not use FP8"):
         evo2.run(args, FixtureEvo2)
@@ -540,13 +582,22 @@ def test_evo2_workflow_and_guards(tmp_path):
     FixtureEvo2.nonfinite = True
     with pytest.raises(FloatingPointError, match="nonfinite model scores"):
         evo2.run(args, FixtureEvo2)
-    assert not list(args.output_dir_path.glob("*.csv"))
+    assert not list(args.output.glob("*.csv"))
 
     FixtureEvo2.nonfinite = False
-    domingo = pd.read_csv(domingo_file)
-    domingo.loc[0, "sequence"] = np.nan
-    domingo.to_csv(domingo_file, index=False)
-    args.row_id = 1
+    domingo = pl.read_csv(domingo_file)
+    domingo = (
+        domingo.with_row_index()
+        .with_columns(
+            pl.when(pl.col("index") == 0)
+            .then(None)
+            .otherwise(pl.col("sequence"))
+            .alias("sequence")
+        )
+        .drop("index")
+    )
+    domingo.write_csv(domingo_file)
+    args.rows = "1"
     with pytest.raises(ValueError, match="missing or empty sequences"):
         evo2.run(args, FixtureEvo2)
 
@@ -571,10 +622,10 @@ def test_merge_rejects_incomplete_predictions(tmp_path):
         )
     assert not merged_dir.exists()
 
-    predictions = pd.read_csv(
+    predictions = pl.read_csv(
         FIXTURE_DIR / "predictions" / "rna_fm_4fill" / assay_name
-    ).iloc[:-1]
-    predictions.to_csv(prediction_dir / assay_name, index=False)
+    ).head(-1)
+    predictions.write_csv(prediction_dir / assay_name)
 
     with pytest.raises(ValueError, match="Row count mismatch"):
         combine_csv_data(

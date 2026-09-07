@@ -6,9 +6,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from genslm import GenSLM, SequenceDataset
-from rnagym.config import ConfigFitness
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+from rnagym.config import ConfigFitness
 
 
 def get_sequences(wt_sequence, df):

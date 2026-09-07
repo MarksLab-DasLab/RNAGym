@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Merge processed DMS assay CSVs with model prediction scores."""
 
+from __future__ import annotations
+
 import argparse
 import logging
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
-import pandas as pd
+import numpy as np
+import polars as pl
 
 from rnagym.config import ConfigFitness
+from rnagym.fitness.data import read_reference
 from rnagym.fitness.tasks.model_registry import (
     ALL_MODELS,
     ASSAY_GROUPS,
@@ -22,31 +27,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_mutation_column(df):
-    """Find the mutation column name in a DataFrame."""
-    for col in ["mutant", "mutation", "Mutation", "mutations"]:
-        if col in df.columns:
-            return col
-    raise ValueError("Couldn't find a mutation column in the dataframe")
-
-
-def standardize_mutation(mutation):
-    """Replace T with U and strip spaces (DNA -> RNA notation)."""
-    return str(mutation).replace("T", "U").replace(" ", "")
-
-
 def combine_csv_data(
-    processed_folder,
-    model_predictions_folder,
-    output_folder,
-    model_list,
-    score_cols_dict,
-    allow_incomplete=False,
-    assay_types=None,
-    assay_group="all",
+    processed_folder: str | Path,
+    model_predictions_folder: str | Path,
+    output_folder: str | Path,
+    model_list: Sequence[str],
+    score_cols_dict: dict[str, str | dict[str, str]],
+    assay_types: dict[str, str] | None = None,
+    assay_group: str = "all",
 ):
     """
-    Merge each assay CSV with model prediction scores via inner join on mutations.
+    Merge predictions without dropping or multiplying assay measurements.
 
     Every requested model must cover every assay in the selected group.
     The coverage check runs before any output is written, and all merged files
@@ -97,7 +88,7 @@ def combine_csv_data(
         )
         if absent:
             missing[model_name] = absent
-    if missing and not allow_incomplete:
+    if missing:
         detail = " | ".join(
             f"{model}: {len(files)} missing, including {files[:3]}"
             for model, files in sorted(missing.items())
@@ -117,10 +108,11 @@ def combine_csv_data(
         for processed_file in processed_files:
             csv_file = processed_file.name
 
-            df = pd.read_csv(processed_file)
+            df = pl.read_csv(processed_file)
             mutation_col = get_mutation_column(df)
-            df = df.dropna(subset=[mutation_col])
-            df[mutation_col] = df[mutation_col].apply(standardize_mutation)
+            df = df.drop_nulls(mutation_col).with_columns(
+                standardize_mutation(mutation_col)
+            )
 
             for model_name in model_list:
                 folder, score_col = resolve_source(score_cols_dict, model_name)
@@ -129,49 +121,18 @@ def combine_csv_data(
                     logger.warning(f"Model file {csv_file} not found in {model_name}")
                     continue
 
-                model_df = pd.read_csv(model_path)
-                model_mutation_col = get_mutation_column(model_df)
-                if score_col not in model_df.columns:
-                    raise KeyError(
-                        f"{model_path} has no column {score_col!r}. It holds "
-                        f"{list(model_df.columns)}"
-                    )
-                model_df = model_df[[model_mutation_col, score_col]]
-                model_df.columns = [mutation_col, f"{model_name}_score"]
-                model_df = model_df.dropna(subset=[mutation_col])
-                model_df[mutation_col] = model_df[mutation_col].apply(
-                    standardize_mutation
+                df = merge_predictions(
+                    df, pl.read_csv(model_path), score_col, model_name
                 )
-                duplicated = model_df[model_df.duplicated(mutation_col, keep=False)]
-                if not duplicated.empty:
-                    conflicting = duplicated.groupby(mutation_col, dropna=False)[
-                        f"{model_name}_score"
-                    ].nunique(dropna=False)
-                    conflicting = conflicting[conflicting > 1]
-                    if not conflicting.empty:
-                        raise ValueError(
-                            f"{model_path} has conflicting scores for duplicate "
-                            f"mutations: {list(conflicting.index[:5])}"
-                        )
-                model_df = model_df.drop_duplicates(subset=[mutation_col], keep="first")
-
-                original_row_count = len(df)
-                df = df.merge(model_df, on=mutation_col, how="inner")
-                if len(df) != original_row_count:
-                    raise ValueError(
-                        f"Row count mismatch in {csv_file} after merging {model_name}: "
-                        f"Expected {original_row_count}, but got {len(df)}"
-                    )
                 contributed[model_name].add(csv_file)
 
-            df.to_csv(staging_path / csv_file, index=False)
+            df.write_csv(staging_path / csv_file)
 
         absent = sorted(model for model, assays in contributed.items() if not assays)
-        if absent and not allow_incomplete:
+        if absent:
             raise FileNotFoundError(
                 f"No predictions found for {absent} under {model_predictions_folder}. "
-                "Check the folder names against SCORE_COLS, or pass --allow_incomplete "
-                "to merge without them."
+                "Check the model names and prediction folders."
             )
 
         output_path.mkdir(parents=True, exist_ok=True)
@@ -186,94 +147,120 @@ def combine_csv_data(
         logger.info(f"{model_name}: {len(assays)} assays merged")
 
 
-def main(argv=None):
-    """Run the prediction merge command."""
-    parser = argparse.ArgumentParser(
-        description="Combine processed CSV data with model predictions."
-    )
-    parser.add_argument(
-        "--processed_folder",
-        type=Path,
-        default=ConfigFitness.ASSAY_DIR,
-        help="Path to the folder containing processed CSV files.",
-    )
-    parser.add_argument(
-        "--model_predictions_folder",
-        type=Path,
-        default=ConfigFitness.PREDICTION_DIR,
-        help="Path to the folder containing model prediction subfolders.",
-    )
-    parser.add_argument(
-        "--output_folder",
-        type=Path,
-        default=ConfigFitness.COMBINED_DIR,
-        help="Path to the folder where combined CSV files will be saved.",
-    )
-    parser.add_argument(
-        "--reference_file",
-        type=Path,
-        default=ConfigFitness.REFERENCE_FILE,
-        help="Reference sheet used to identify the assays",
-    )
-    parser.add_argument(
-        "--models",
-        nargs="+",
-        default=None,
-        help="Model entries to merge (default: every entry in ALL_MODELS). Use "
-        "this to merge a subset, such as one masked model's four fill "
-        "strategies: rna_fm_wt_fill rna_fm_mask_fill rna_fm_mut_fill rna_fm_match_fill",
-    )
-    parser.add_argument(
-        "--type",
-        default="ncRNA",
-        choices=["all", *ASSAY_GROUPS],
-        help="Assay group to merge (default: ncRNA)",
-    )
-    parser.add_argument(
-        "--allow_incomplete",
-        action="store_true",
-        help="Merge even when a requested model has no predictions at all. Off by "
-        "default, so that a misspelled prediction folder fails instead of "
-        "producing a merge with that model silently missing",
-    )
-    parser.add_argument(
-        "--assays_with_MSAs_only",
-        action="store_true",
-        help="Focus on assays with MSAs only (i.e., EVmutation)",
-    )
-    args = parser.parse_args(argv)
+def get_mutation_column(df: pl.DataFrame):
+    """Find the mutation column name in a DataFrame."""
+    for col in ["mutant", "mutation", "Mutation", "mutations"]:
+        if col in df.columns:
+            return col
+    raise ValueError("Couldn't find a mutation column in the dataframe")
 
-    if args.assays_with_MSAs_only:
-        model_list = ["EVmutation"]
-    else:
-        model_list = args.models if args.models else ALL_MODELS
+
+def main(argv: Sequence[str] | None = None):
+    """Run the prediction merge command."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--models", nargs="+", default=ALL_MODELS, help="Models to merge"
+    )
+    parser.add_argument("--output", type=Path, default=ConfigFitness.COMBINED_DIR)
+    parser.add_argument("--type", default="ncRNA", choices=["all", *ASSAY_GROUPS])
+    args = parser.parse_args(argv)
+    model_list = args.models
     unknown = [m for m in model_list if m not in SCORE_COLS]
     if unknown:
         parser.error(f"No score column configured for: {unknown}")
 
-    reference = pd.read_csv(args.reference_file, encoding="utf-8-sig")
-    required = {"DMS_ID", "RNA_TYPE"}
-    missing = sorted(required - set(reference.columns))
-    if missing:
-        parser.error(f"Reference sheet is missing columns: {missing}")
-    if reference[list(required)].isna().any().any():
-        parser.error("Reference sheet has missing DMS_ID or RNA_TYPE values")
-    duplicated = sorted(
-        reference.loc[reference["DMS_ID"].duplicated(), "DMS_ID"].astype(str)
-    )
-    if duplicated:
-        parser.error(f"Reference sheet repeats DMS_ID values: {duplicated[:5]}")
-    assay_types = dict(zip(reference["DMS_ID"], reference["RNA_TYPE"]))
+    reference = read_reference(ConfigFitness.REFERENCE_FILE)
+    assay_types = dict(reference.select("DMS_ID", "RNA_TYPE").iter_rows())
 
     combine_csv_data(
-        args.processed_folder,
-        args.model_predictions_folder,
-        args.output_folder,
+        ConfigFitness.ASSAY_DIR,
+        ConfigFitness.PREDICTION_DIR,
+        args.output,
         model_list,
         SCORE_COLS,
-        allow_incomplete=args.allow_incomplete,
         assay_types=assay_types,
         assay_group=args.type,
+    )
+
+
+def merge_predictions(
+    assay: pl.DataFrame, prediction: pl.DataFrame, score_column: str, model: str
+) -> pl.DataFrame:
+    """Attach scores while preserving every experimental measurement.
+
+    The published leaderboard uses the first prediction for each mutation and
+    retains repeated experimental measurements. Repeated predictions must have
+    matching sequences and agree within 0.2% relative or 1e-6 absolute tolerance.
+    This allows rounding drift while rejecting conflicting prediction files.
+    """
+    mutation = get_mutation_column(assay)
+    source_mutation = get_mutation_column(prediction)
+    if score_column not in prediction:
+        raise KeyError(f"{model} has no column {score_column!r}")
+    prediction = (
+        prediction.drop_nulls(source_mutation)
+        .with_columns(standardize_mutation(source_mutation))
+        .rename({source_mutation: mutation})
+    )
+    output_column = f"{model}_score"
+    if output_column in assay:
+        raise ValueError(f"Assay already contains {output_column}")
+    scores = prediction[score_column].cast(pl.Float64, strict=True)
+    if model != "EVmutation" and not scores.is_finite().fill_null(False).all():
+        raise ValueError(f"{model} has missing or nonfinite predictions")
+    if scores.is_infinite().any():
+        raise ValueError(f"{model} has infinite predictions")
+
+    if prediction[mutation].is_duplicated().any():
+        for _, repeated in prediction.filter(pl.col(mutation).is_duplicated()).group_by(
+            mutation
+        ):
+            if "sequence" in repeated and repeated["sequence"].n_unique() != 1:
+                raise ValueError(f"{model}: repeated prediction sequences conflict")
+            values = repeated[score_column].cast(pl.Float64).to_numpy()
+            if not np.allclose(values, values[0], rtol=2e-3, atol=1e-6, equal_nan=True):
+                raise ValueError(
+                    f"{model}: conflicting scores for duplicate mutation {repeated[mutation][0]}"
+                )
+        prediction = prediction.unique(
+            subset=mutation, keep="first", maintain_order=True
+        )
+
+    columns = [pl.col(mutation), pl.col(score_column).alias(output_column)]
+    if "sequence" in prediction and "sequence" in assay:
+        columns.append(pl.col("sequence").alias("_prediction_sequence"))
+    prediction = prediction.select(columns)
+    matched = assay.join(
+        prediction, on=mutation, how="inner", validate="m:1", maintain_order="left"
+    )
+    if matched.height != assay.height:
+        raise ValueError(
+            f"Row count mismatch after merging {model}: expected {assay.height}, got {matched.height}"
+        )
+    if "_prediction_sequence" in matched:
+        different = matched.select(
+            (
+                pl.col("sequence").str.to_uppercase().str.replace_all("T", "U")
+                != pl.col("_prediction_sequence")
+                .str.to_uppercase()
+                .str.replace_all("T", "U")
+            )
+            .fill_null(True)
+            .any()
+        ).item()
+        if different:
+            raise ValueError(f"{model}: prediction sequence disagrees with assay")
+        matched = matched.drop("_prediction_sequence")
+    return matched
+
+
+def standardize_mutation(column: str) -> pl.Expr:
+    """Normalize a mutation column to uppercase RNA notation."""
+    return (
+        pl.col(column)
+        .str.to_uppercase()
+        .str.replace_all("T", "U")
+        .str.replace_all(" ", "")
     )
 
 

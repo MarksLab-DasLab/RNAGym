@@ -6,7 +6,11 @@ transformer runs in bfloat16 for flash attention and its masked-LM head is
 recomputed in float32 to avoid quantized log-likelihood ratios.
 """
 
+import argparse
+
 import torch
+from typing_extensions import override
+
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
 
 
@@ -21,16 +25,18 @@ class RiNALMoAdapter(MaskedLMAdapter):
     requires_cuda = True  # the giga checkpoint stores flash-attention modules
 
     @staticmethod
-    def add_arguments(parser):
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "--checkpoint_path",
+            "--checkpoint",
+            dest="checkpoint_path",
             type=str,
             required=True,
-            help="Path to the RiNALMo giga-v1 checkpoint (.pt), e.g. "
-            "rinalmo_giga_pretrained.pt from the project's Zenodo record.",
+            help="RiNALMo giga-v1 weights (.pt)",
         )
 
-    def load(self, args):
+    @override
+    def load(self, args: argparse.Namespace) -> None:
         from rinalmo.config import model_config
         from rinalmo.data.alphabet import Alphabet
         from rinalmo.model.model import RiNALMo
@@ -49,7 +55,14 @@ class RiNALMoAdapter(MaskedLMAdapter):
         self.prefix_ids = [alphabet.cls_idx]
         self.suffix_ids = [alphabet.eos_idx]
 
-    def logits_at(self, input_ids, attention_mask, rows, cols):
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
         with torch.autocast("cuda", dtype=torch.bfloat16):
             representation = self.model(input_ids)["representation"]
         return self.model.lm_mask_head(representation.float())[rows, cols]

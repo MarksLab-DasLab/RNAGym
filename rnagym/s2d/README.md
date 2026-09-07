@@ -1,62 +1,27 @@
-# RNAGym secondary structure benchmark
+# Secondary structure benchmark
 
-## Getting started
+RNA secondary structure prediction on the RNAGym datasets in `data/2d/`.
+See the [leaderboard][0] for results.
 
-The datasets are stored under [`../../data/2d/`](../../data/2d/). See the
-[repository-level instructions](../../README.md#resources) to download and extract
-them.
+## Run
 
-## Environments
-
-This directory has isolated [Pixi](https://pixi.sh) environments for the
-secondary structure baselines in RNAGym:
-
-| Environment | Tool |
-| --- | --- |
-| `(default)` | Default env for scripts and processing |
-| `ribonanzanet` | RibonanzaNet |
-| `rinalmo` | RiNALMo |
-| `eternafold` | EternaFold |
-| `contrafold` | CONTRAfold |
-| `vienna` | ViennaRNA |
-| `rnastructure` | RNAstructure |
-| `rna-fm` | RNA-FM |
-| `ufold` | UFold |
-| `mxfold2` | MXfold2 |
-
-Install the environments with `pixi install --all`, then enter an environment
-with `pixi shell -e <name>`, or run a command directly with `pixi run -e <name>
-<command>`.
-
-### Note on source-only neural models
-
-RibonanzaNet, RiNALMo, and UFold use pinned upstream source. Their `source` task
-checks out a pinned upstream commit under `.pixi/model-sources/`, and `test`
-runs this task automatically. For example:
+From this directory, with the datasets installed:
 
 ```bash
-pixi run -e ufold source
+pixi install
 pixi run -e ufold test
-```
-
-Neural model tests fetch verified public weights automatically. RiNALMo requires
-a GPU. The other adapters test one short sequence on CPU.
-
-## Reproducing the predictions
-
-After verifying the contents of `sh/predict.sh` for your cluster, generate
-predictions with a model and save them to
-`../../data/2d/predictions/<model>` with:
-
-```bash
-pixi run -e <env> predict
-```
-
-To generate the leaderboard from the saved predictions:
-
-```bash
+pixi run -e ufold predict
 pixi run leaderboard
 ```
 
-This writes the [2D leaderboard](../../leaderboard/2d/README.md) and its
-[detailed scores](../../leaderboard/2d/leaderboard.csv).
+Choose a model environment from [pixi.toml][1]. Model sources and public weights
+are fetched automatically.
+RiNALMo requires a GPU.
+
+Prediction jobs use the Slurm settings in [sh/predict.sh][2]. Outputs go to
+`data/2d/predictions/<model>/`. `leaderboard` scores the saved predictions and
+writes the leaderboard CSV and README.
+
+[0]: ../../leaderboard/2d/
+[1]: pixi.toml
+[2]: sh/predict.sh

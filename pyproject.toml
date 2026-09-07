@@ -38,3 +38,6 @@ include = [
 
 [tool.distutils.egg_info]
 egg-base = "rnagym/.egg"
+
+[tool.ruff.lint.isort]
+known-first-party = ["rnagym"]

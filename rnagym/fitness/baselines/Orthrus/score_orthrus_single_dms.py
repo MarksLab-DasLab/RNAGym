@@ -10,7 +10,11 @@ Orthrus's two optional annotation channels remain zero.
 https://huggingface.co/antichronology/orthrus-mlm-6-track/blob/5f0dc87d51065035fc28e71972c69f9c84f4deae/orthrus_hf.py#L290-L325
 """
 
+import argparse
+
 import torch
+from typing_extensions import override
+
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
 
 
@@ -31,20 +35,24 @@ class OrthrusAdapter(MaskedLMAdapter):
     PAD_CODE = 5
 
     @staticmethod
-    def add_arguments(parser):
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "--model_name",
+            "--model",
+            dest="model_name",
             type=str,
             default="antichronology/orthrus-mlm-6-track",
-            help="Orthrus checkpoint with an MLM head (default: "
-            "antichronology/orthrus-mlm-6-track). The contrastive checkpoints "
-            "raise NotImplementedError from predict_tokens",
+            help="MLM checkpoint ID or local path",
         )
 
-    def load(self, args):
+    @override
+    def load(self, args: argparse.Namespace) -> None:
         from transformers import AutoModel
 
-        self.model = AutoModel.from_pretrained(args.model_name, trust_remote_code=True)
+        self.model = AutoModel.from_pretrained(
+            args.model_name,
+            trust_remote_code=True,
+        )
         self.model = self.model.to(args.device).eval()
         self.device = args.device
         if getattr(self.model, "sequence_head", None) is None:
@@ -59,7 +67,14 @@ class OrthrusAdapter(MaskedLMAdapter):
         self.prefix_ids = []
         self.suffix_ids = []
 
-    def logits_at(self, input_ids, attention_mask, rows, cols):
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
         """
         Convert base codes to six-track inputs for ``predict_tokens``.
 

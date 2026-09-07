@@ -6,16 +6,19 @@ tokens, and ``tMASK``. Its vocabulary is read directly from ``tokenizer.model``
 because the shipped tokenizer does not expose the model's mask ID.
 """
 
+import argparse
 from pathlib import Path
 
 import torch
+from typing_extensions import override
+
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
 
 MASK_TOKEN = "tMASK"
 UNK_TOKEN = "N"
 
 
-def load_vocab(model_path: Path) -> dict:
+def load_vocab(model_path: Path) -> dict[str, int]:
     """
     Read the model's own vocabulary file and return a token to id mapping.
 
@@ -40,30 +43,25 @@ class RNAGenesisAdapter(MaskedLMAdapter):
     default_max_batch_tokens = 32768
 
     @staticmethod
-    def add_arguments(parser):
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "--model_name",
+            "--model",
+            dest="model_name",
             type=Path,
             required=True,
             help="Local RNAGenesis checkpoint directory",
         )
-        parser.add_argument(
-            "--dtype",
-            type=str,
-            default="bfloat16",
-            choices=["bfloat16", "float32"],
-            help="Torch dtype for the model weights. bfloat16 is the default and "
-            "is what the released predictions were produced with",
-        )
 
-    def load(self, args):
+    @override
+    def load(self, args: argparse.Namespace) -> None:
         from transformers import AutoModelForMaskedLM
 
         vocab = load_vocab(args.model_name)
         self.model = AutoModelForMaskedLM.from_pretrained(
             args.model_name,
             trust_remote_code=True,
-            torch_dtype=getattr(torch, args.dtype),
+            torch_dtype=torch.bfloat16,
         )
         self.model = self.model.to(args.device).eval()
         self.device = args.device
@@ -75,7 +73,14 @@ class RNAGenesisAdapter(MaskedLMAdapter):
         self.prefix_ids = []  # the reference usage adds no special tokens
         self.suffix_ids = []
 
-    def logits_at(self, input_ids, attention_mask, rows, cols):
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
         return outputs.logits[rows, cols]
 

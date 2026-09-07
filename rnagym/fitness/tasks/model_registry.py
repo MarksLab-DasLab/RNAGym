@@ -1,4 +1,6 @@
-"""Assay groups, prediction folders and score columns for fitness workflows."""
+"""Assay groups and prediction columns for fitness workflows."""
+
+from __future__ import annotations
 
 ALL_MODELS = (
     "evo1",
@@ -29,7 +31,7 @@ ASSAY_GROUPS = {
     "coding": ("mRNA-coding",),
 }
 
-SCORE_COLS = {
+SCORE_COLS: dict[str, str | dict[str, str]] = {
     "evo1": "evo_1_131k_base_score",
     "evo1.5": "evo_1.5_8k_base_score",
     "evo2": "evo2_7b_score",
@@ -37,43 +39,7 @@ SCORE_COLS = {
     "evo2_20b": "evo2_20b_score",
     "evo2_40b": "evo2_40b_score",
     "GenSLM": "logit_scores",
-    "ntv3_8m": {
-        "folder": "ntv3_8m_4fill",
-        "column": "ntv3_score_wt_fill",
-    },
-    "ntv3_100m": {
-        "folder": "ntv3_100m_4fill",
-        "column": "ntv3_score_wt_fill",
-    },
-    "ntv3_650m": {
-        "folder": "ntv3_650m_4fill",
-        "column": "ntv3_score_wt_fill",
-    },
-    "RNA-FM": {"folder": "rna_fm_4fill", "column": "RNA_FM_scores_wt_fill"},
-    "rinalmo": {"folder": "rinalmo_4fill", "column": "logit_scores_wt_fill"},
     "RNAErnie": "Mutation_Scores",
-    "orthrus": {"folder": "orthrus_4fill", "column": "orthrus_score_wt_fill"},
-    "aido_rna": {"folder": "aido_rna_4fill", "column": "aido_rna_score_wt_fill"},
-    "rnagenesis": {
-        "folder": "rnagenesis_4fill",
-        "column": "rnagenesis_score_wt_fill",
-    },
-    "aido_rna_1m": {
-        "folder": "aido_rna_1m_4fill",
-        "column": "aido_rna_score_wt_fill",
-    },
-    "aido_rna_25m": {
-        "folder": "aido_rna_25m_4fill",
-        "column": "aido_rna_score_wt_fill",
-    },
-    "aido_rna_300m": {
-        "folder": "aido_rna_300m_4fill",
-        "column": "aido_rna_score_wt_fill",
-    },
-    "aido_rna_650m": {
-        "folder": "aido_rna_650m_4fill",
-        "column": "aido_rna_score_wt_fill",
-    },
     "EVmutation": "prediction_epistatic",
 }
 
@@ -93,6 +59,16 @@ FOUR_FILL_SPECS = {
 }
 STRATEGIES = ("wt_fill", "mask_fill", "mut_fill", "match_fill")
 
+SCORE_COLS.update(
+    {
+        ("RNA-FM" if name == "rna_fm" else name): {
+            "folder": folder,
+            "column": f"{stem}_wt_fill",
+        }
+        for name, (folder, stem) in FOUR_FILL_SPECS.items()
+    }
+)
+
 _four_fill_models = []
 for name, (folder, column_stem) in FOUR_FILL_SPECS.items():
     entries = {
@@ -107,7 +83,9 @@ for name, (folder, column_stem) in FOUR_FILL_SPECS.items():
 FOUR_FILL_MODELS = tuple(_four_fill_models)
 
 
-def resolve_source(score_columns: dict, model_name: str) -> tuple[str, str]:
+def resolve_source(
+    score_columns: dict[str, str | dict[str, str]], model_name: str
+) -> tuple[str, str]:
     """Return the prediction folder and score column for a model entry."""
     try:
         specification = score_columns[model_name]

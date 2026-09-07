@@ -7,30 +7,17 @@ data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 
 model_name=${EVO2_MODEL_NAME:-evo2_40b}
 prediction_name=${EVO2_PREDICTION_NAME:-$model_name}
-row_id=${SLURM_ARRAY_TASK_ID:-0}
+row_id=${1:-${SLURM_ARRAY_TASK_ID:-0}}
 local_path=${EVO2_LOCAL_PATH:-}
 
 extra_args=()
 if [[ -n "$local_path" ]]; then
-	extra_args+=(--local_path "$local_path")
+	extra_args+=(--checkpoint "$local_path")
 fi
-case "$model_name" in
-evo2_1b_base)
-	extra_args+=(--max_tokens_per_batch 32768 --require_fp8)
-	;;
-evo2_20b)
-	extra_args+=(--max_tokens_per_batch 16384 --require_fp8)
-	;;
-evo2_40b)
-	extra_args+=(--require_fp8)
-	;;
-esac
 
 cd "$repository"
 python -m rnagym.fitness.baselines.Evo.score_evo2_single_dms \
-	--row_id "$row_id" \
-	--ref_sheet "$data_dir/reference_sheet_final.csv" \
-	--dms_dir_path "$data_dir/assays" \
-	--output_dir_path "$data_dir/model_predictions/$prediction_name" \
-	--model_name "$model_name" \
+	--rows "$row_id" \
+	--output "$data_dir/model_predictions/$prediction_name" \
+	--model "$model_name" \
 	"${extra_args[@]}"

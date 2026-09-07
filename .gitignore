@@ -5,9 +5,8 @@
 
 # Anywere
 __pycache__/
-/activations_debug.log
+activations_debug.log
 slurm-*.out
 archives
 .vibe/
 .rg_jobs/
-

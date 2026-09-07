@@ -1,88 +1,22 @@
 """Run batched inference over deduplicated masked contexts."""
 
+from __future__ import annotations
+
 import numpy as np
 import torch
-from rnagym.fitness.baselines.masked_lm.strategies import MASK_CHAR, validate_table
 from tqdm.auto import tqdm
 
-
-def window_contexts(table, budget: int) -> None:
-    """Window contexts in place around their masked span."""
-    if all(len(c) <= budget for c in table.contexts):
-        return
-
-    # Masked span per context, from the task table rather than from the string
-    # The table is sorted by context, so the spans come from one grouped reduce
-    # rather than a pass over every term, which matters on the mRNA-coding
-    # assays where this path is reached at all
-    span_lo = {}
-    span_hi = {}
-    if table.n_terms():
-        used, first = np.unique(table.ctx_id, return_index=True)
-        lows = np.minimum.reduceat(table.pos, first)
-        highs = np.maximum.reduceat(table.pos, first)
-        span_lo = dict(zip(used.tolist(), lows.tolist()))
-        span_hi = dict(zip(used.tolist(), highs.tolist()))
-
-    shift = np.zeros(len(table.contexts), dtype=np.int64)
-    trimmed = list(table.contexts)
-    for k, context in enumerate(table.contexts):
-        if len(context) <= budget:
-            continue
-        if k not in span_lo:
-            trimmed[k] = context[:budget]
-            continue
-        low, high = span_lo[k], span_hi[k]
-        span = high - low + 1
-        if span > budget:
-            raise ValueError(
-                f"Masked span of {span} positions does not fit in a window of "
-                f"{budget}. This context cannot be scored"
-            )
-        centre = (low + high) // 2
-        start = max(0, centre - budget // 2)
-        end = min(len(context), start + budget)
-        start = max(0, end - budget)
-        trimmed[k] = context[start:end]
-        shift[k] = start
-
-    table.contexts = trimmed
-    if shift.any():
-        table.pos = (table.pos - shift[table.ctx_id]).astype(np.int32)
-    validate_table(table)
-
-
-def pad_contexts(table, adapter) -> None:
-    """Pad fixed-length contexts to the adapter's required length."""
-    if adapter.context_pad_char is None:
-        return
-    lengths = {len(c) for c in table.contexts}
-    if len(lengths) != 1:
-        raise ValueError(
-            f"{adapter.name} pads contexts to a fixed length, so every context "
-            f"must start the same length. Found {sorted(lengths)}"
-        )
-    length = lengths.pop()
-    target = adapter.context_length_for(length)
-    if target < length:
-        raise ValueError(
-            f"{adapter.name} asked to pad a {length} nt context down to {target}"
-        )
-    if target == length:
-        return
-    padding = target - length
-    filler = adapter.context_pad_char
-    print(
-        f"Padding contexts from {length} to {target} positions with "
-        f"{padding} trailing {filler}"
-    )
-    table.contexts = [context + filler * padding for context in table.contexts]
-    validate_table(table)
+from rnagym.fitness.baselines.masked_lm.adapter import MaskedLMAdapter
+from rnagym.fitness.baselines.masked_lm.strategies import (
+    MASK_CHAR,
+    TaskTable,
+    validate_table,
+)
 
 
 def accumulate_scores(
-    adapter,
-    table,
+    adapter: MaskedLMAdapter,
+    table: TaskTable,
     n_rows: int,
     batch_size: int,
     max_batch_tokens: int,
@@ -196,3 +130,77 @@ def accumulate_scores(
             f"{adapter.name} produced a non-finite accumulated score"
         )
     return scores
+
+
+def pad_contexts(table: TaskTable, adapter: MaskedLMAdapter) -> None:
+    """Pad fixed-length contexts to the adapter's required length."""
+    if adapter.context_pad_char is None:
+        return
+    lengths = {len(c) for c in table.contexts}
+    if len(lengths) != 1:
+        raise ValueError(
+            f"{adapter.name} pads contexts to a fixed length, so every context "
+            f"must start the same length. Found {sorted(lengths)}"
+        )
+    length = lengths.pop()
+    target = adapter.context_length_for(length)
+    if target < length:
+        raise ValueError(
+            f"{adapter.name} asked to pad a {length} nt context down to {target}"
+        )
+    if target == length:
+        return
+    padding = target - length
+    filler = adapter.context_pad_char
+    print(
+        f"Padding contexts from {length} to {target} positions with "
+        f"{padding} trailing {filler}"
+    )
+    table.contexts = [context + filler * padding for context in table.contexts]
+    validate_table(table)
+
+
+def window_contexts(table: TaskTable, budget: int) -> None:
+    """Window contexts in place around their masked span."""
+    if all(len(c) <= budget for c in table.contexts):
+        return
+
+    # Masked span per context, from the task table rather than from the string
+    # The table is sorted by context, so the spans come from one grouped reduce
+    # rather than a pass over every term, which matters on the mRNA-coding
+    # assays where this path is reached at all
+    span_lo: dict[int, int] = {}
+    span_hi: dict[int, int] = {}
+    if table.n_terms():
+        used, first = np.unique(table.ctx_id, return_index=True)
+        lows = np.minimum.reduceat(table.pos, first)
+        highs = np.maximum.reduceat(table.pos, first)
+        span_lo = dict(zip(used.tolist(), lows.tolist()))
+        span_hi = dict(zip(used.tolist(), highs.tolist()))
+
+    shift = np.zeros(len(table.contexts), dtype=np.int64)
+    trimmed = list(table.contexts)
+    for k, context in enumerate(table.contexts):
+        if len(context) <= budget:
+            continue
+        if k not in span_lo:
+            trimmed[k] = context[:budget]
+            continue
+        low, high = span_lo[k], span_hi[k]
+        span = high - low + 1
+        if span > budget:
+            raise ValueError(
+                f"Masked span of {span} positions does not fit in a window of "
+                f"{budget}. This context cannot be scored"
+            )
+        centre = (low + high) // 2
+        start = max(0, centre - budget // 2)
+        end = min(len(context), start + budget)
+        start = max(0, end - budget)
+        trimmed[k] = context[start:end]
+        shift[k] = start
+
+    table.contexts = trimmed
+    if shift.any():
+        table.pos = (table.pos - shift[table.ctx_id]).astype(np.int32)
+    validate_table(table)

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import polars as pl
 from polars.testing import assert_frame_equal
+
 from rnagym.config import Config2D, Config3D
 from rnagym.s3d.cmd import split
 from rnagym.s3d.tasks import score

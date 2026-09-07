@@ -4,17 +4,20 @@ The formulas and provenance are documented in this package's README. Task
 positions are zero-based context coordinates and must point at a mask.
 """
 
+from __future__ import annotations
+
 from array import array
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
+
+from rnagym.fitness.tasks.model_registry import STRATEGIES
 
 MASK_CHAR = "#"
 
 # Canonical order. The CLI accepts the hyphenated spelling used in the write-up
 # the underscored spelling is used for identifiers and output column suffixes
-STRATEGIES = ("wt_fill", "mask_fill", "mut_fill", "match_fill")
 
 
 def normalize_strategy(name: str) -> str:
@@ -29,7 +32,7 @@ def normalize_strategy(name: str) -> str:
 class TaskTable:
     """Deduplicated contexts and parallel arrays of accumulation terms."""
 
-    contexts: list
+    contexts: list[str]
     ctx_id: np.ndarray
     pos: np.ndarray
     base: np.ndarray
@@ -37,13 +40,13 @@ class TaskTable:
     strategy: np.ndarray
     sign: np.ndarray
     scorable: np.ndarray
-    strategies: tuple
+    strategies: tuple[str, ...]
 
     def n_terms(self) -> int:
         return int(self.ctx_id.size)
 
 
-def parse_mutations(mutant_str: str, bases: str) -> list:
+def parse_mutations(mutant_str: str, bases: str) -> list[tuple[int, str, str]]:
     """Return ``(position, wild base, mutant base)`` substitution tuples."""
     fold_from, fold_to = ("U", "T") if "T" in bases else ("T", "U")
     mutations = []
@@ -59,11 +62,15 @@ def parse_mutations(mutant_str: str, bases: str) -> list:
     return mutations
 
 
-def recover_wild_type(mutants, sequences, bases: str) -> str:
+def recover_wild_type(
+    mutants: Sequence[str | None], sequences: Sequence[str], bases: str
+) -> str:
     """Recover one wild type by reverting every valid variant."""
-    candidates = {}
+    candidates: dict[str, int] = {}
     for mutant_str, seq in zip(mutants, sequences):
-        if pd.isna(mutant_str):
+        if mutant_str is None or (
+            isinstance(mutant_str, float) and np.isnan(mutant_str)
+        ):
             continue
         try:
             mutations = parse_mutations(mutant_str, bases)
@@ -84,15 +91,15 @@ def recover_wild_type(mutants, sequences, bases: str) -> str:
     if not candidates:
         raise ValueError("No variant could be reverted to a wild-type sequence")
     if len(candidates) > 1:
-        top = sorted(candidates.items(), key=lambda kv: -kv[1])[:3]
+        top = sorted(candidates, key=candidates.__getitem__, reverse=True)[:3]
         raise ValueError(
             "Variants imply more than one wild-type sequence "
-            f"({len(candidates)} distinct, top counts {[c for _, c in top]})"
+            f"({len(candidates)} distinct, top counts {[candidates[key] for key in top]})"
         )
     return next(iter(candidates))
 
 
-def difference_counts(sequences, wild_type: str) -> np.ndarray:
+def difference_counts(sequences: Sequence[str], wild_type: str) -> np.ndarray:
     """Count differences, using -1 for sequences of the wrong length."""
     length = len(wild_type)
     counts = np.full(len(sequences), -1, dtype=np.int64)
@@ -108,7 +115,7 @@ def difference_counts(sequences, wild_type: str) -> np.ndarray:
     return counts
 
 
-def validate_table(table) -> None:
+def validate_table(table: TaskTable) -> None:
     """Require every task position to point at a mask in its context."""
     if table.n_terms() == 0:
         return
@@ -167,7 +174,7 @@ def _single_mask(seq: str, pos: int) -> str:
     return seq[:pos] + MASK_CHAR + seq[pos + 1 :]
 
 
-def _multi_mask(seq: str, positions) -> str:
+def _multi_mask(seq: str, positions: Sequence[int]) -> str:
     chars = list(seq)
     for pos in positions:
         chars[pos] = MASK_CHAR
@@ -175,11 +182,11 @@ def _multi_mask(seq: str, positions) -> str:
 
 
 def build_tasks(
-    mutants,
-    sequences,
+    mutants: Sequence[str | None],
+    sequences: Sequence[str],
     wild_type: str,
     bases: str,
-    strategies=STRATEGIES,
+    strategies: tuple[str, ...] = STRATEGIES,
     verbose: bool = True,
 ) -> TaskTable:
     """Build deduplicated contexts and signed log-probability terms.
@@ -204,7 +211,7 @@ def build_tasks(
 
     # The wild-type single-mask contexts depend only on the position, so they are
     # shared by every variant and worth caching
-    wt_ctx_cache = {}
+    wt_ctx_cache: dict[int, int] = {}
 
     def wt_masked(pos: int) -> int:
         key = wt_ctx_cache.get(pos)
@@ -227,7 +234,9 @@ def build_tasks(
 
     n_skipped = 0
     for i, (mutant_str, seq) in enumerate(zip(mutants, sequences)):
-        if pd.isna(mutant_str):
+        if mutant_str is None or (
+            isinstance(mutant_str, float) and np.isnan(mutant_str)
+        ):
             continue  # wild-type row: leave as NaN
         try:
             mutations = parse_mutations(mutant_str, bases)
@@ -267,7 +276,7 @@ def build_tasks(
                             f"Wild type has {wild_type[pos]} at position {pos + 1}, "
                             f"expected {wt_base}"
                         )
-            if needs_wt and n_differences[i] != len(positions):
+            if n_differences is not None and n_differences[i] != len(positions):
                 raise ValueError(
                     f"Sequence differs from the wild type at {n_differences[i]} "
                     f"positions but declares {len(positions)} mutations, so the "
@@ -292,7 +301,7 @@ def build_tasks(
                 key = wt_masked(pos)
                 emit(key, pos, mut_base, i, "wt_fill", 1)
                 emit(key, pos, wt_base, i, "wt_fill", -1)
-            if "mask_fill" in strat_id:
+            if joint_ctx is not None:
                 emit(joint_ctx, pos, mut_base, i, "mask_fill", 1)
                 emit(joint_ctx, pos, wt_base, i, "mask_fill", -1)
             if "mut_fill" in strat_id:

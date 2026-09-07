@@ -7,6 +7,11 @@ padding tokens. This benchmark applies its shared masked-marginal estimator,
 not the authors' supervised variant-effect method.
 """
 
+import argparse
+
+import torch
+from typing_extensions import override
+
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
 
 
@@ -20,19 +25,28 @@ class NTv3Adapter(MaskedLMAdapter):
     default_batch_size = 128
 
     @staticmethod
-    def add_arguments(parser):
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "--model_name",
+            "--model",
+            dest="model_name",
             default="InstaDeepAI/NTv3_650M_pre",
-            help="Main pretrained checkpoint ID or local path "
-            "(default: InstaDeepAI/NTv3_650M_pre)",
+            help="Pretrained checkpoint ID or local path",
         )
 
-    def load(self, args):
+    @override
+    def context_length_for(self, length: int) -> int:
+        """Round up to the checkpoint's U-Net block size."""
+        multiple = 2**self.num_downsamples
+        return ((length + multiple - 1) // multiple) * multiple
+
+    @override
+    def load(self, args: argparse.Namespace) -> None:
         from transformers import AutoModelForMaskedLM, AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name, trust_remote_code=True
+            args.model_name,
+            trust_remote_code=True,
         )
         self.model = AutoModelForMaskedLM.from_pretrained(
             args.model_name,
@@ -48,12 +62,14 @@ class NTv3Adapter(MaskedLMAdapter):
         self.pad_id = tokenizer.pad_token_id
         self.unk_id = vocab["N"]
 
-    def context_length_for(self, length: int) -> int:
-        """Round up to the checkpoint's U-Net block size."""
-        multiple = 2**self.num_downsamples
-        return ((length + multiple - 1) // multiple) * multiple
-
-    def logits_at(self, input_ids, attention_mask, rows, cols):
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
         if (input_ids == self.pad_id).any():
             raise ValueError(
                 f"{self.name} ignores the attention mask, but a padding token "

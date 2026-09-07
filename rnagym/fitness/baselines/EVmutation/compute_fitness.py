@@ -1,10 +1,12 @@
 """Score fitness assays with EVmutation and their released Riboseek MSAs."""
 
+from __future__ import annotations
+
 import argparse
-import os
 import re
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -13,7 +15,9 @@ from evcouplings.couplings import CouplingsModel
 from evcouplings.mutate import extract_mutations, predict_mutation_table
 from evcouplings.utils import BailoutException
 from evcouplings.utils.pipeline import execute
+
 from rnagym.config import ConfigFitness
+from rnagym.fitness.data import read_reference, write_csv_atomically
 
 MUTATION_PATTERN = re.compile(r"^[ACGU]\d+[ACGU](?:,[ACGU]\d+[ACGU])*$")
 RNA_TO_DNA = str.maketrans("Uu", "Tt")
@@ -27,7 +31,7 @@ def build_config(
     sequence_id: str,
     work_dir: Path,
     cpu_count: int,
-) -> dict:
+) -> dict[str, Any]:
     """Build the EVcouplings existing-alignment pipeline configuration."""
     return {
         "stages": ["align", "couplings"],
@@ -115,20 +119,91 @@ def first_fasta_record(path: Path) -> tuple[str, str]:
     return identifier, "".join(sequence)
 
 
+def infer_model(config: dict[str, Any]) -> CouplingsModel:
+    """Fit DNA couplings with the alignment's coverage mask and query coordinates."""
+    alignment = execute(**(config | {"stages": ["align"]}))
+    positions = prepare_dna_alignment(
+        Path(alignment["alignment_file"]), alignment["focus_sequence"]
+    )
+    # Preserve upstream (L - 1)(q - 1) scaling after replacing masked bases with gaps
+    couplings = config["couplings"] | {
+        "lambda_J": config["couplings"]["lambda_J"] * (len(positions) - 1) * 3,
+        "lambda_J_times_Lq": False,
+    }
+    output = execute(**(config | {"stages": ["couplings"], "couplings": couplings}))
+    model = CouplingsModel(output["model_file"])
+    if not np.array_equal(model.index_list, positions):
+        raise ValueError("PLMC positions disagree with the alignment coverage mask")
+    return model
+
+
+def main() -> None:
+    """Score every reference-sheet assay that has a released Riboseek MSA."""
+    args = parse_args()
+    msa_dir = ConfigFitness.MSA_DIR / "by_assay"
+    work_dir = ConfigFitness.DATA_DIR / "tmp/evmutation"
+    if args.cpu < 1:
+        raise ValueError("--cpu must be positive")
+    if not msa_dir.is_dir():
+        raise FileNotFoundError(f"Riboseek MSA directory is missing: {msa_dir}")
+
+    reference = read_reference(ConfigFitness.REFERENCE_FILE)
+    args.output.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    completed = 0
+    rejected = 0
+    for name, raw_sequence in reference.select(
+        "DMS_ID", "RAW_CONSTRUCT_SEQ"
+    ).iter_rows():
+        alignment_file = msa_dir / f"{name}.a3m"
+        query_file = msa_dir / f"{name}.fa"
+        if not alignment_file.is_file() and not query_file.is_file():
+            continue
+        if not alignment_file.is_file() or not query_file.is_file():
+            raise FileNotFoundError(f"Incomplete Riboseek MSA files for {name}")
+        assay_file = ConfigFitness.ASSAY_DIR / f"{name}.csv"
+        if not assay_file.is_file():
+            raise FileNotFoundError(f"Fitness assay is missing: {assay_file}")
+        output_file = args.output / assay_file.name
+        if output_file.exists():
+            continue
+        if raw_sequence is None:
+            raise ValueError(f"{name} has no reference sequence")
+
+        print(f"Scoring {name}", flush=True)
+        try:
+            with tempfile.TemporaryDirectory(prefix=f"{name}-", dir=work_dir) as path:
+                result = score_assay(
+                    assay_file,
+                    alignment_file,
+                    query_file,
+                    normalize_sequence(raw_sequence),
+                    name,
+                    Path(path),
+                    args.cpu,
+                )
+        except BailoutException as error:
+            print(f"Skipped {name}: {error}", flush=True)
+            rejected += 1
+            continue
+        write_csv_atomically(result, output_file)
+        completed += 1
+    print(f"Scored {completed} assay(s), EVcouplings rejected {rejected}")
+
+
 def normalize_sequence(sequence: str) -> str:
     """Normalize an RNA sequence for reference and MSA consistency checks."""
     return sequence.upper().replace("T", "U").replace("-", "").replace(".", "")
 
 
-def write_dna_fasta(source: Path, destination: Path) -> None:
-    """Write a FASTA copy with uracil represented as thymine."""
-    # Existing-alignment parsing uses the protein alphabet, which omits U
-    # https://github.com/debbiemarkslab/EVcouplings/blob/14c83457c6cfca8156aabe0615067447a2169791/evcouplings/align/protocol.py#L702
-    with source.open() as input_handle, destination.open("w") as output_handle:
-        for line in input_handle:
-            output_handle.write(
-                line if line.startswith(">") else line.translate(RNA_TO_DNA)
-            )
+def parse_args() -> argparse.Namespace:
+    """Parse EVmutation input and output locations."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "EVmutation"
+    )
+    parser.add_argument("--cpu", type=int, default=4)
+    return parser.parse_args()
 
 
 def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, str]]:
@@ -155,10 +230,30 @@ def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, 
     return mutations
 
 
-def infer_model(config: dict) -> CouplingsModel:
-    """Run the EVcouplings pipeline and load its accepted Potts model."""
-    output = execute(**config)
-    return CouplingsModel(output["model_file"])
+def prepare_dna_alignment(path: Path, focus_id: str) -> list[int]:
+    """Convert protein A2M gaps and focus masking to PLMC's DNA representation."""
+    # PLMC handles dot gaps and lowercase focus masking only for its protein alphabet
+    # https://github.com/debbiemarkslab/plmc/blob/9152c483e18263a90cbe79082a61e83cf6dd70a1/src/plm.c#L248-L258
+    # https://github.com/debbiemarkslab/plmc/blob/9152c483e18263a90cbe79082a61e83cf6dd70a1/src/plm.c#L395-L413
+    destination = path.with_suffix(".dna.a2m")
+    focus = False
+    query = []
+    with path.open() as source, destination.open("w") as output:
+        for line in source:
+            if line.startswith(">"):
+                focus = line[1:].split()[0] == focus_id
+                output.write(line)
+            else:
+                if focus:
+                    query.extend(line.strip())
+                    # Gap-reduced PLMC excludes query gaps while retaining original indices
+                    line = "".join("-" if base.islower() else base for base in line)
+                output.write(line.upper().replace(".", "-"))
+    positions = [i + 1 for i, base in enumerate(query) if base in "ACGT"]
+    if not positions:
+        raise ValueError("Alignment has no covered query positions")
+    destination.replace(path)
+    return positions
 
 
 def score_assay(
@@ -170,7 +265,7 @@ def score_assay(
     work_dir: Path,
     cpu_count: int,
 ) -> pl.DataFrame:
-    """Infer one accepted Potts model and score every assay variant."""
+    """Score covered variants, retaining nulls for mutations outside modeled sites."""
     sequence_id, aligned_query = first_fasta_record(alignment_file)
     query_id, query_sequence = first_fasta_record(query_file)
     if sequence_id != query_id:
@@ -201,6 +296,7 @@ def score_assay(
         raise ValueError(f"{assay_file} is missing columns: {missing_columns}")
 
     normalized_mutants = []
+    covered = []
     for row, (mutant, sequence) in enumerate(
         assay.select("mutant", "sequence").iter_rows()
     ):
@@ -219,102 +315,38 @@ def score_assay(
                 or "wt"
             ).translate(RNA_TO_DNA)
         )
+        covered.append(all(position in model.index_map for position, _, _ in mutations))
 
     # predict_mutation_table is the upstream scoring API and requires pandas
-    prediction_input = pd.DataFrame({"mutant": normalized_mutants})
+    prediction_input = pd.DataFrame(
+        {
+            "mutant": [
+                mutant for mutant, keep in zip(normalized_mutants, covered) if keep
+            ]
+        }
+    )
+    if prediction_input.empty:
+        raise BailoutException("No assay variants fall within modeled positions")
     predictions = predict_mutation_table(model, prediction_input, SCORE_COLUMN)
-    scores = predictions[SCORE_COLUMN].to_numpy(dtype=float)
-    if not np.isfinite(scores).all():
-        count = int((~np.isfinite(scores)).sum())
+    values = predictions[SCORE_COLUMN].to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        count = int((~np.isfinite(values)).sum())
         raise FloatingPointError(f"{assay_file} produced {count} non-finite scores")
-    return assay.with_columns(pl.Series(SCORE_COLUMN, scores))
+    scores = np.full(assay.height, np.nan)
+    scores[covered] = values
+    print(f"{name}: scored {sum(covered)}/{assay.height} variants within modeled sites")
+    return assay.with_columns(pl.Series(SCORE_COLUMN, scores, nan_to_null=True))
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse EVmutation input and output locations."""
-    parser = argparse.ArgumentParser(
-        description="Score RNA fitness assays with EVmutation"
-    )
-    parser.add_argument(
-        "--msa_dir", type=Path, default=ConfigFitness.MSA_DIR / "by_assay"
-    )
-    parser.add_argument("--ref_sheet", type=Path, default=ConfigFitness.REFERENCE_FILE)
-    parser.add_argument("--dms_dir", type=Path, default=ConfigFitness.ASSAY_DIR)
-    parser.add_argument(
-        "--out_dir", type=Path, default=ConfigFitness.PREDICTION_DIR / "EVmutation"
-    )
-    parser.add_argument(
-        "--tmp_dir", type=Path, default=ConfigFitness.DATA_DIR / "tmp" / "evmutation"
-    )
-    parser.add_argument("--cpu", type=int, default=4)
-    return parser.parse_args()
-
-
-def main() -> None:
-    """Score every reference-sheet assay that has a released Riboseek MSA."""
-    args = parse_args()
-    if args.cpu < 1:
-        raise ValueError("--cpu must be positive")
-    if not args.msa_dir.is_dir():
-        raise FileNotFoundError(f"Riboseek MSA directory is missing: {args.msa_dir}")
-
-    reference = pl.read_csv(args.ref_sheet, encoding="utf8-lossy")
-    if reference.columns and reference.columns[0].startswith("\ufeff"):
-        first = reference.columns[0]
-        reference = reference.rename({first: first.lstrip("\ufeff")})
-    required_columns = {"DMS_ID", "RAW_CONSTRUCT_SEQ"}
-    missing_columns = sorted(required_columns - set(reference.columns))
-    if missing_columns:
-        raise ValueError(f"{args.ref_sheet} is missing columns: {missing_columns}")
-
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    args.tmp_dir.mkdir(parents=True, exist_ok=True)
-    completed = 0
-    rejected = 0
-    for name, raw_sequence in reference.select(
-        "DMS_ID", "RAW_CONSTRUCT_SEQ"
-    ).iter_rows():
-        alignment_file = args.msa_dir / f"{name}.a3m"
-        query_file = args.msa_dir / f"{name}.fa"
-        if not alignment_file.is_file() and not query_file.is_file():
-            continue
-        if not alignment_file.is_file() or not query_file.is_file():
-            raise FileNotFoundError(f"Incomplete Riboseek MSA files for {name}")
-        assay_file = args.dms_dir / f"{name}.csv"
-        if not assay_file.is_file():
-            raise FileNotFoundError(f"Fitness assay is missing: {assay_file}")
-        output_file = args.out_dir / assay_file.name
-        if output_file.exists():
-            continue
-        if raw_sequence is None:
-            raise ValueError(f"{name} has no reference sequence")
-
-        print(f"Scoring {name}", flush=True)
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix=f"{name}-", dir=args.tmp_dir
-            ) as path:
-                result = score_assay(
-                    assay_file,
-                    alignment_file,
-                    query_file,
-                    normalize_sequence(raw_sequence),
-                    name,
-                    Path(path),
-                    args.cpu,
-                )
-        except BailoutException as error:
-            print(f"Skipped {name}: {error}", flush=True)
-            rejected += 1
-            continue
-        with tempfile.TemporaryDirectory(
-            prefix=f".{name}.{os.getpid()}-", dir=args.out_dir
-        ) as output_staging_dir:
-            temporary_output = Path(output_staging_dir) / output_file.name
-            result.write_csv(temporary_output)
-            temporary_output.replace(output_file)
-        completed += 1
-    print(f"Scored {completed} assay(s); EVcouplings rejected {rejected}")
+def write_dna_fasta(source: Path, destination: Path) -> None:
+    """Write a FASTA copy with uracil represented as thymine."""
+    # Existing-alignment parsing uses the protein alphabet, which omits U
+    # https://github.com/debbiemarkslab/EVcouplings/blob/14c83457c6cfca8156aabe0615067447a2169791/evcouplings/align/protocol.py#L702
+    with source.open() as input_handle, destination.open("w") as output_handle:
+        for line in input_handle:
+            output_handle.write(
+                line if line.startswith(">") else line.translate(RNA_TO_DNA)
+            )
 
 
 if __name__ == "__main__":

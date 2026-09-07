@@ -1,5 +1,12 @@
 """Model interface for the shared masked-marginal engine."""
 
+from __future__ import annotations
+
+import argparse
+from collections.abc import Sequence
+
+import torch
+
 
 class MaskedLMAdapter:
     """Supply model tokenization and logits to the shared engine."""
@@ -7,7 +14,7 @@ class MaskedLMAdapter:
     name = "masked LM"
     bases = "ACGU"
     score_column = "score"
-    max_tokens = None
+    max_tokens: int | None = None
     default_batch_size = 512
     default_max_batch_tokens = 65536
     # Whether contexts of different lengths may share a padded batch. Current
@@ -21,31 +28,23 @@ class MaskedLMAdapter:
     # the loaded tokenizer in ``check_alphabet``
     n_special_tokens = 0
     # Optional filler for architecture-required context padding
-    context_pad_char = None
+    context_pad_char: str | None = None
     # Whether context positions map to token positions by a constant shift, which
     # is what lets the engine gather without calling ``token_position`` per term
     # An adapter that overrides ``token_position`` non-linearly must clear this
     constant_token_offset = True
 
-    prefix_ids = ()
-    suffix_ids = ()
+    prefix_ids: Sequence[int] = ()
+    suffix_ids: Sequence[int] = ()
     pad_id = 0
     mask_id = 0
     unk_id = 0
-    base_ids = None
+    base_ids: dict[str, int] = {}
     device = "cpu"
 
     @staticmethod
-    def add_arguments(parser):
+    def add_arguments(parser: argparse.ArgumentParser):
         """Add the model's own command line arguments, such as a checkpoint."""
-        raise NotImplementedError
-
-    def load(self, args):
-        """Construct the model and tokenizer and fill in the token ids."""
-        raise NotImplementedError
-
-    def logits_at(self, input_ids, attention_mask, rows, cols):
-        """Return raw logits of shape ``(positions, vocabulary)``."""
         raise NotImplementedError
 
     def canonicalize_sequence(self, sequence: str) -> str:
@@ -54,27 +53,6 @@ class MaskedLMAdapter:
         if "T" in self.bases:
             return sequence.replace("U", "T")
         return sequence.replace("T", "U")
-
-    def encode_context(self, context: str, mask_char: str) -> list:
-        """Encode one token per context character plus special tokens."""
-        ids = list(self.prefix_ids)
-        for char in context:
-            token_id = (
-                self.mask_id
-                if char == mask_char
-                else self.base_ids.get(char, self.unk_id)
-            )
-            ids.append(token_id)
-        ids.extend(self.suffix_ids)
-        return ids
-
-    def context_length_for(self, length: int) -> int:
-        """Return the model-ready context length."""
-        return length
-
-    def token_position(self, context_position: int) -> int:
-        """Map a context coordinate to an input-token coordinate."""
-        return len(self.prefix_ids) + context_position
 
     def check_alphabet(self):
         """Fail loudly if the tokenizer does not cover the model's alphabet."""
@@ -98,3 +76,38 @@ class MaskedLMAdapter:
             )
         if self.mask_id in self.base_ids.values():
             raise ValueError(f"A base maps to the mask token id: {self.base_ids}")
+
+    def context_length_for(self, length: int) -> int:
+        """Return the model-ready context length."""
+        return length
+
+    def encode_context(self, context: str, mask_char: str) -> list[int]:
+        """Encode one token per context character plus special tokens."""
+        ids = list(self.prefix_ids)
+        for char in context:
+            token_id = (
+                self.mask_id
+                if char == mask_char
+                else self.base_ids.get(char, self.unk_id)
+            )
+            ids.append(token_id)
+        ids.extend(self.suffix_ids)
+        return ids
+
+    def load(self, args: argparse.Namespace):
+        """Construct the model and tokenizer and fill in the token ids."""
+        raise NotImplementedError
+
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return raw logits of shape ``(positions, vocabulary)``."""
+        raise NotImplementedError
+
+    def token_position(self, context_position: int) -> int:
+        """Map a context coordinate to an input-token coordinate."""
+        return len(self.prefix_ids) + context_position

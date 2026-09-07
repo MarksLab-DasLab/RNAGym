@@ -8,6 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
+
 from rnagym.config import Config2D
 from rnagym.s2d.models.utils import parse_pairs
 

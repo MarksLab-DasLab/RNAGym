@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Score RNA-FM with the shared masked-marginal engine."""
 
+import argparse
+
 import torch
+from typing_extensions import override
+
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
 
 
@@ -15,16 +19,18 @@ class RNAFMAdapter(MaskedLMAdapter):
     n_special_tokens = 2
 
     @staticmethod
-    def add_arguments(parser):
+    @override
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
-            "--checkpoint_path",
+            "--checkpoint",
+            dest="checkpoint_path",
             type=str,
             required=True,
-            help="Path to the RNA-FM_pretrained.pth weights file. The rna-fm package "
-            "must be installed in the model environment",
+            help="RNA-FM weights (.pth)",
         )
 
-    def load(self, args):
+    @override
+    def load(self, args: argparse.Namespace) -> None:
         # The released checkpoint pickles an argparse.Namespace, which torch>=2.6
         # refuses to unpickle under the weights_only default, so that one class is
         # allowlisted rather than disabling the check entirely
@@ -43,7 +49,14 @@ class RNAFMAdapter(MaskedLMAdapter):
         self.prefix_ids = [alphabet.cls_idx]
         self.suffix_ids = [alphabet.eos_idx]
 
-    def logits_at(self, input_ids, attention_mask, rows, cols):
+    @override
+    def logits_at(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        rows: torch.Tensor,
+        cols: torch.Tensor,
+    ) -> torch.Tensor:
         return self.model(input_ids)["logits"][rows, cols]
 
 
