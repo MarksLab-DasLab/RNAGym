@@ -60,8 +60,21 @@ pixi run lint
 pixi run --locked -e default check-published
 ```
 
-The fast tests use real assay fixtures and need no checkpoints.
-`check-published` reruns the published checkpoints on one complete assay.
+The fast tests use real assay fixtures and need no checkpoints. The full check
+rebuilds the leaderboard, checks native GenSLM and EVmutation scoring, then
+reruns all 20 checkpoints on 128 variants from each of the 31 ncRNA assays.
+It requires matching rows and missing values, finite scores, and old/new score
+Spearman of at least 0.95. Score-magnitude and fitness-correlation differences
+are reported separately. Install environments and weights first. The full run
+has a shared one-hour deadline and needs two 80 GB GPUs for Evo2 40B.
+
+Use `pixi run -e ntv3 check-published` to check one family, or add
+`--leaderboard-only` to the default command to check aggregates. Reports,
+including failures, go to the temporary directory. Use `--report PATH` to choose
+the report location. Acceptance bounds are fixed in the [checker][5].
+
+`pixi run coverage` runs the fast tests and full reproduction, requiring 80%
+coverage. Full reproduction remains a required check before merging.
 
 [0]: ../../leaderboard/fitness/
 [1]: https://marks.hms.harvard.edu/rnagym/fitness_prediction

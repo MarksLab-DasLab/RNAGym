@@ -168,6 +168,88 @@ def runner_command(output_dir):
     return f"fitness-fixture --rows 1 --output {output_dir}"
 
 
+def test_checkpoint_download(tmp_path, monkeypatch):
+    for model in CHECKPOINT_REVISIONS:
+        revision = checkpoint_revision(model)
+        assert revision is not None and len(revision) == 40
+        assert set(revision) <= set("0123456789abcdef")
+    with pytest.raises(ValueError, match="Unpinned checkpoint"):
+        checkpoint_revision("unregistered/model")
+    local_model = tmp_path / "local checkpoint"
+    local_model.mkdir()
+    assert checkpoint_revision(str(local_model)) is None
+
+    source = ASSAY_DIR / ASSAY_NAMES[0]
+    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+    destination = tmp_path / "shared checkpoints" / "model" / "weights.csv"
+    helper = REPOSITORY / "rnagym/sh/weights.sh"
+    shell = 'source "$1" && download "$2" "$3" "$4"'
+    command = (
+        f"bash -c {shlex.quote(shell)} checkpoint-download {shlex.quote(str(helper))} "
+        f"{shlex.quote(source.resolve().as_uri())} {shlex.quote(str(destination))} {checksum}"
+    )
+    environment = {**os.environ, "RNAGYM_CHECKPOINT_DIR": str(destination.parents[1])}
+    with subprocess.Popen(shlex.split(command), env=environment) as first:
+        with subprocess.Popen(shlex.split(command), env=environment) as second:
+            assert first.wait(timeout=20) == second.wait(timeout=20) == 0
+    assert destination.read_bytes() == source.read_bytes()
+    assert destination.stat().st_mode & 0o044 == 0o044
+    failed = subprocess.run(
+        shlex.split(command.replace(checksum, "0" * 64)),
+        env=environment,
+        check=False,
+        timeout=20,
+    )
+    assert failed.returncode != 0
+    assert destination.read_bytes() == source.read_bytes()
+    assert list(destination.parent.iterdir()) == [destination]
+
+    from rnagym.fitness.baselines.Evo import checkpoints
+
+    content = source.read_bytes()
+    split = len(content) // 2
+    parts = [tmp_path / f"part{index}" for index in range(2)]
+    for path, data in zip(parts, (content[:split], content[split:])):
+        path.write_bytes(data)
+    monkeypatch.setattr(
+        checkpoints,
+        "EVO2_40B_PARTS",
+        tuple(
+            (p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest())
+            for p in parts
+        ),
+    )
+    monkeypatch.setattr(ConfigFitness, "CHECKPOINT_DIR", tmp_path / "checkpoints")
+    downloads = []
+
+    def download_part(repo_id, filename, revision):
+        assert repo_id == "arcinstitute/evo2_40b"
+        assert revision == "d529aa57c30771814217ad89baaeaf6e2315c7d7"
+        downloads.append(filename)
+        return str(parts[int(filename.rsplit("part", 1)[1])])
+
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(hf_hub_download=download_part),
+    )
+    merged = Path(checkpoints.evo2_checkpoint("evo2_40b"))
+    assert merged.read_bytes() == content
+    assert downloads == ["evo2_40b.pt.part0", "evo2_40b.pt.part1"]
+    assert checkpoints.evo2_checkpoint("evo2_40b") == str(merged)
+    assert len(downloads) == 2
+    for corrupted in (b"X" + content[1:], content[:-1], content + b"X"):
+        merged.write_bytes(corrupted)
+        with pytest.raises(ValueError, match="checksum|Truncated|trailing"):
+            checkpoints.evo2_checkpoint("evo2_40b")
+        assert merged.read_bytes() == corrupted
+    merged.unlink()
+    parts[1].unlink()
+    with pytest.raises(FileNotFoundError):
+        checkpoints.evo2_checkpoint("evo2_40b")
+    assert list(merged.parent.iterdir()) == [merged.with_suffix(".lock")]
+
+
 @pytest.mark.filterwarnings("ignore:An input array is constant")
 @pytest.mark.filterwarnings("ignore:Only one class is present in y_true")
 def test_fitness_workflow(tmp_path, monkeypatch):
@@ -478,39 +560,155 @@ def test_metrics_reject_nonfinite_predictions():
 
 
 def test_published_comparison_tolerance(tmp_path):
-    """Accept GPU rounding drift while preserving prediction structure."""
-    import polars as pl
-
-    expected_file = tmp_path / "expected.csv"
+    """Reject structural errors, nonfinite scores and plausible-looking wrong rankings."""
+    expected_file = PREDICTION_DIR / "Tome_2014_GFP_aptamer.csv"
+    expected = pl.read_csv(expected_file)
+    columns = tuple(PREDICTION_COLUMNS.values())
     actual_file = tmp_path / "actual.csv"
-    expected = pl.DataFrame(
-        {"mutant": ["A1C", "C2G"], "sequence": ["CC", "AG"], "score": [0.0, None]}
-    )
-    expected.write_csv(expected_file)
+    exact = check_published.compare_predictions(expected_file, expected_file, columns)
+    assert exact.exact and exact.max_absolute_difference == 0
+    expected.with_columns(
+        pl.col("mutant").str.replace_all("U", "T").str.replace_all(",", ", ")
+    ).write_csv(actual_file)
+    assert check_published.compare_predictions(
+        actual_file, expected_file, columns
+    ).exact
+    shifted = expected.with_columns(pl.col(*columns) + 1e-5)
+    shifted.write_csv(actual_file)
+    close = check_published.compare_predictions(actual_file, expected_file, columns)
+    assert not close.exact and close.minimum_correlation > 0.999
+    assert close.max_absolute_difference == pytest.approx(1e-5)
+    expected.with_columns(pl.col(*columns) * 2 + 10).write_csv(actual_file)
+    rescaled = check_published.compare_predictions(actual_file, expected_file, columns)
+    assert rescaled.minimum_correlation == pytest.approx(1.0)
+    assert rescaled.max_metric_difference == 0
+    shifted.write_csv(actual_file)
+    lowercase = tmp_path / "lowercase.csv"
+    expected.rename({"DMS_score": "dms_score"}).write_csv(lowercase)
+    assert check_published.compare_predictions(actual_file, lowercase, columns) == close
+    for corrupted in (
+        expected.head(-1),
+        expected.reverse(),
+        expected.drop(columns[0]),
+        expected.with_columns(pl.lit(float("inf")).alias(columns[0])),
+        expected.with_columns(pl.lit(None, dtype=pl.Float64).alias(columns[0])),
+        expected.with_columns(-pl.col(columns[0])),
+        expected.with_columns(pl.lit(0.0).alias(columns[0])),
+    ):
+        corrupted.write_csv(actual_file)
+        with pytest.raises((AssertionError, ValueError)):
+            check_published.compare_predictions(actual_file, expected_file, columns)
+    expected.drop("DMS_score").write_csv(lowercase)
+    with pytest.raises(ValueError, match="measured fitness"):
+        check_published.compare_predictions(expected_file, lowercase, columns)
+    for scale in (0.0, 1e200):
+        expected.with_columns(pl.col(*columns) * scale).write_csv(lowercase)
+        with np.errstate(over="ignore", invalid="ignore"):
+            with pytest.raises(AssertionError, match="no variation|normalized error"):
+                check_published.compare_predictions(expected_file, lowercase, columns)
 
-    exact = check_published.compare_predictions(
-        expected_file, expected_file, ("score",)
-    )
-    assert exact.exact and exact.max_absolute_difference == 0.0
+    # Small scores can pass an absolute tolerance despite losing all signal
+    scaled_file = tmp_path / "scaled.csv"
+    scaled = expected.with_columns(pl.col(*columns) * 1e-5)
+    scaled.write_csv(scaled_file)
+    scaled.with_columns(pl.lit(0.0).alias(columns[0])).write_csv(actual_file)
+    with pytest.raises(AssertionError, match="normalized error"):
+        check_published.compare_predictions(actual_file, scaled_file, columns)
 
-    close_score = check_published.ABSOLUTE_TOLERANCE * 0.98
-    expected.with_columns(pl.Series("score", [close_score, None])).write_csv(
-        actual_file
-    )
-    close = check_published.compare_predictions(actual_file, expected_file, ("score",))
-    assert not close.exact
-    assert close.max_absolute_difference == pytest.approx(close_score)
 
-    rejected_score = check_published.ABSOLUTE_TOLERANCE * 1.02
-    expected.with_columns(pl.Series("score", [rejected_score, None])).write_csv(
-        actual_file
-    )
-    with pytest.raises(AssertionError, match="absolute difference"):
-        check_published.compare_predictions(actual_file, expected_file, ("score",))
+def test_evo_precision_comparison(tmp_path):
+    """Accept stable GPU rankings and reject the observed Evo1 BF16 failures."""
+    fixture = pl.read_csv(FIXTURE_DIR / "evo.csv")
+    actual_file, expected_file = tmp_path / "actual.csv", tmp_path / "expected.csv"
+    comparisons = []
+    for table in fixture.partition_by("model", "assay", maintain_order=True):
+        for precision in ("float32", "bfloat16"):
+            table.select(
+                "mutant",
+                "sequence",
+                "DMS_score",
+                pl.col(f"{precision}_h100").alias("score"),
+            ).write_csv(expected_file)
+            table.select(
+                "mutant",
+                "sequence",
+                "DMS_score",
+                pl.col(f"{precision}_l40s").alias("score"),
+            ).write_csv(actual_file)
+            if (
+                precision == "bfloat16"
+                and table["model"][0] == "evo1"
+                and table["assay"][0] != "Domingo_2018_tRNA"
+            ):
+                with pytest.raises(AssertionError):
+                    check_published.compare_predictions(
+                        actual_file, expected_file, ("score",)
+                    )
+            else:
+                comparison = check_published.compare_predictions(
+                    actual_file, expected_file, ("score",)
+                )
+                if precision == "float32":
+                    comparisons.append(comparison)
+    assert len(comparisons) == 8 and sum(row.rows for row in comparisons) == 1972
+    assert max(row.normalized_error for row in comparisons) < 0.001
+    assert min(row.minimum_correlation for row in comparisons) > 0.9999
+    assert max(row.max_metric_difference for row in comparisons) < 0.001
 
-    expected.with_columns(pl.Series("score", [0.0, 1.0])).write_csv(actual_file)
-    with pytest.raises(AssertionError, match="missing-value status"):
-        check_published.compare_predictions(actual_file, expected_file, ("score",))
+
+def test_fp8_comparison(tmp_path):
+    """Accept measured Evo2 variation and reject rank agreement below 0.95."""
+    fixture = pl.read_csv(FIXTURE_DIR / "fp8.csv")
+    actual_file, expected_file = tmp_path / "actual.csv", tmp_path / "expected.csv"
+    comparisons = []
+    for table in fixture.partition_by("model", "assay", maintain_order=True):
+        expected = table.select(
+            "mutant", "sequence", "DMS_score", pl.col("published_score").alias("score")
+        )
+        expected.write_csv(expected_file)
+        expected.with_columns(table["h100_score"].alias("score")).write_csv(actual_file)
+        comparison = check_published.compare_predictions(
+            actual_file, expected_file, ("score",)
+        )
+        assert not comparison.exact
+        comparisons.append(comparison)
+    assert len(comparisons) == 8 and sum(row.rows for row in comparisons) == 1972
+    assert max(row.normalized_error for row in comparisons) == pytest.approx(0.2013094)
+    assert min(row.minimum_correlation for row in comparisons) == pytest.approx(
+        0.9874413
+    )
+    assert max(row.max_metric_difference for row in comparisons) < 0.005
+
+    # Perturb real scores on either side of the accepted rank agreement
+    for amplitude in (0.2, 0.4):
+        expected.with_columns(
+            pl.col("score")
+            + amplitude * (pl.col("score").shuffle(seed=0) - pl.col("score").mean())
+        ).write_csv(actual_file)
+        if amplitude == 0.2:
+            comparison = check_published.compare_predictions(
+                actual_file, expected_file, ("score",)
+            )
+            assert comparison.minimum_correlation == pytest.approx(0.9776518)
+        else:
+            with pytest.raises(AssertionError, match="rank correlation"):
+                check_published.compare_predictions(
+                    actual_file, expected_file, ("score",)
+                )
+
+    # Fitness drift remains visible even when the score ranks agree
+    measured = pl.col("DMS_score").rank()
+    expected.with_columns(
+        pl.col("score")
+        + 0.1
+        * pl.col("score").std(ddof=0)
+        * (measured - measured.mean())
+        / measured.std(ddof=0)
+    ).write_csv(actual_file)
+    comparison = check_published.compare_predictions(
+        actual_file, expected_file, ("score",)
+    )
+    assert comparison.max_metric_difference > 0.01
 
 
 def test_evo2_workflow_and_guards(tmp_path, monkeypatch):
@@ -642,86 +840,305 @@ def test_merge_rejects_incomplete_predictions(tmp_path):
     assert not merged_dir.exists()
 
 
-def test_checkpoint_download(tmp_path, monkeypatch):
-    for model in CHECKPOINT_REVISIONS:
-        revision = checkpoint_revision(model)
-        assert revision is not None and len(revision) == 40
-        assert set(revision) <= set("0123456789abcdef")
-    with pytest.raises(ValueError, match="Unpinned checkpoint"):
-        checkpoint_revision("unregistered/model")
-    local_model = tmp_path / "local checkpoint"
-    local_model.mkdir()
-    assert checkpoint_revision(str(local_model)) is None
+def test_repeated_predictions(tmp_path):
+    """Preserve repeated measurements and reproduce the published first-score convention."""
+    from rnagym.fitness.tasks.merge_scoring_files import merge_predictions
 
-    source = ASSAY_DIR / ASSAY_NAMES[0]
-    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
-    destination = tmp_path / "shared checkpoints" / "model" / "weights.csv"
-    helper = REPOSITORY / "rnagym/sh/weights.sh"
-    shell = 'source "$1" && download "$2" "$3" "$4"'
-    command = (
-        f"bash -c {shlex.quote(shell)} checkpoint-download {shlex.quote(str(helper))} "
-        f"{shlex.quote(source.resolve().as_uri())} {shlex.quote(str(destination))} {checksum}"
+    assay = pl.read_csv(FIXTURE_DIR / "repeated" / "assay.csv")
+    prediction = pl.read_csv(FIXTURE_DIR / "repeated" / "prediction.csv")
+    merged = merge_predictions(assay, prediction, "evo2_7b_score", "evo2")
+    assert_frame_equal(merged.select(assay.columns), assay)
+    assert merged.height == 186
+    repeated = merged.filter(pl.col("mutant") == "A48C")
+    assert repeated["evo2_score"].to_list() == [-1.1337192, -1.1337192]
+    rho = get_performance_dataset(merged, "DMS_score", ["evo2_score"])["evo2_score"][
+        "Spearman"
+    ]
+    assert rho == pytest.approx(-0.017426406587199662, abs=1e-14)
+    corrupted = (
+        prediction.with_row_index()
+        .with_columns(
+            pl.when(
+                (pl.col("mutant") == "A48C")
+                & (
+                    pl.col("index")
+                    == pl.col("index").filter(pl.col("mutant") == "A48C").max()
+                )
+            )
+            .then(pl.col("evo2_7b_score") + 0.1)
+            .otherwise(pl.col("evo2_7b_score"))
+            .alias("evo2_7b_score")
+        )
+        .drop("index")
     )
-    environment = {**os.environ, "RNAGYM_CHECKPOINT_DIR": str(destination.parents[1])}
-    with subprocess.Popen(shlex.split(command), env=environment) as first:
-        with subprocess.Popen(shlex.split(command), env=environment) as second:
-            assert first.wait(timeout=20) == second.wait(timeout=20) == 0
-    assert destination.read_bytes() == source.read_bytes()
-    assert destination.stat().st_mode & 0o044 == 0o044
-    failed = subprocess.run(
-        shlex.split(command.replace(checksum, "0" * 64)),
-        env=environment,
-        check=False,
-        timeout=20,
+    with pytest.raises(ValueError, match="conflicting scores"):
+        merge_predictions(assay, corrupted, "evo2_7b_score", "evo2")
+    with pytest.raises(ValueError, match="Row count mismatch"):
+        merge_predictions(
+            assay,
+            prediction.filter(pl.col("mutant") != "A48C"),
+            "evo2_7b_score",
+            "evo2",
+        )
+    with pytest.raises(ValueError, match="sequence disagrees"):
+        merge_predictions(
+            assay,
+            prediction.with_columns(pl.lit("ACGU").alias("sequence")),
+            "evo2_7b_score",
+            "evo2",
+        )
+
+    coding = pl.read_csv(FIXTURE_DIR / "repeated" / "coding.csv")
+    assert coding.height == 106
+    assays = tmp_path / "assays"
+    predictions = tmp_path / "predictions" / "GenSLM"
+    assays.mkdir()
+    predictions.mkdir(parents=True)
+    for (name,), group in coding.group_by("DMS_ID", maintain_order=True):
+        group.select("mutant", "sequence", "DMS_score").write_csv(
+            assays / f"{name}.csv"
+        )
+        group.drop("DMS_ID").write_csv(predictions / f"{name}.csv")
+    combine_csv_data(
+        assays, predictions.parent, tmp_path / "merged", ["GenSLM"], SCORE_COLS
     )
-    assert failed.returncode != 0
-    assert destination.read_bytes() == source.read_bytes()
-    assert list(destination.parent.iterdir()) == [destination]
+    for path in assays.glob("*.csv"):
+        assay = pl.read_csv(path).with_columns(
+            merge_scoring_files.standardize_mutation("mutant")
+        )
+        result = pl.read_csv(tmp_path / "merged" / path.name)
+        assert_frame_equal(result.select(assay.columns), assay)
+        assert (
+            result.group_by("mutant")
+            .agg(pl.col("GenSLM_score").n_unique())["GenSLM_score"]
+            .eq(1)
+            .all()
+        )
 
-    from rnagym.fitness.baselines.Evo import checkpoints
 
-    content = source.read_bytes()
-    split = len(content) // 2
-    parts = [tmp_path / f"part{index}" for index in range(2)]
-    for path, data in zip(parts, (content[:split], content[split:])):
-        path.write_bytes(data)
+def test_launchers_and_reproduction(tmp_path, monkeypatch):
+    """Exercise real shell launchers and detect ignored row IDs in the reproduction harness."""
+    import os
+    import subprocess
+    import time
+
+    from rnagym.fitness.tasks.check_published import ModelFamily
+
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    capture = tmp_path / "arguments.json"
+    executable = executable_dir / "python"
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "from rnagym.config import ConfigFitness\n"
+        "Path(os.environ['FITNESS_TEST_ARGUMENTS']).write_text(json.dumps(\n"
+        "    {'args': sys.argv[1:], 'cache': os.environ.get('HF_HUB_CACHE'),\n"
+        "     'reference': str(ConfigFitness.REFERENCE_FILE),\n"
+        "     'checkpoints': str(ConfigFitness.CHECKPOINT_DIR)}))\n"
+    )
+    executable.chmod(0o755)
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{executable_dir}:{environment['PATH']}",
+        SLURM_ARRAY_TASK_ID="24",
+        RNAGYM_CHECKPOINT_DIR=str(tmp_path / "shared checkpoints"),
+        RNAGYM_DATA_DIR=str(tmp_path / "external data"),
+        FITNESS_TEST_ARGUMENTS=str(capture),
+    )
+    environment.pop("HF_HUB_CACHE", None)
+    cache_families = {"aido-rna", "evo", "evo2", "ntv3", "orthrus"}
+    for name, family in check_published.MODEL_FAMILIES.items():
+        command = f"bash {shlex.quote(str(ConfigFitness.DIR / family.launcher))}"
+        subprocess.run(shlex.split(command), env=environment, check=True)
+        captured = json.loads(capture.read_text())
+        args = captured["args"]
+        assert args[args.index("--rows") + 1] == "24"
+        assert captured["reference"] == str(
+            tmp_path / "external data" / "fitness" / "reference_sheet_final.csv"
+        )
+        checkpoint_root = tmp_path / "shared checkpoints"
+        if name in cache_families:
+            assert captured["cache"] == str(checkpoint_root / name / "hub")
+            subprocess.run(
+                shlex.split(command),
+                env=environment | {"HF_HUB_CACHE": str(tmp_path / "custom cache")},
+                check=True,
+            )
+            assert json.loads(capture.read_text())["cache"] == str(
+                tmp_path / "custom cache"
+            )
+        elif name not in ("genslm", "rna-ernie"):
+            assert any(value.startswith(str(checkpoint_root) + "/") for value in args)
+        assert captured["checkpoints"] == str(checkpoint_root)
+
+    # Archived Evo2 production jobs use these FP8 token budgets
+    launcher = ConfigFitness.DIR / check_published.MODEL_FAMILIES["evo2"].launcher
+    for model, budget in (
+        ("evo2_1b_base", "32768"),
+        ("evo2_7b", "16384"),
+        ("evo2_20b", "16384"),
+        ("evo2_40b", "8192"),
+    ):
+        command = f"bash {shlex.quote(str(launcher))}"
+        subprocess.run(
+            shlex.split(command),
+            env=environment | {"EVO2_MODEL_NAME": model},
+            check=True,
+        )
+        args = json.loads(capture.read_text())["args"]
+        parsed = evo2.parse_args(args[2:])
+        assert parsed.model_name == model
+        assert evo2.BATCH_TOKENS[parsed.model_name] == int(budget)
+
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(REFERENCE_FILE, source / "reference_sheet_final.csv")
+    shutil.copytree(ASSAY_DIR, source / "assays")
+    shutil.copytree(PREDICTION_DIR.parent, source / "model_predictions")
+    monkeypatch.setattr(ConfigFitness, "DATA_DIR", source)
+    monkeypatch.setattr(ConfigFitness, "PREDICTION_DIR", source / "model_predictions")
+    monkeypatch.setattr(check_published, "CHECK_ROWS", 32)
     monkeypatch.setattr(
-        checkpoints,
-        "EVO2_40B_PARTS",
-        tuple(
-            (p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest())
-            for p in parts
-        ),
+        check_published,
+        "MODEL_FAMILIES",
+        {
+            "rna-fm": ModelFamily(
+                "baselines/RNA_FM/score_rna_fm.sh", (("rna_fm", None),)
+            )
+        },
     )
-    monkeypatch.setattr(ConfigFitness, "CHECKPOINT_DIR", tmp_path / "checkpoints")
-    downloads = []
+    selected_root = tmp_path / "selection"
+    selections = check_published.prepare_fixture(source, selected_root)
+    assert (
+        selected_root / "reference_sheet_final.csv"
+    ).read_bytes() == REFERENCE_FILE.read_bytes()
+    assert [selection[0] for selection in selections.values()] == [0, 1, 2]
+    assert all(len(rows) == 32 for _, rows in selections.values())
 
-    def download_part(repo_id, filename, revision):
-        assert repo_id == "arcinstitute/evo2_40b"
-        assert revision == "d529aa57c30771814217ad89baaeaf6e2315c7d7"
-        downloads.append(filename)
-        return str(parts[int(filename.rsplit("part", 1)[1])])
-
-    monkeypatch.setitem(
-        sys.modules,
-        "huggingface_hub",
-        SimpleNamespace(hf_hub_download=download_part),
+    # Replay frozen predictions to test the launcher and comparison orchestration
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "import polars as pl\n"
+        "from rnagym.config import ConfigFitness\n"
+        "from rnagym.fitness.data import parse_row_ids\n"
+        "from rnagym.fitness.tasks.check_published import select_rows\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--rows', required=True)\n"
+        "parser.add_argument('--output', type=Path)\n"
+        "args, _ = parser.parse_known_args()\n"
+        f"source = Path({str(source)!r})\n"
+        f"with Path({str(capture)!r}).open('a') as log:\n"
+        "    log.write(args.rows + '\\n')\n"
+        "args.output.mkdir(parents=True, exist_ok=True)\n"
+        "for row in parse_row_ids(args.rows):\n"
+        "    name = pl.read_csv(ConfigFitness.REFERENCE_FILE)['DMS_ID'][row]\n"
+        "    table = pl.read_csv(source / 'model_predictions/rna_fm_4fill' / f'{name}.csv')\n"
+        "    table = table.drop_nulls('mutant')\n"
+        "    table[select_rows(table, 32)].write_csv(args.output / f'{name}.csv')\n"
     )
-    merged = Path(checkpoints.evo2_checkpoint("evo2_40b"))
-    assert merged.read_bytes() == content
-    assert downloads == ["evo2_40b.pt.part0", "evo2_40b.pt.part1"]
-    assert checkpoints.evo2_checkpoint("evo2_40b") == str(merged)
-    assert len(downloads) == 2
-    for corrupted in (b"X" + content[1:], content[:-1], content + b"X"):
-        merged.write_bytes(corrupted)
-        with pytest.raises(ValueError, match="checksum|Truncated|trailing"):
-            checkpoints.evo2_checkpoint("evo2_40b")
-        assert merged.read_bytes() == corrupted
-    merged.unlink()
-    parts[1].unlink()
-    with pytest.raises(FileNotFoundError):
-        checkpoints.evo2_checkpoint("evo2_40b")
-    assert list(merged.parent.iterdir()) == [merged.with_suffix(".lock")]
+    capture.write_text("")
+    monkeypatch.setenv("PATH", environment["PATH"])
+    results = list(check_published.run_one("rna-fm", time.monotonic() + 30))
+    assert [row["row_id"] for row in results] == [0, 1, 2]
+    assert all(row["exact"] for row in results)
+    assert capture.read_text().splitlines() == ["0,1,2"]
+    report_file = tmp_path / "reproduction.json"
+    run_cli(check_published.main, f"rna-fm --timeout 30 --report {report_file}")
+    report = json.loads(report_file.read_text())
+    assert report["status"] == "passed"
+    assert report["scope"] == "rna-fm"
+    assert report["code_sha256"] == check_published.fingerprint()
+    assert len(report["checks"]) == 3
+    for record in report["checks"]:
+        assert len(record["assay_sha256"]) == len(record["published_sha256"]) == 64
+    executable.write_text(
+        executable.read_text().replace(
+            "name = pl.read_csv(ConfigFitness.REFERENCE_FILE)['DMS_ID'][row]",
+            "name = pl.read_csv(ConfigFitness.REFERENCE_FILE)['DMS_ID'][0]",
+        )
+    )
+    with pytest.raises(FileNotFoundError, match="selected assay"):
+        run_cli(check_published.main, f"rna-fm --timeout 30 --report {report_file}")
+    report = json.loads(report_file.read_text())
+    assert report["status"] == "failed"
+    assert "selected assay" in report["error"]
+    for options in ("--timeout 0", "--timeout nan", "rna-fm --leaderboard-only"):
+        with pytest.raises(ValueError):
+            run_cli(check_published.main, options)
+    with pytest.raises(subprocess.TimeoutExpired):
+        program = "__import__('time').sleep(30)"
+        check_published.run_command(
+            f"{shlex.quote(sys.executable)} -c {shlex.quote(program)}",
+            tmp_path,
+            time.monotonic() + 0.1,
+        )
+
+
+def test_reproduction_report_failure(tmp_path, monkeypatch):
+    """A partial run, missing model family or changed code cannot leave a passing report."""
+    import time
+
+    report_file = tmp_path / "reproduction.json"
+    report_file.write_text('{"status": "passed"}\n')
+    command = f"rna-fm --report {report_file}"
+
+    def reject_native_scoring(command, cwd, deadline):
+        assert command == "pixi run --locked -e evmutation check-scoring"
+        raise AssertionError("Native scoring failed")
+
+    with monkeypatch.context() as native:
+        native.setattr(check_published, "check_leaderboard", lambda *args: None)
+        native.setattr(check_published, "validate_family", lambda *args: None)
+        native.setattr(check_published, "run_command", reject_native_scoring)
+        with pytest.raises(AssertionError, match="Native scoring failed"):
+            run_cli(check_published.main, f"--report {report_file}")
+        assert json.loads(report_file.read_text())["status"] == "failed"
+
+    def partial_run(environment, deadline):
+        assert environment == "rna-fm" and deadline > time.monotonic()
+        assert json.loads(report_file.read_text())["status"] == "running"
+        yield {"model": "rna_fm", "assay": "completed"}
+        raise TimeoutError("fixture deadline")
+
+    monkeypatch.setattr(check_published, "run_one", partial_run)
+    with pytest.raises(TimeoutError, match="fixture deadline"):
+        run_cli(check_published.main, command)
+    report = json.loads(report_file.read_text())
+    assert report["status"] == "failed"
+    assert report["checks"] == [{"model": "rna_fm", "assay": "completed"}]
+    assert report["scope"] == "rna-fm"
+
+    monkeypatch.setattr(check_published, "MODEL_FAMILIES", {})
+    with pytest.raises(AssertionError, match="every leaderboard checkpoint"):
+        run_cli(check_published.main, f"--report {report_file}")
+    assert json.loads(report_file.read_text())["status"] == "failed"
+
+    fingerprints = iter(("before", "after"))
+    monkeypatch.setattr(check_published, "fingerprint", lambda: next(fingerprints))
+    monkeypatch.setattr(
+        check_published, "check_leaderboard", lambda directory, deadline: None
+    )
+    with pytest.raises(AssertionError, match="changed during reproduction"):
+        run_cli(check_published.main, f"--leaderboard-only --report {report_file}")
+    report = json.loads(report_file.read_text())
+    assert report["status"] == "failed"
+    assert report["scope"] == "leaderboard"
+
+    def broken_runtime():
+        raise ImportError("fixture CUDA library")
+
+    report_file.write_text('{"status": "passed"}\n')
+    monkeypatch.setattr(check_published, "fingerprint", lambda: "before")
+    monkeypatch.setattr(check_published, "runtime_versions", broken_runtime)
+    with pytest.raises(ImportError, match="fixture CUDA library"):
+        run_cli(check_published.main, f"--leaderboard-only --report {report_file}")
+    report = json.loads(report_file.read_text())
+    assert report["status"] == "failed"
+    assert report["checks"] == []
 
 
 def test_genslm_causal_likelihood(tmp_path, monkeypatch):
@@ -835,3 +1252,42 @@ def test_genslm_causal_likelihood(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="missing or empty sequences"):
         genslm.main(args, lambda *args, **kwargs: TokenModel())
     assert result_file.read_bytes() == original
+
+
+def test_reproduction_timeout_stops_inference(tmp_path):
+    """A parent deadline stops a scoring process in a nested process group."""
+    import os
+    import subprocess
+    import time
+
+    pid_file = tmp_path / "inference.pid"
+    child = tmp_path / "inference.py"
+    child.write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        f"Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "time.sleep(30)\n"
+    )
+    worker = tmp_path / "family.py"
+    report = tmp_path / "family.json"
+    inference_command = f"{shlex.quote(sys.executable)} {shlex.quote(str(child))}"
+    worker.write_text(
+        "from pathlib import Path\n"
+        "from rnagym.fitness.tasks import check_published as check\n"
+        "def run_one(environment, deadline):\n"
+        "    yield {'model': 'started'}\n"
+        f"    check.run_command({inference_command!r}, Path.cwd(), deadline)\n"
+        "check.run_one = run_one\n"
+        f"check.main(['rna-fm', '--report', {str(report)!r}])\n"
+    )
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        check_published.run_command(
+            f"{shlex.quote(sys.executable)} {shlex.quote(str(worker))}",
+            tmp_path,
+            started + 4,
+        )
+    assert time.monotonic() - started < 10
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pid_file.read_text()), 0)
+    assert json.loads(report.read_text())["status"] == "failed"

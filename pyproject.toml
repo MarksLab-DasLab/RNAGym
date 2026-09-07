@@ -41,3 +41,31 @@ egg-base = "rnagym/.egg"
 
 [tool.ruff.lint.isort]
 known-first-party = ["rnagym"]
+
+[tool.coverage.run]
+parallel = true
+patch = ["subprocess"]
+source = ["rnagym.fitness"]
+
+[tool.pyrefly]
+preset = "strict"
+project-includes = ["rnagym/fitness"]
+python-interpreter-path = "rnagym/fitness/.pixi/envs/default/bin/python"
+# Model libraries live in separate Pixi environments and are tested by reproduction
+ignore-missing-imports = [
+  "evcouplings.*",
+  "evo.*",
+  "evo2",
+  "flash_attn.*",
+  "fm",
+  "genslm",
+  "huggingface_hub",
+  "modelgenerator.*",
+  "paddle",
+  "paddlenlp.*",
+  "pandas",
+  "rinalmo.*",
+  "safetensors.*",
+  "stripedhyena.*",
+  "transformers",
+]

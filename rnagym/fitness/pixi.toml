@@ -88,6 +88,7 @@ setuptools = "<81"
 evcouplings = { git = "https://github.com/debbiemarkslab/EVcouplings.git", rev = "14c83457c6cfca8156aabe0615067447a2169791" }
 
 [feature.evmutation.tasks]
+check-scoring = "python -m pytest -q ../../tests/fitness_model_checks.py -k evmutation"
 predict = "bash baselines/EVmutation/run.sh"
 
 [feature.evo.dependencies]
@@ -152,6 +153,10 @@ wandb = "==0.13.3"
 
 [feature.genslm.tasks]
 weights = "bash sh/fetch-weight.sh genslm"
+
+[feature.genslm.tasks.check-scoring]
+cmd = "python -m pytest -q ../../tests/fitness_model_checks.py -k genslm"
+depends-on = ["weights"]
 
 [feature.genslm.tasks.check-published]
 cmd = "python -m rnagym.fitness.tasks.check_published genslm"
