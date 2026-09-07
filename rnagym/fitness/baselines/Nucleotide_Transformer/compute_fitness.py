@@ -13,6 +13,10 @@ import torch
 from typing_extensions import override
 
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
+from rnagym.fitness.tasks.model_registry import checkpoint_revision
+
+# Tokenizer, configuration and model code live in InstaDeepAI/ntv3_base_model
+CODE_REVISION = "0ecff3637f0d3ba5b686d1095083218157c2ca34"
 
 
 class NTv3Adapter(MaskedLMAdapter):
@@ -44,12 +48,17 @@ class NTv3Adapter(MaskedLMAdapter):
     def load(self, args: argparse.Namespace) -> None:
         from transformers import AutoModelForMaskedLM, AutoTokenizer
 
+        revision = checkpoint_revision(args.model_name)
         tokenizer = AutoTokenizer.from_pretrained(
             args.model_name,
+            revision=revision,
+            code_revision=CODE_REVISION,
             trust_remote_code=True,
         )
         self.model = AutoModelForMaskedLM.from_pretrained(
             args.model_name,
+            revision=revision,
+            code_revision=CODE_REVISION,
             trust_remote_code=True,
         )
         self.model = self.model.to(args.device).eval()

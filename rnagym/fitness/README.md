@@ -19,7 +19,8 @@ pixi install
 ```
 
 Data defaults to `data/fitness/`. Set `RNAGYM_DATA_DIR` to another parent data
-directory if needed. Checkpoints are stored under `.pixi/model-weights/`.
+directory if needed. Checkpoints are shared under `/n/lw_groups/marks/ckpt/<model>`.
+Set `RNAGYM_CHECKPOINT_DIR` to use another location.
 
 ## Run
 

@@ -1,6 +1,8 @@
-"""Assay groups and prediction columns for fitness workflows."""
+"""Assay groups, checkpoint revisions and prediction columns for fitness workflows."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 ALL_MODELS = (
     "evo1",
@@ -29,6 +31,24 @@ ASSAY_GROUPS = {
     "ncRNA": ("Ribozyme", "tRNA", "Aptamer"),
     "non-coding": ("Ribozyme", "tRNA", "Aptamer", "mRNA-splicing"),
     "coding": ("mRNA-coding",),
+}
+
+CHECKPOINT_REVISIONS = {
+    "InstaDeepAI/NTv3_8M_pre": "c57a813117f0f90142098f81cc912b3357c9ecd1",
+    "InstaDeepAI/NTv3_100M_pre": "5c685dca15891f5c5b80e0c930e23b87a217e441",
+    "InstaDeepAI/NTv3_650M_pre": "5e6050bed864a5a8fb32481096bf555495316b31",
+    "antichronology/orthrus-mlm-6-track": "5f0dc87d51065035fc28e71972c69f9c84f4deae",
+    "arcinstitute/evo2_1b_base": "2279e1df422c991037470302360edd40d0d2ea1e",
+    "arcinstitute/evo2_7b": "bda0089f92582d5baabf0f22d9fc85f3588f6b58",
+    "arcinstitute/evo2_20b": "8b0f0a9a70c66367ed181a17d049b95699a28fed",
+    "arcinstitute/evo2_40b": "d529aa57c30771814217ad89baaeaf6e2315c7d7",
+    "evo-design/evo-1.5-8k-base": "99a9a4df722662b03d2a79b1770c3150421aa9e9",
+    "genbio-ai/AIDO.RNA-1M-MARS": "00029ce0f63d5c40ef6cc12ddd7744dcc5a97a42",
+    "genbio-ai/AIDO.RNA-25M-MARS": "f7f0bfaeabf4fbd258995dab82c5cf356ec6e852",
+    "genbio-ai/AIDO.RNA-300M-MARS": "0f21db50d971d43ee66b39963ae4ec3c28b66e0d",
+    "genbio-ai/AIDO.RNA-650M": "efaf4af45dc6b522b7ba62ee725d00ad9c43ce11",
+    "genbio-ai/AIDO.RNA-1.6B": "cea90e53284c2a8b77c66528303d04a784b9c67b",
+    "togethercomputer/evo-1-131k-base": "c206aab77ae5967a069c4200ecb1858588528c9d",
 }
 
 SCORE_COLS: dict[str, str | dict[str, str]] = {
@@ -81,6 +101,19 @@ for name, (folder, column_stem) in FOUR_FILL_SPECS.items():
     SCORE_COLS.update(entries)
     _four_fill_models.extend(entries)
 FOUR_FILL_MODELS = tuple(_four_fill_models)
+
+
+def checkpoint_revision(model: str) -> str | None:
+    """Resolve a pinned Hub checkpoint or an explicit local model directory."""
+    if Path(model).is_dir():
+        return None
+    try:
+        return CHECKPOINT_REVISIONS[model]
+    except KeyError:
+        raise ValueError(
+            f"Unpinned checkpoint: {model!r}. "
+            "Use a registered checkpoint or a local model directory."
+        ) from None
 
 
 def resolve_source(

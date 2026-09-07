@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository=$(cd -- "$script_dir/../../../.." && pwd)
-checkpoint_root="$script_dir/../../.pixi/model-weights"
+checkpoint_root=${RNAGYM_CHECKPOINT_DIR:-/n/lw_groups/marks/ckpt}
 fitness_dir=$(cd -- "$script_dir/../.." && pwd)
 data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 export PYTHONPATH="$fitness_dir/.pixi/model-sources/RiNALMo${PYTHONPATH:+:$PYTHONPATH}"

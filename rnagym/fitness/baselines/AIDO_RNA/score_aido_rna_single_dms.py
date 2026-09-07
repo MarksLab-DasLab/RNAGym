@@ -12,6 +12,7 @@ import torch
 from typing_extensions import override
 
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
+from rnagym.fitness.tasks.model_registry import checkpoint_revision
 
 
 class AIDORNAAdapter(MaskedLMAdapter):
@@ -52,6 +53,7 @@ class AIDORNAAdapter(MaskedLMAdapter):
         tokenizer = RNABertTokenizer(str(vocab_file), version="v2")
         self.model = RNABertForMaskedLM.from_pretrained(
             args.model_name,
+            revision=checkpoint_revision(args.model_name),
             torch_dtype=torch.bfloat16,
         )
         self.model = self.model.to(args.device).eval()

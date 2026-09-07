@@ -65,9 +65,9 @@ def run(
             raise ValueError(f"{name} has mixed sequence lengths")
         if checkpoint is None:
             if model_factory is None:
-                from evo import Evo
+                from rnagym.fitness.baselines.Evo.checkpoints import load_evo
 
-                model_factory = Evo
+                model_factory = load_evo
             checkpoint = model_factory(args.model_name)
             checkpoint.model.to(device).eval()
         model = checkpoint.model

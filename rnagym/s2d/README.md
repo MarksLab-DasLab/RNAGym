@@ -15,7 +15,8 @@ pixi run leaderboard
 ```
 
 Choose a model environment from [pixi.toml][1]. Model sources and public weights
-are fetched automatically.
+are fetched automatically. Checkpoints are shared across benchmarks under
+`/n/lw_groups/marks/ckpt/<model>`. Set `RNAGYM_CHECKPOINT_DIR` to use another root.
 RiNALMo requires a GPU.
 
 Prediction jobs use the Slurm settings in [sh/predict.sh][2]. Outputs go to

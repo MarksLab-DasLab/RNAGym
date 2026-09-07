@@ -95,6 +95,10 @@ def run(
     if model_factory is None:
         from evo2 import Evo2
 
+        from rnagym.fitness.baselines.Evo.checkpoints import evo2_checkpoint
+
+        if args.local_path is None:
+            args.local_path = evo2_checkpoint(args.model_name)
         model_factory = Evo2
     model = model_factory(args.model_name, local_path=args.local_path)
     fp8 = bool(model.model.config.get("use_fp8_input_projections", False))

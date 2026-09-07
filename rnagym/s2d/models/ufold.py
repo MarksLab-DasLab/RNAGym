@@ -12,7 +12,7 @@ from rnagym.config import Config2D
 from .utils import Prediction, decode_pair_probabilities, dot_bracket
 
 MODEL_SOURCE = Config2D.MODEL_SOURCE_DIR / "UFold"
-MODEL_WEIGHTS = Config2D.MODEL_WEIGHT_DIR / "ufold" / "ufold_train_alldata.pt"
+MODEL_WEIGHTS = Config2D.CHECKPOINT_DIR / "ufold" / "ufold_train_alldata.pt"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Pre-processing

@@ -16,6 +16,7 @@ import torch
 from typing_extensions import override
 
 from rnagym.fitness.baselines.masked_lm import MaskedLMAdapter, main
+from rnagym.fitness.tasks.model_registry import checkpoint_revision
 
 
 class OrthrusAdapter(MaskedLMAdapter):
@@ -49,8 +50,11 @@ class OrthrusAdapter(MaskedLMAdapter):
     def load(self, args: argparse.Namespace) -> None:
         from transformers import AutoModel
 
+        revision = checkpoint_revision(args.model_name)
         self.model = AutoModel.from_pretrained(
             args.model_name,
+            revision=revision,
+            code_revision=revision,
             trust_remote_code=True,
         )
         self.model = self.model.to(args.device).eval()

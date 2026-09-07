@@ -1,42 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-weight_root="$project_root/.pixi/model-weights"
-mkdir -p "$weight_root"
-exec 9>"$weight_root/.download.lock"
-flock 9
-
-download() {
-	local url=$1 destination=$2 checksum=$3 temporary
-
-	mkdir -p "$(dirname -- "$destination")"
-	if ! printf '%s  %s\n' "$checksum" "$destination" | sha256sum --check --status 2>/dev/null; then
-		temporary=$(mktemp "${destination}.XXXXXX")
-		if ! curl -L --fail --retry 3 --output "$temporary" "$url"; then
-			rm -f -- "$temporary"
-			return 1
-		fi
-		if ! printf '%s  %s\n' "$checksum" "$temporary" | sha256sum --check --status; then
-			rm -f -- "$temporary"
-			return 1
-		fi
-		mv -- "$temporary" "$destination"
-	fi
-}
+# shellcheck source=../sh/weights.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../sh/weights.sh"
 
 case ${1:-} in
 genslm)
-	destination="$project_root/.pixi/model-weights/genslm/2.5B/patric_2.5b_epoch00_val_los_0.29_bias_removed.pt"
-	if [[ ! -f $destination ]]; then
+	destination="$checkpoint_root/genslm/2.5B/patric_2.5b_epoch00_val_los_0.29_bias_removed.pt"
+	if ! printf '%s  %s\n' b13645dc523854a5f811d9a50bd747b611310d85d41a5498a9d7f93cea205f9d "$destination" | sha256sum --check --status 2>/dev/null; then
 		echo "GenSLM publishes its 2.5B checkpoint through authenticated Globus:" >&2
 		echo "https://app.globus.org/file-manager?origin_id=25918ad0-2a4e-4f37-bcfc-8183b19c3150" >&2
-		echo "Download it to $destination" >&2
+		echo "A verified copy is required at $destination" >&2
 		exit 1
 	fi
 	;;
 rna-ernie)
-	destination="$project_root/.pixi/model-weights/rna-ernie/checkpoint_final"
+	destination="$checkpoint_root/rna-ernie/checkpoint_final"
 	download \
 		'https://drive.usercontent.google.com/download?id=1MQjtnrtssoF5qAiALakaDDBnQfy0PJC4&export=download&confirm=t' \
 		"$destination/model_state.pdparams" \
@@ -49,11 +28,11 @@ rna-ernie)
 rna-fm)
 	download \
 		https://huggingface.co/cuhkaih/rnafm/resolve/main/RNA-FM_pretrained.pth \
-		"$project_root/.pixi/model-weights/rna-fm/RNA-FM_pretrained.pth" \
+		"$checkpoint_root/rna-fm/hub/checkpoints/RNA-FM_pretrained.pth" \
 		5b5d7d87b37c291ef42c140ef9edf7aea29f255fa2a4fd435f776c52e93d5e99
 	;;
 rnagenesis)
-	destination="$weight_root/rnagenesis"
+	destination="$checkpoint_root/rnagenesis"
 	if [[ -s $destination/config.json &&
 		-s $destination/configuration_xtrimopglm.py &&
 		-s $destination/modeling_xtrimopglm.py &&
@@ -68,8 +47,9 @@ rnagenesis)
 		echo "$destination exists but is not a complete RNAGenesis checkpoint" >&2
 		exit 1
 	fi
-	temporary=$(mktemp -d "$weight_root/.rnagenesis.XXXXXX")
+	temporary=$(mktemp -d "$checkpoint_root/.rnagenesis.XXXXXX")
 	trap 'rm -rf -- "$temporary"' EXIT
+	chmod 2775 "$temporary"
 	hf download Zaixi/RNAGenesis \
 		--revision d8a42130984cbf04f6a5e16a3aa0c0d6578036a8 \
 		--local-dir "$temporary"
@@ -84,7 +64,7 @@ rnagenesis)
 rinalmo)
 	download \
 		https://zenodo.org/api/records/15043668/files/rinalmo_giga_pretrained.pt/content \
-		"$project_root/.pixi/model-weights/rinalmo/rinalmo_giga_pretrained.pt" \
+		"$checkpoint_root/rinalmo/rinalmo_giga_pretrained.pt" \
 		cd93c3f21eb3e767373c9491192686b5846247bd1110693e453c1dd0f321c0db
 	;;
 *)

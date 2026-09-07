@@ -44,9 +44,7 @@ def main() -> None:
 
         if model is None:
             model = ErnieForMaskedLM.from_pretrained(
-                str(
-                    ConfigFitness.DIR / ".pixi/model-weights/rna-ernie/checkpoint_final"
-                ),
+                str(ConfigFitness.CHECKPOINT_DIR / "rna-ernie/checkpoint_final"),
                 use_task_id=False,
             )
             model.eval()

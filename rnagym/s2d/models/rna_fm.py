@@ -10,8 +10,8 @@ from rnagym.config import Config2D
 
 from .utils import Prediction, decode_pair_probabilities, dot_bracket
 
-MODEL_WEIGHTS = Config2D.MODEL_WEIGHT_DIR / "rna-fm" / "RNA-FM-ResNet_PDB-All.pth"
-TORCH_HOME = Config2D.MODEL_WEIGHT_DIR / "rna-fm"
+MODEL_WEIGHTS = Config2D.CHECKPOINT_DIR / "rna-fm" / "RNA-FM-ResNet_PDB-All.pth"
+TORCH_HOME = Config2D.CHECKPOINT_DIR / "rna-fm"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 

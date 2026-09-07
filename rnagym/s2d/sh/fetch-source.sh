@@ -46,6 +46,13 @@ git -C "$destination" fetch origin "$revision"
 git -C "$destination" checkout --detach "$revision"
 test "$(git -C "$destination" rev-parse HEAD)" = "$revision"
 
+if [[ $1 == ribonanzanet ]]; then
+	patch="$PROJECT_ROOT/sh/ribonanzanet-weights.patch"
+	if ! git -C "$destination" apply --reverse --check "$patch" 2>/dev/null; then
+		git -C "$destination" apply "$patch"
+	fi
+fi
+
 if [[ $1 == rna-assessment ]]; then
 	chmod +x "$destination/MC-Annotate"
 fi

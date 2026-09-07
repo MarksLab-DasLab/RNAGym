@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository=$(cd -- "$script_dir/../../../.." && pwd)
-checkpoint_root="$script_dir/../../.pixi/model-weights"
+checkpoint_root=${RNAGYM_CHECKPOINT_DIR:-/n/lw_groups/marks/ckpt}
 data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 
 row_id=${1:-${SLURM_ARRAY_TASK_ID:-0}}

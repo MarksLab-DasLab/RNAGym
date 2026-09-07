@@ -7,10 +7,10 @@ platforms = [
 ]
 
 [dependencies]
+coverage = "==7.10.7"
 cpuonly = { version = "*", channel = "pytorch" }
 go-shfmt = "==3.13.1"
 numpy = "2.*"
-pandas = "2.*"
 polars = "1.*"
 pytest = "==8.4.2"
 pytest-cov = "==7.0.0"
@@ -22,8 +22,10 @@ scipy = "1.*"
 shellcheck = "==0.11.0"
 taplo = "==0.10.0"
 tqdm = "==4.69.0"
+typing_extensions = ">=4.6"
 
 [pypi-dependencies]
+pyrefly = "==1.2.0"
 rnagym = { path = "../..", editable = true }
 
 [tasks]
@@ -39,16 +41,21 @@ test = "python -m pytest -q ../../tests/test_fitness.py"
 [feature.model]
 channel-priority = "flexible"
 
+[feature.model.activation.env]
+# Triton's cached C launchers must use the current Python ABI
+TRITON_CACHE_DIR = "$PIXI_PROJECT_ROOT/.pixi/triton-cache/$PIXI_ENVIRONMENT_NAME"
+
 [feature.model.dependencies]
 curl = "8.*"
 git = "2.*"
 numpy = "*"
-pandas = "*"
 polars = "1.*"
 scipy = "*"
 tqdm = "4.*"
+typing_extensions = ">=4.6"
 
 [feature.model.pypi-dependencies]
+coverage = { version = "==7.10.7", extras = ["toml"] }
 rnagym = { path = "../..", editable = true }
 
 [feature.aido-rna.dependencies]
@@ -72,6 +79,7 @@ predict = "bash baselines/AIDO_RNA/score_aido_rna.sh"
 [feature.evmutation.dependencies]
 hhsuite = "3.*"
 plmc = "==20221105"
+pytest = "8.*"
 python = "3.11.*"
 scikit-learn = "==1.7.2"
 setuptools = "<81"
@@ -114,16 +122,24 @@ einops = "==0.8.1"
 check-published = "python -m rnagym.fitness.tasks.check_published evo2"
 predict = "bash baselines/Evo/score_evo2.sh"
 
+[feature.genslm.activation.env]
+# Keep the historical CUDA runtime's compiled H100 kernels between runs
+CUDA_CACHE_MAXSIZE = "4294967296"
+CUDA_CACHE_PATH = "$PIXI_PROJECT_ROOT/.pixi/cuda-cache/genslm"
+
 [feature.genslm.dependencies]
 cudatoolkit = "11.3.*"
+mkl = "<2024.1"
 numpy = "1.23.*"
 pandas = "==1.4.4"
+pytest = "8.*"
 python = "3.9.*"
 pytorch = { version = "==1.12.1", channel = "pytorch" }
 
 [feature.genslm.pypi-dependencies]
 biopython = "==1.79"
-genslm = { git = "https://github.com/ramanathanlab/genslm.git", rev = "6622c47e8d9f00a1e8b8c4e30b78e6d702d2b883" }
+# Preserve the released inference before the PyTorch and Pydantic API changes
+genslm = { git = "https://github.com/ramanathanlab/genslm.git", rev = "96340d48bf6ecbee5bf7ec67ad1e6aa4c4b46590" }
 h5py = "==3.7.0"
 jinja2 = "==3.1.2"
 lightning-transformers = "==0.2.1"
@@ -172,6 +188,8 @@ check-published = "python -m rnagym.fitness.tasks.check_published orthrus"
 predict = "bash baselines/Orthrus/score_orthrus.sh"
 
 [feature.rna-ernie.dependencies]
+# Avoid loading NumPy's MKL alongside Paddle's bundled MKL runtime
+libblas = { version = "*", build = "*openblas" }
 numpy = "==1.23.1"
 paddlepaddle = { version = "==2.5.2", build = "py39_cpu_many_linux", channel = "Paddle" }
 pip = "25.*"
@@ -237,15 +255,14 @@ depends-on = ["weights"]
 [feature.rinalmo.dependencies]
 einops = "==0.7.0"
 ml-collections = "==0.1.1"
-numpy = "==1.26.0"
+numpy = "1.26.*"
 python = "3.11.*"
-scipy = "==1.11.3"
+scipy = "1.14.*"
 setuptools = "<81"
-pytorch = { version = "==2.1.0", channel = "pytorch" }
-pytorch-cuda = { version = "==11.8", channel = "pytorch" }
 
 [feature.rinalmo.pypi-dependencies]
-flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.2/flash_attn-2.3.2%2Bcu118torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp311-cp311-linux_x86_64.whl" }
+torch = "==2.6.0"
 
 [feature.rinalmo.tasks]
 source = "bash sh/fetch-source.sh rinalmo"

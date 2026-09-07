@@ -7,5 +7,5 @@ cd "$script_dir/.."
 taplo lint pixi.toml ../../pyproject.toml
 ruff check --extend-select I . ../../tests/test_fitness.py ../config.py
 ruff format --check . ../../tests/test_fitness.py ../config.py
-shfmt -d sh baselines/*/*.sh
-shellcheck sh/*.sh baselines/*/*.sh
+shfmt -d ../sh sh baselines/*/*.sh
+shellcheck ../sh/*.sh sh/*.sh baselines/*/*.sh

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+patch_file="$project_root/baselines/RiNALMo/flash-attn.patch"
 
 case ${1:-} in
 rinalmo)
@@ -21,6 +22,9 @@ is_revision() {
 }
 
 if is_revision; then
+	if ! git -C "$destination" apply --reverse --check "$patch_file" 2>/dev/null; then
+		git -C "$destination" apply "$patch_file"
+	fi
 	exit 0
 fi
 if [[ -e $destination ]]; then
@@ -36,6 +40,7 @@ trap 'rm -rf -- "$temporary"' EXIT
 git clone --no-checkout "$url" "$temporary"
 git -C "$temporary" checkout --detach "$revision"
 test "$(git -C "$temporary" rev-parse HEAD)" = "$revision"
+git -C "$temporary" apply "$patch_file"
 
 if ! mv -T -- "$temporary" "$destination" 2>/dev/null && ! is_revision; then
 	echo "Could not install RiNALMo source at $destination" >&2

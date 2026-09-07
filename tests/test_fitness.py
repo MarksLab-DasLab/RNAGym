@@ -2,8 +2,10 @@
 
 import hashlib
 import json
+import os
 import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,7 +39,9 @@ from rnagym.fitness.tasks import (
 from rnagym.fitness.tasks.merge_scoring_files import combine_csv_data
 from rnagym.fitness.tasks.model_registry import (
     ALL_MODELS,
+    CHECKPOINT_REVISIONS,
     SCORE_COLS,
+    checkpoint_revision,
     resolve_source,
 )
 from rnagym.fitness.tasks.performance_fitness import get_performance_dataset
@@ -636,3 +640,85 @@ def test_merge_rejects_incomplete_predictions(tmp_path):
             SCORE_COLS,
         )
     assert not merged_dir.exists()
+
+
+def test_checkpoint_download(tmp_path, monkeypatch):
+    for model in CHECKPOINT_REVISIONS:
+        revision = checkpoint_revision(model)
+        assert revision is not None and len(revision) == 40
+        assert set(revision) <= set("0123456789abcdef")
+    with pytest.raises(ValueError, match="Unpinned checkpoint"):
+        checkpoint_revision("unregistered/model")
+    local_model = tmp_path / "local checkpoint"
+    local_model.mkdir()
+    assert checkpoint_revision(str(local_model)) is None
+
+    source = ASSAY_DIR / ASSAY_NAMES[0]
+    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+    destination = tmp_path / "shared checkpoints" / "model" / "weights.csv"
+    helper = REPOSITORY / "rnagym/sh/weights.sh"
+    shell = 'source "$1" && download "$2" "$3" "$4"'
+    command = (
+        f"bash -c {shlex.quote(shell)} checkpoint-download {shlex.quote(str(helper))} "
+        f"{shlex.quote(source.resolve().as_uri())} {shlex.quote(str(destination))} {checksum}"
+    )
+    environment = {**os.environ, "RNAGYM_CHECKPOINT_DIR": str(destination.parents[1])}
+    with subprocess.Popen(shlex.split(command), env=environment) as first:
+        with subprocess.Popen(shlex.split(command), env=environment) as second:
+            assert first.wait(timeout=20) == second.wait(timeout=20) == 0
+    assert destination.read_bytes() == source.read_bytes()
+    assert destination.stat().st_mode & 0o044 == 0o044
+    failed = subprocess.run(
+        shlex.split(command.replace(checksum, "0" * 64)),
+        env=environment,
+        check=False,
+        timeout=20,
+    )
+    assert failed.returncode != 0
+    assert destination.read_bytes() == source.read_bytes()
+    assert list(destination.parent.iterdir()) == [destination]
+
+    from rnagym.fitness.baselines.Evo import checkpoints
+
+    content = source.read_bytes()
+    split = len(content) // 2
+    parts = [tmp_path / f"part{index}" for index in range(2)]
+    for path, data in zip(parts, (content[:split], content[split:])):
+        path.write_bytes(data)
+    monkeypatch.setattr(
+        checkpoints,
+        "EVO2_40B_PARTS",
+        tuple(
+            (p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest())
+            for p in parts
+        ),
+    )
+    monkeypatch.setattr(ConfigFitness, "CHECKPOINT_DIR", tmp_path / "checkpoints")
+    downloads = []
+
+    def download_part(repo_id, filename, revision):
+        assert repo_id == "arcinstitute/evo2_40b"
+        assert revision == "d529aa57c30771814217ad89baaeaf6e2315c7d7"
+        downloads.append(filename)
+        return str(parts[int(filename.rsplit("part", 1)[1])])
+
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(hf_hub_download=download_part),
+    )
+    merged = Path(checkpoints.evo2_checkpoint("evo2_40b"))
+    assert merged.read_bytes() == content
+    assert downloads == ["evo2_40b.pt.part0", "evo2_40b.pt.part1"]
+    assert checkpoints.evo2_checkpoint("evo2_40b") == str(merged)
+    assert len(downloads) == 2
+    for corrupted in (b"X" + content[1:], content[:-1], content + b"X"):
+        merged.write_bytes(corrupted)
+        with pytest.raises(ValueError, match="checksum|Truncated|trailing"):
+            checkpoints.evo2_checkpoint("evo2_40b")
+        assert merged.read_bytes() == corrupted
+    merged.unlink()
+    parts[1].unlink()
+    with pytest.raises(FileNotFoundError):
+        checkpoints.evo2_checkpoint("evo2_40b")
+    assert list(merged.parent.iterdir()) == [merged.with_suffix(".lock")]

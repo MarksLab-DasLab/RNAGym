@@ -42,7 +42,6 @@ class Config2D(_Config):
     EFOLD_VIRAL_FILE = RAW_DIR / "viral_fragments.json"
     PSEUDOBASE_FILE = RAW_DIR / "pseudobase.csv"
     MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
-    MODEL_WEIGHT_DIR = DIR / ".pixi" / "model-weights"
     MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 
     MIN_SEQUENCE_IDENTITY = 0.40

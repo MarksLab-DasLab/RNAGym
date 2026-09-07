@@ -1,0 +1,9 @@
+diff --git a/src/rnet_2d.py b/src/rnet_2d.py
+--- a/src/rnet_2d.py
++++ b/src/rnet_2d.py
+@@ -27,4 +27,4 @@ model = finetuned_RibonanzaNet(load_config_from_yaml(path.join(path.dirname(__file__
+ if USE_GPU:
+     model = model.cuda()
+-model.load_state_dict(torch.load(path.join(path.dirname(__file__), '../RibonanzaNet-Weights', 'RibonanzaNet-SS.pt'), map_location='cpu'))
++model.load_state_dict(torch.load(path.join(os.environ.get('RNAGYM_CHECKPOINT_DIR', '/n/lw_groups/marks/ckpt'), 'ribonanzanet', 'RibonanzaNet-SS.pt'), map_location='cpu'))
+ model.eval()

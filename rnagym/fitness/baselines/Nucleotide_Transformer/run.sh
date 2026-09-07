@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 002
+
+checkpoint_root=${RNAGYM_CHECKPOINT_DIR:-/n/lw_groups/marks/ckpt}
+export HF_HUB_CACHE=${HF_HUB_CACHE:-"$checkpoint_root/ntv3/hub"}
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository=$(cd -- "$script_dir/../../../.." && pwd)

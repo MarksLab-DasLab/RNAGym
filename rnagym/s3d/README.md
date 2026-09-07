@@ -34,7 +34,8 @@ are fetched automatically. AlphaFold 3 requires licensed parameters and its
 databases. RF2NA requires PDB100 and must run after AF3 to reuse partner-chain
 MSAs. [Riboseek][4] databases live under `RNAGYM_DATABASE_DIR`.
 
-Predictions and scores go to
+Checkpoints are shared under `/n/lw_groups/marks/ckpt/<model>`.
+Set `RNAGYM_CHECKPOINT_DIR` to use another root. Predictions and scores go to
 `data/3d/`, and `leaderboard` updates the leaderboard CSV and README.
 
 [0]: https://github.com/marcellszi/rna3db/releases/tag/2026-01-05-full-release

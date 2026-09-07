@@ -13,5 +13,5 @@ def predict(sequence: str) -> Prediction:
     return _predict(
         sequence,
         ETERNAFOLD / "src" / "contrafold",
-        ETERNAFOLD / "parameters" / "EternaFoldParams.v1",
+        Config2D.CHECKPOINT_DIR / "eternafold" / "EternaFoldParams.v1",
     )
