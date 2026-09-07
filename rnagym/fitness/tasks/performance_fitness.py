@@ -111,11 +111,11 @@ def aggregate_by_rna_type(
         for metric in METRICS:
             type_means = []
             for rna_type in rna_types:
-                mean = grouped[(model, rna_type)][metric]
+                mean = grouped.get((model, rna_type), {}).get(metric)
                 row[f"{metric}_{rna_type}_Mean"] = mean
                 type_means.append(mean)
             row[f"{metric}_All_Mean"] = (
-                float(np.mean(type_means))
+                float(np.mean(np.asarray(type_means, dtype=float)))
                 if all(value is not None for value in type_means)
                 else None
             )
@@ -144,7 +144,7 @@ def aggregate_by_type_and_depth(
         for depth in (*DEPTHS, "overall"):
             type_values = []
             for rna_type in rna_types:
-                values = grouped[(model, depth, rna_type)]
+                values = grouped.get((model, depth, rna_type), dict.fromkeys(METRICS))
                 row: dict[str, object] = {
                     "Model": model,
                     "Depth": depth,
@@ -185,31 +185,11 @@ def calculate_metrics(
 
 def cli(argv: Sequence[str] | None = None) -> None:
     """Run the fitness performance command."""
-    main(parse_args(argv))
-
-
-def filter_msa_assays(
-    reference: pl.DataFrame, combined_dir: str | Path
-) -> pl.DataFrame:
-    """Keep assays with at least ten EVmutation predictions."""
-    combined_dir = Path(combined_dir)
-    available = []
-
-    for dms_id in reference["DMS_ID"]:
-        assay_path = combined_dir / f"{dms_id}.csv"
-        if not assay_path.exists():
-            continue
-        assay = pl.read_csv(assay_path)
-        if (
-            "EVmutation_score" in assay
-            and assay["EVmutation_score"].is_finite().fill_null(False).sum() >= 10
-        ):
-            available.append(dms_id)
-
-    dropped = len(reference) - len(available)
-    if dropped:
-        print(f"Dropped {dropped} datasets missing EVmutation scores")
-    return reference.filter(pl.col("DMS_ID").is_in(available))
+    args = parse_args(argv)
+    summary = main(args)
+    with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4):
+        print(summary)
+    print(f"Saved metrics to {args.output}")
 
 
 def get_performance_dataset(
@@ -254,18 +234,18 @@ def load_assay_metrics(
     combined_dir: str | Path,
     score_columns: list[str],
     msa_only: bool = False,
-) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Calculate overall and mutation-depth metrics for every selected assay."""
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Calculate assay metrics and record the evaluated variant counts."""
     assay_rows = []
     depth_rows = []
     combined_dir = Path(combined_dir)
-    filtered_sizes = []
+    coverage = []
 
     for assay_info in reference.iter_rows(named=True):
         assay_path = combined_dir / f"{assay_info['DMS_ID']}.csv"
         if not assay_path.is_file():
             raise FileNotFoundError(f"Selected assay is missing: {assay_path}")
-        assay = pl.read_csv(assay_path)
+        assay = pl.read_csv(assay_path).drop_nulls("mutant")
         missing_columns = [column for column in score_columns if column not in assay]
         if missing_columns:
             raise KeyError(f"{assay_path} is missing score columns: {missing_columns}")
@@ -275,10 +255,22 @@ def load_assay_metrics(
 
         filtered = assay
         if msa_only:
-            filtered = assay.filter(
-                pl.col("EVmutation_score").is_finite().fill_null(False)
-            )
-            filtered_sizes.append((len(assay), len(filtered)))
+            baseline = assay["EVmutation_score"].cast(pl.Float64)
+            if baseline.is_nan().any() or baseline.is_infinite().any():
+                raise ValueError(f"{assay_path} has nonfinite EVmutation scores")
+            filtered = assay.filter(baseline.is_not_null())
+        evaluable = filtered.height >= 2 and filtered["DMS_score"].n_unique() >= 2
+        coverage.append(
+            {
+                "DMS_ID": assay_info["DMS_ID"],
+                "RNA_TYPE": assay_info["RNA_TYPE"],
+                "variants": assay.height,
+                "scored_variants": filtered.height,
+                "evaluated_variants": filtered.height if evaluable else 0,
+            }
+        )
+        if msa_only and not evaluable:
+            continue
 
         filtered_results = get_performance_dataset(filtered, "DMS_score", score_columns)
         undefined = [
@@ -316,66 +308,62 @@ def load_assay_metrics(
                 )
             )
 
-    if msa_only:
-        unfiltered = sum(size[0] for size in filtered_sizes)
-        filtered = sum(size[1] for size in filtered_sizes)
-        if not unfiltered:
-            raise ValueError("No assay rows remain after MSA filtering")
-        print(f"Filtered dataset sizes: {[size[1] for size in filtered_sizes]}")
-        print(
-            f"{filtered / unfiltered * 100:.1f}% of samples remain after "
-            "filtering for EVmutation scores"
-        )
-
-    return pl.DataFrame(assay_rows).with_columns(
-        pl.col(*METRICS).fill_nan(None)
-    ), pl.DataFrame(depth_rows).with_columns(pl.col(*METRICS).fill_nan(None))
+    if not assay_rows:
+        raise ValueError("No assays have enough scored variants with varying fitness")
+    return (
+        pl.DataFrame(assay_rows).with_columns(pl.col(*METRICS).fill_nan(None)),
+        pl.DataFrame(depth_rows).with_columns(pl.col(*METRICS).fill_nan(None)),
+        pl.DataFrame(coverage),
+    )
 
 
-def main(args: argparse.Namespace) -> None:
-    """Run the fitness performance workflow."""
+def main(args: argparse.Namespace) -> pl.DataFrame:
+    """Write the fitness metrics and return category means."""
     reference = select_assays(read_reference(ConfigFitness.REFERENCE_FILE), args.type)
     if reference.is_empty():
         raise ValueError(f"No assays found for type {args.type!r}")
-    if args.msa_only:
-        reference = filter_msa_assays(reference, args.input)
-        if reference.is_empty():
-            raise ValueError("No assays have at least ten finite EVmutation scores")
-
     models = list(args.models or ALL_MODELS)
-    if args.msa_only and "EVmutation" not in models:
-        models.append("EVmutation")
-
     if len(models) != len(set(models)):
         raise ValueError("Model list contains duplicates")
     score_columns = [f"{model}_score" for model in models]
     rna_types = [
         rna_type for rna_type in RNA_TYPES if (reference["RNA_TYPE"] == rna_type).any()
     ]
-    assay_metrics, depth_metrics = load_assay_metrics(
-        reference, args.input, score_columns, args.msa_only
+    complete_columns = [
+        column for column in score_columns if column != "EVmutation_score"
+    ]
+    assays: list[pl.DataFrame] = []
+    depths: list[pl.DataFrame] = []
+    if complete_columns:
+        assay_metrics, depth_metrics, _ = load_assay_metrics(
+            reference, args.input, complete_columns
+        )
+        assays.append(assay_metrics)
+        depths.append(depth_metrics)
+    if "EVmutation" in models:
+        shared_assays, shared_depths, coverage = load_assay_metrics(
+            reference, args.input, score_columns, msa_only=True
+        )
+        save_results(
+            args.output / "evmutation",
+            shared_assays,
+            shared_depths,
+            score_columns,
+            rna_types,
+        )
+        coverage.write_csv(args.output / "evmutation/coverage.csv")
+        baseline = pl.col("Model") == "EVmutation_score"
+        assays.append(shared_assays.filter(baseline))
+        depths.append(shared_depths.filter(baseline))
+    assay_metrics, depth_metrics = pl.concat(assays), pl.concat(depths)
+    by_rna_type = save_results(
+        args.output, assay_metrics, depth_metrics, score_columns, rna_types
     )
-    by_rna_type = aggregate_by_rna_type(assay_metrics, score_columns, rna_types)
-    by_depth = aggregate_by_depth(depth_metrics, score_columns)
-    by_type_and_depth = aggregate_by_type_and_depth(
-        depth_metrics, score_columns, rna_types
-    )
-    save_results(
-        args.output,
-        assay_metrics,
-        score_columns,
-        by_rna_type,
-        by_depth,
-        by_type_and_depth,
-    )
-    summary = by_rna_type.select(
+    return by_rna_type.select(
         "Model",
         *[pl.col(f"Spearman_{name}_Mean").alias(name) for name in rna_types],
         pl.col("Spearman_All_Mean").alias("Mean"),
     ).sort("Mean", descending=True)
-    with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4):
-        print(summary)
-    print(f"Saved metrics to {args.output}")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -384,9 +372,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input", type=Path, default=ConfigFitness.COMBINED_DIR)
     parser.add_argument("--output", type=Path, default=ConfigFitness.REPORT_DIR)
     parser.add_argument("--models", nargs="+", help="Models to evaluate")
-    parser.add_argument(
-        "--msa-only", action="store_true", help="Evaluate MSA-covered variants"
-    )
     parser.add_argument("--type", default="ncRNA", choices=["all", *ASSAY_GROUPS])
     return parser.parse_args(argv)
 
@@ -394,12 +379,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def save_results(
     output_dir: str | Path,
     assay_metrics: pl.DataFrame,
+    depth_metrics: pl.DataFrame,
     models: list[str],
-    by_rna_type: pl.DataFrame,
-    by_depth: pl.DataFrame,
-    by_type_and_depth: pl.DataFrame,
-) -> None:
-    """Write the five benchmark result tables."""
+    rna_types: list[str],
+) -> pl.DataFrame:
+    """Write assay and aggregate metrics and return the category means."""
+    by_rna_type = aggregate_by_rna_type(assay_metrics, models, rna_types)
+    by_depth = aggregate_by_depth(depth_metrics, models)
+    by_type_and_depth = aggregate_by_type_and_depth(depth_metrics, models, rna_types)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     tables = {
@@ -421,6 +408,7 @@ def save_results(
             metric_table, on="DMS_ID", validate="1:1", maintain_order="left"
         )
     transposed.write_csv(output_dir / "assay_level_results_transposed.csv")
+    return by_rna_type
 
 
 def select_assays(reference: pl.DataFrame, assay_type: str) -> pl.DataFrame:

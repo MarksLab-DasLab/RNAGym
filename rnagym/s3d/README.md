@@ -5,41 +5,66 @@ RNA 3D structure prediction on quality-filtered targets released after
 structures are retained. Predictions and MSAs are shared by sequence.
 See the [leaderboard][1] for results.
 
-## Prepare data
+## Setup
 
-Configure the data and database paths in [Config3D][2], then run here:
+Complete the [shared data setup][5], then run from `rnagym/s3d/`:
 
 ```bash
-pixi run pipeline
-pixi run usalign
-pixi run split
+pixi install
 ```
 
-`pipeline` downloads and filters RNA3DB. It requires Rfam 15.0 with a pressed
-`Rfam.cm` and `family.txt.gz`. `usalign` compares targets against each model's
-training structures. `split` adds those comparisons to `data/3d/rnagym_3d.parquet`.
+The shared archive includes the datasets, MSAs and precomputed US-align outputs
+under `data/3d/`.
 
 ## Predict and evaluate
 
 ```bash
-pixi run riboseek-db
-pixi run riboseek
-pixi run -e af3 predict
+pixi run -e <env> predict
+```
+
+Replace `<env>` with a model environment from [pixi.toml][3]:
+
+| Environment | Model |
+| --- | --- |
+| `af3` | AlphaFold 3 |
+| `nufold` | NuFold |
+| `rf2na` | RoseTTAFold2NA |
+| `rhofold` | RhoFold+ |
+| `trrna` | trRosettaRNA |
+
+Sources and public checkpoints are fetched automatically. Checkpoints use
+`RNAGYM_CHECKPOINT_DIR`. AlphaFold 3 requires licensed parameters and its
+databases. RF2NA requires PDB100 and must run after AF3 to reuse partner-chain
+MSAs. Reference databases use `RNAGYM_DATABASE_DIR`.
+
+Prediction jobs use the Slurm settings in [sh/predict.sh][6]. Once they finish:
+
+```bash
 pixi run score
 pixi run leaderboard
 ```
 
-Choose a model environment from [pixi.toml][3]. Sources and public checkpoints
-are fetched automatically. AlphaFold 3 requires licensed parameters and its
-databases. RF2NA requires PDB100 and must run after AF3 to reuse partner-chain
-MSAs. [Riboseek][4] databases live under `RNAGYM_DATABASE_DIR`.
+Predictions and scores go to `data/3d/`. `leaderboard` updates the leaderboard
+CSV and README.
 
-Checkpoints are shared under `/n/lw_groups/marks/ckpt/<model>`.
-Set `RNAGYM_CHECKPOINT_DIR` to use another root. Predictions and scores go to
-`data/3d/`, and `leaderboard` updates the leaderboard CSV and README.
+## Rebuild data
+
+To regenerate the shared datasets, check the paths in [Config3D][2], then run
+`pixi run pipeline`. It downloads and filters RNA3DB and requires Rfam 15.0
+with a pressed `Rfam.cm` and `family.txt.gz`.
+
+`pixi run usalign` submits comparisons against each model's training structures.
+Once those jobs finish, run `pixi run split` to add the results to
+`data/3d/rnagym_3d.parquet`.
+
+To regenerate MSAs, run `pixi run riboseek-db` to prepare [Riboseek][4] databases
+under `RNAGYM_DATABASE_DIR`. Once those jobs finish, run `pixi run riboseek` and
+wait for the alignments before predicting structures.
 
 [0]: https://github.com/marcellszi/rna3db/releases/tag/2026-01-05-full-release
 [1]: ../../leaderboard/3d/
 [2]: ../config.py
 [3]: pixi.toml
 [4]: https://github.com/steineggerlab/riboseek
+[5]: ../../README.md#getting-started
+[6]: sh/predict.sh

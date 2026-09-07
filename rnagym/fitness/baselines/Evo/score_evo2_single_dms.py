@@ -20,7 +20,6 @@ from scipy.stats import spearmanr
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.data import (
-    parse_row_ids,
     read_assay,
     read_reference,
     write_csv_atomically,
@@ -46,16 +45,6 @@ def load_dms_data(dms_dir: Path, dms_id: str) -> pl.DataFrame:
     return read_assay(dms_dir / f"{dms_id}.csv")
 
 
-def load_reference_data(reference_file: Path, row_ids: list[int]) -> list[str]:
-    """Return assay identifiers at validated reference-sheet rows."""
-    reference = read_reference(reference_file)
-    if any(row < 0 or row >= reference.height for row in row_ids):
-        raise ValueError(
-            f"Reference rows {row_ids} fall outside 0-{reference.height - 1}"
-        )
-    return reference[row_ids]["DMS_ID"].to_list()
-
-
 def main() -> None:
     """Run the Evo 2 scoring command."""
     run(parse_args())
@@ -65,7 +54,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Score assays with Evo 2")
     parser.add_argument(
-        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
@@ -84,10 +73,10 @@ def run(
     args: argparse.Namespace, model_factory: Callable[..., Any] | None = None
 ) -> None:
     """Load Evo 2 once and score all requested assays."""
-    row_ids = parse_row_ids(args.rows)
-    dms_ids = load_reference_data(ConfigFitness.REFERENCE_FILE, row_ids)
+    dms_ids = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)[
+        "DMS_ID"
+    ].to_list()
     args.output.mkdir(parents=True, exist_ok=True)
-    pending = list(zip(row_ids, dms_ids))
 
     if not torch.cuda.is_available():
         print("WARNING: Evo 2 requires CUDA", file=sys.stderr)
@@ -106,13 +95,13 @@ def run(
         raise RuntimeError("The constructed model does not use FP8 input projections")
 
     failures = []
-    for row_id, dms_id in pending:
+    for dms_id in dms_ids:
         try:
             score_assay(model, args, dms_id, fp8)
         except Exception as error:
-            if len(pending) == 1:
+            if len(dms_ids) == 1:
                 raise
-            print(f"Row {row_id} ({dms_id}) failed: {error}", file=sys.stderr)
+            print(f"{dms_id} failed: {error}", file=sys.stderr)
             failures.append(dms_id)
     if failures:
         raise RuntimeError(f"Failed assays: {', '.join(failures)}")

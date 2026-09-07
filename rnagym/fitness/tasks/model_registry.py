@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ALL_MODELS = (
+CHECKPOINT_MODELS = (
     "evo1",
     "evo1.5",
     "evo2",
@@ -26,6 +26,7 @@ ALL_MODELS = (
     "aido_rna_300m",
     "aido_rna_650m",
 )
+ALL_MODELS = (*CHECKPOINT_MODELS, "EVmutation")
 
 ASSAY_GROUPS = {
     "ncRNA": ("Ribozyme", "tRNA", "Aptamer"),

@@ -6,14 +6,14 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+from fitness_fixtures import FIXTURE_DIR
+from fitness_fixtures import fitness_data as fitness_data
 from polars.testing import assert_frame_equal
 
 from rnagym.config import ConfigFitness
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures" / "fitness"
 
-
-def test_evmutation_scoring(tmp_path, monkeypatch):
+def test_evmutation_scoring(fitness_data, tmp_path, monkeypatch):
     """Fit a real RNA MSA and verify coverage, coordinates and Potts energies."""
     from rnagym.fitness.baselines.EVmutation import compute_fitness as scorer
     from rnagym.fitness.tasks.merge_scoring_files import merge_predictions
@@ -27,13 +27,6 @@ def test_evmutation_scoring(tmp_path, monkeypatch):
         return model
 
     monkeypatch.setattr(scorer, "infer_model", capture_model)
-    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", FIXTURE_DIR / "assays")
-    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", FIXTURE_DIR / "reference.csv")
-    monkeypatch.setattr(ConfigFitness, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(ConfigFitness, "MSA_DIR", tmp_path / "msa")
-    (tmp_path / "msa/by_assay").mkdir(parents=True)
-    for path in (FIXTURE_DIR / "msa").iterdir():
-        (tmp_path / "msa/by_assay" / path.name).symlink_to(path.resolve())
     monkeypatch.setattr(
         sys,
         "argv",
@@ -84,8 +77,17 @@ def test_evmutation_scoring(tmp_path, monkeypatch):
     assert merged.height == assay.height
     assert merged["EVmutation_score"].null_count() == (~covered).sum()
 
+    # Selecting another assay must not fit the available Domingo alignment
+    output = tmp_path / "selected"
+    monkeypatch.setattr(
+        sys, "argv", shlex.split(f"evmutation --rows 0 --output {output} --cpu 2")
+    )
+    scorer.main()
+    assert len(models) == 1
+    assert not list(output.glob("*.csv"))
 
-def test_genslm_scoring(tmp_path, monkeypatch):
+
+def test_genslm_scoring(fitness_data, tmp_path, monkeypatch):
     """Compare real checkpoint predictions with native unpadded causal losses."""
     import genslm
     import torch
@@ -106,14 +108,19 @@ def test_genslm_scoring(tmp_path, monkeypatch):
         return model
 
     monkeypatch.setattr(genslm, "GenSLM", capture_model)
-    monkeypatch.setattr(ConfigFitness, "ASSAY_DIR", FIXTURE_DIR / "assays")
-    monkeypatch.setattr(ConfigFitness, "REFERENCE_FILE", FIXTURE_DIR / "reference.csv")
-    args = scorer.parse_args(shlex.split(f"--rows 2 --output {tmp_path}"))
+    assay_dir = fitness_data / "assays"
+    for path in assay_dir.glob("*.csv"):
+        if path.name != "Tome_2014_GFP_aptamer.csv":
+            pl.read_csv(path).head(2).write_csv(path)
+    args = scorer.parse_args(shlex.split(f"--output {tmp_path / 'scores'}"))
     scorer.main(args)
     assert len(models) == 1
+    assert {path.name for path in args.output.glob("*.csv")} == {
+        path.name for path in assay_dir.glob("*.csv")
+    }
     model = models[0]
     assay = pl.read_csv(FIXTURE_DIR / "assays/Tome_2014_GFP_aptamer.csv")
-    result = pl.read_csv(tmp_path / "Tome_2014_GFP_aptamer.csv")
+    result = pl.read_csv(args.output / "Tome_2014_GFP_aptamer.csv")
     assert_frame_equal(result.select(assay.columns), assay)
     assert result["logit_scores"].is_finite().all()
     assert (result["logit_scores"] < 0).all()

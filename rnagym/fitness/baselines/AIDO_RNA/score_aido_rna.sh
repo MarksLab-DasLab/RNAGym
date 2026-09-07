@@ -11,10 +11,10 @@ data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 
 model_name=${AIDO_RNA_MODEL_NAME:-genbio-ai/AIDO.RNA-1.6B}
 prediction_name=${AIDO_RNA_PREDICTION_NAME:-aido_rna_4fill}
-row_id=${1:-${SLURM_ARRAY_TASK_ID:-0}}
+rows=${1:-${SLURM_ARRAY_TASK_ID:-all}}
 
 cd "$repository"
 python -m rnagym.fitness.baselines.AIDO_RNA.score_aido_rna_single_dms \
-	--rows "$row_id" \
+	--rows "$rows" \
 	--output "$data_dir/model_predictions/$prediction_name" \
 	--model "$model_name"

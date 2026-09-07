@@ -1,4 +1,4 @@
-"""Score one fitness assay with RNA-ERNIE."""
+"""Score fitness assays with RNA-ERNIE."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from paddlenlp.transformers import ErnieForMaskedLM
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.baselines.RNAERNIE.src.rna_ernie import BatchConverter
-from rnagym.fitness.data import parse_row_ids, read_reference, write_csv_atomically
+from rnagym.fitness.data import read_reference, write_csv_atomically
 
 BASES = "ACGT"
 MUTATION_PATTERN = re.compile(r"^[ACGT]\d+[ACGT](?:,[ACGT]\d+[ACGT])*$")
@@ -23,16 +23,12 @@ SCORE_COLUMN = "Mutation_Scores"
 def main() -> None:
     """Load RNA-ERNIE once and score the selected assays."""
     args = parse_args()
-    reference = read_reference(ConfigFitness.REFERENCE_FILE)
-    row_ids = parse_row_ids(args.rows)
-    if any(row >= reference.height for row in row_ids):
-        raise ValueError(f"Rows {row_ids} fall outside the reference sheet")
+    reference = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)
     model = None
     converter = BatchConverter(
         vocab_path=Path(__file__).with_name("src") / "vocab_1MER.txt"
     )
-    for row_id in row_ids:
-        row = reference.row(row_id, named=True)
+    for row in reference.iter_rows(named=True):
         name = row["DMS_ID"]
         wild_type = normalize_sequence(row["RAW_CONSTRUCT_SEQ"])
         if len(wild_type) > 510:
@@ -69,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     """Parse RNA-ERNIE input and output paths."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
     )
     parser.add_argument(
         "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "RNAErnie"

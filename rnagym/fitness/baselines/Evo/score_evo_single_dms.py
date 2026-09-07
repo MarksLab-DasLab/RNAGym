@@ -15,7 +15,6 @@ from tqdm.auto import tqdm
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.data import (
-    parse_row_ids,
     read_assay,
     read_reference,
     write_csv_atomically,
@@ -31,7 +30,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the checkpoint, assay and output directory."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", dest="model_name", default="evo-1.5-8k-base")
@@ -59,14 +58,10 @@ def run(
     args: argparse.Namespace, model_factory: Callable[..., Any] | None = None
 ) -> None:
     """Load one checkpoint and score the selected assays."""
-    reference = read_reference(ConfigFitness.REFERENCE_FILE)
-    row_ids = parse_row_ids(args.rows)
-    if any(row >= reference.height for row in row_ids):
-        raise ValueError(f"Rows {row_ids} fall outside the reference sheet")
+    reference = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)
     checkpoint = None
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    for row in row_ids:
-        name = reference["DMS_ID"][row]
+    for name in reference["DMS_ID"]:
         assay = read_assay(ConfigFitness.ASSAY_DIR / f"{name}.csv")
         raw = assay["sequence"]
         if (

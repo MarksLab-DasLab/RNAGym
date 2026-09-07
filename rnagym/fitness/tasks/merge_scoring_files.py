@@ -118,7 +118,9 @@ def combine_csv_data(
                 folder, score_col = resolve_source(score_cols_dict, model_name)
                 model_path = Path(model_predictions_folder) / folder / csv_file
                 if not model_path.exists():
-                    logger.warning(f"Model file {csv_file} not found in {model_name}")
+                    df = df.with_columns(
+                        pl.lit(None, dtype=pl.Float64).alias(f"{model_name}_score")
+                    )
                     continue
 
                 df = merge_predictions(
@@ -208,8 +210,8 @@ def merge_predictions(
     scores = prediction[score_column].cast(pl.Float64, strict=True)
     if model != "EVmutation" and not scores.is_finite().fill_null(False).all():
         raise ValueError(f"{model} has missing or nonfinite predictions")
-    if scores.is_infinite().any():
-        raise ValueError(f"{model} has infinite predictions")
+    if scores.is_infinite().any() or scores.is_nan().any():
+        raise ValueError(f"{model} has nonfinite predictions")
 
     if prediction[mutation].is_duplicated().any():
         for _, repeated in prediction.filter(pl.col(mutation).is_duplicated()).group_by(

@@ -15,7 +15,6 @@ from tqdm.auto import tqdm
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.data import (
-    parse_row_ids,
     read_assay,
     read_reference,
     write_csv_atomically,
@@ -28,10 +27,7 @@ def main(
 ) -> None:
     """Load GenSLM once and score the selected assays."""
     args = args or parse_args()
-    reference = read_reference(ConfigFitness.REFERENCE_FILE)
-    row_ids = parse_row_ids(args.rows)
-    if any(row >= reference.height for row in row_ids):
-        raise ValueError(f"Rows {row_ids} fall outside the reference sheet")
+    reference = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)
     if model_factory is None:
         from genslm import GenSLM
 
@@ -42,9 +38,9 @@ def main(
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device).eval()
-    for row in row_ids:
+    for row in reference.iter_rows(named=True):
         process_single_row(
-            reference.row(row, named=True),
+            row,
             model,
             device,
             ConfigFitness.ASSAY_DIR,
@@ -57,7 +53,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse the assays and output directory."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
     )
     parser.add_argument(
         "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "GenSLM"

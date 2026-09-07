@@ -27,13 +27,23 @@ See the [leaderboards][3] for results and [releases][4] for stable versions.
 
 ## Getting started
 
-Follow the setup, dataset preparation and reproduction instructions for the
-[fitness][0], [2D structure][6], and [3D structure][7] benchmarks.
+<!-- TODO(MCA): Upload complete data files to this link -->
 
-Model checkpoints are shared across all three benchmarks under
-`/n/lw_groups/marks/ckpt/<model>`. Set `RNAGYM_CHECKPOINT_DIR` to use another
-location. Model environments and source checkouts stay under each benchmark's
-`.pixi/` directory.
+All three benchmarks share the RNAGym v0.2 data archive. Download and extract
+it from the repository root:
+
+```bash
+wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
+tar -xJf data.tar.xz
+```
+
+Data defaults to `data/`. Set `RNAGYM_DATA_DIR` to use another data directory.
+Then follow the setup and reproduction instructions for the [fitness][0],
+[2D structure][6], and [3D structure][7] benchmarks.
+
+Set `RNAGYM_CHECKPOINT_DIR` for model weights and `RNAGYM_DATABASE_DIR` for
+reference databases. Both locations are shared across benchmarks. Model
+environments and source checkouts stay under each benchmark's `.pixi/` directory.
 
 ## Contributing
 

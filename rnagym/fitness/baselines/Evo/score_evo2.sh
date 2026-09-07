@@ -11,7 +11,7 @@ data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 
 model_name=${EVO2_MODEL_NAME:-evo2_40b}
 prediction_name=${EVO2_PREDICTION_NAME:-$model_name}
-row_id=${1:-${SLURM_ARRAY_TASK_ID:-0}}
+rows=${1:-${SLURM_ARRAY_TASK_ID:-all}}
 local_path=${EVO2_LOCAL_PATH:-}
 
 extra_args=()
@@ -21,7 +21,7 @@ fi
 
 cd "$repository"
 python -m rnagym.fitness.baselines.Evo.score_evo2_single_dms \
-	--rows "$row_id" \
+	--rows "$rows" \
 	--output "$data_dir/model_predictions/$prediction_name" \
 	--model "$model_name" \
 	"${extra_args[@]}"

@@ -138,7 +138,7 @@ def infer_model(config: dict[str, Any]) -> CouplingsModel:
 
 
 def main() -> None:
-    """Score every reference-sheet assay that has a released Riboseek MSA."""
+    """Score selected reference-sheet assays with released Riboseek MSAs."""
     args = parse_args()
     msa_dir = ConfigFitness.MSA_DIR / "by_assay"
     work_dir = ConfigFitness.DATA_DIR / "tmp/evmutation"
@@ -147,7 +147,7 @@ def main() -> None:
     if not msa_dir.is_dir():
         raise FileNotFoundError(f"Riboseek MSA directory is missing: {msa_dir}")
 
-    reference = read_reference(ConfigFitness.REFERENCE_FILE)
+    reference = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)
     args.output.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
     completed = 0
@@ -199,6 +199,9 @@ def normalize_sequence(sequence: str) -> str:
 def parse_args() -> argparse.Namespace:
     """Parse EVmutation input and output locations."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
+    )
     parser.add_argument(
         "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "EVmutation"
     )

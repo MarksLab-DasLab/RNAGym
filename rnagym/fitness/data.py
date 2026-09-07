@@ -32,10 +32,12 @@ def read_assay(path: str | Path) -> pl.DataFrame:
     return table
 
 
-def read_reference(path: str | Path) -> pl.DataFrame:
-    """Read unique, nonempty assay identifiers and their metadata."""
+def read_reference(path: str | Path, rows: str = "all") -> pl.DataFrame:
+    """Read validated metadata for all assays or selected zero-based rows."""
     table = pl.read_csv(path)
     require_columns(table, ("DMS_ID", "RNA_TYPE", "RAW_CONSTRUCT_SEQ"), path)
+    if table.is_empty():
+        raise ValueError(f"{path} has no assays")
     for column in ("DMS_ID", "RNA_TYPE", "RAW_CONSTRUCT_SEQ"):
         if (
             table[column].is_null().any()
@@ -44,6 +46,11 @@ def read_reference(path: str | Path) -> pl.DataFrame:
             raise ValueError(f"{path} has missing {column} values")
     if table["DMS_ID"].is_duplicated().any():
         raise ValueError(f"{path} repeats DMS_ID values")
+    if rows != "all":
+        row_ids = parse_row_ids(rows)
+        if row_ids[-1] >= table.height:
+            raise ValueError(f"Rows {row_ids} fall outside the reference sheet")
+        table = table[row_ids]
     return table
 
 

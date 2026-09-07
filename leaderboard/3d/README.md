@@ -8,7 +8,7 @@ when both structures lack that interaction class and zero when only one
 does. Monomer metrics take the best match across experimental structures
 with the same sequence. Monomer sequence scores and individual multimer
 target scores are then averaged within each 40% sequence identity cluster,
-then across clusters. Missing predictions score zero, and all metrics are
+then across clusters. Failed predictions score 0, and all metrics are
 better when higher. Models are ranked by TM score.
 
 <!-- BEGIN GENERATED TABLES -->

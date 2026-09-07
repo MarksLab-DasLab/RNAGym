@@ -23,14 +23,15 @@ from typing import Any
 
 import numpy as np
 import polars as pl
+from polars.testing import assert_frame_equal
 from scipy.stats import spearmanr
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.data import read_reference
 from rnagym.fitness.tasks.merge_scoring_files import standardize_mutation
 from rnagym.fitness.tasks.model_registry import (
-    ALL_MODELS,
     ASSAY_GROUPS,
+    CHECKPOINT_MODELS,
     FOUR_FILL_SPECS,
     SCORE_COLS,
     STRATEGIES,
@@ -67,12 +68,13 @@ class Comparison:
 
 @dataclass(frozen=True)
 class ModelFamily:
-    """Prediction launcher and the published checkpoints it supports."""
+    """Prediction launcher, published checkpoints and native scoring test."""
 
     launcher: str
     checkpoints: tuple[tuple[str, str | None], ...]
     model_variable: str | None = None
     prediction_variable: str | None = None
+    native_test: str | None = None
 
 
 MODEL_FAMILIES = {
@@ -87,6 +89,9 @@ MODEL_FAMILIES = {
         ),
         model_variable="AIDO_RNA_MODEL_NAME",
         prediction_variable="AIDO_RNA_PREDICTION_NAME",
+    ),
+    "evmutation": ModelFamily(
+        "baselines/EVmutation/run.sh", (), native_test="test_evmutation_scoring"
     ),
     "evo": ModelFamily(
         launcher="baselines/Evo/score_evo.sh",
@@ -108,7 +113,11 @@ MODEL_FAMILIES = {
         model_variable="EVO2_MODEL_NAME",
         prediction_variable="EVO2_PREDICTION_NAME",
     ),
-    "genslm": ModelFamily("baselines/GenSLM/run_model.sh", (("GenSLM", None),)),
+    "genslm": ModelFamily(
+        "baselines/GenSLM/run_model.sh",
+        (("GenSLM", None),),
+        native_test="test_genslm_scoring",
+    ),
     "ntv3": ModelFamily(
         launcher="baselines/Nucleotide_Transformer/run.sh",
         checkpoints=(
@@ -138,37 +147,23 @@ def check_leaderboard(directory: Path, deadline: float) -> None:
         deadline,
     )
     run_command(
-        f"{shlex.quote(sys.executable)} -m rnagym.fitness.tasks.performance_fitness --input {shlex.quote(str(merged))} --output {shlex.quote(str(reports))}",
+        f"{shlex.quote(sys.executable)} -m rnagym.fitness.tasks.leaderboard --input {shlex.quote(str(merged))} --output {shlex.quote(str(reports))}",
         ConfigFitness.REPO_DIR,
         deadline,
     )
-    expected = pl.read_csv(
-        ConfigFitness.REPO_DIR / "leaderboard/fitness/leaderboard_signed_3ncRNA.csv"
-    )
-    actual = pl.read_csv(reports / "results_by_rna_type.csv").with_columns(
-        pl.col("Model").str.strip_suffix("_score").alias("model")
-    )
-    if set(expected["model"]) != set(actual["model"]):
-        raise AssertionError("Leaderboard model coverage differs")
-    combined = expected.join(actual, on="model", validate="1:1")
-    for published, computed in (
-        ("Ribozyme", "Spearman_Ribozyme_Mean"),
-        ("tRNA", "Spearman_tRNA_Mean"),
-        ("Aptamer", "Spearman_Aptamer_Mean"),
-        ("macro_3ncRNA", "Spearman_All_Mean"),
+    for name in (
+        "leaderboard_signed_3ncRNA.csv",
+        "leaderboard_evmutation.csv",
+        "evmutation_coverage.csv",
     ):
-        np.testing.assert_allclose(
-            combined[published].to_numpy(),
-            combined[computed].to_numpy(),
-            atol=1e-10,
-            rtol=0,
-            equal_nan=False,
-            err_msg=published,
+        assert_frame_equal(
+            pl.read_csv(reports / name),
+            pl.read_csv(ConfigFitness.LEADERBOARD_DIR / name),
+            check_exact=False,
+            rel_tol=0,
+            abs_tol=1e-10,
         )
-    print(
-        f"All {expected.height} leaderboard models and category means matched",
-        flush=True,
-    )
+    print("Both leaderboards and EVmutation coverage matched", flush=True)
 
 
 def compare_predictions(
@@ -338,7 +333,16 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         report["environment"] = runtime_versions()
         if args.environment:
-            report["checks"].extend(run_one(args.environment, deadline))
+            family = MODEL_FAMILIES[args.environment]
+            if family.native_test:
+                run_command(
+                    f"{shlex.quote(sys.executable)} -m pytest -q tests/fitness_model_checks.py::{family.native_test}",
+                    ConfigFitness.REPO_DIR,
+                    deadline,
+                )
+                report["scoring"] = {args.environment: "passed"}
+            if family.checkpoints:
+                report["checks"].extend(run_one(args.environment, deadline))
         else:
             if not args.leaderboard_only:
                 models = [
@@ -346,7 +350,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                     for family in MODEL_FAMILIES.values()
                     for name, _ in family.checkpoints
                 ]
-                if sorted(models) != sorted(ALL_MODELS):
+                if sorted(models) != sorted(CHECKPOINT_MODELS):
                     raise AssertionError(
                         "Reproduction must cover every leaderboard checkpoint exactly once"
                     )
@@ -357,13 +361,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 if not args.leaderboard_only:
                     for environment in MODEL_FAMILIES:
                         validate_family(environment)
-                    for environment in ("evmutation", "genslm"):
-                        run_command(
-                            f"pixi run --locked -e {environment} check-scoring",
-                            ConfigFitness.DIR,
-                            deadline,
-                        )
-                        report.setdefault("scoring", {})[environment] = "passed"
                     for environment in MODEL_FAMILIES:
                         child_report = root / f"{environment}.json"
                         try:
@@ -376,6 +373,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                             if child_report.is_file():
                                 child = json.loads(child_report.read_text())
                                 report["checks"].extend(child["checks"])
+                                report.setdefault("scoring", {}).update(
+                                    child.get("scoring", {})
+                                )
                                 report.setdefault("families", {})[environment] = child
                         child = json.loads(child_report.read_text())
                         if child["status"] != "passed":

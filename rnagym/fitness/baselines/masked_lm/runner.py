@@ -1,4 +1,4 @@
-"""Score one assay with all four masked-marginal fill strategies."""
+"""Score assays with all four masked-marginal fill strategies."""
 
 from __future__ import annotations
 
@@ -30,14 +30,14 @@ from rnagym.fitness.baselines.masked_lm.strategies import (
     build_tasks,
     recover_wild_type,
 )
-from rnagym.fitness.data import parse_row_ids, read_assay, read_reference
+from rnagym.fitness.data import read_assay, read_reference
 
 
 def build_parser(adapter: MaskedLMAdapter) -> argparse.ArgumentParser:
     """Parse the assay, output directory and checkpoint."""
-    parser = argparse.ArgumentParser(description=f"Score an assay with {adapter.name}")
+    parser = argparse.ArgumentParser(description=f"Score assays with {adapter.name}")
     parser.add_argument(
-        "--rows", required=True, help="Reference rows, e.g. 12 or 0-8,12"
+        "--rows", default="all", help="Reference rows: all (default), 12 or 0-8,12"
     )
     parser.add_argument(
         "--output", type=Path, required=True, help="Prediction directory"
@@ -90,17 +90,6 @@ def load_dms_data(dms_dir_path: str | Path, dms_id: str) -> pl.DataFrame:
     return read_assay(Path(dms_dir_path) / f"{dms_id}.csv")
 
 
-def load_reference_row(ref_sheet_path: str | Path, row_id: int):
-    """Return one reference-sheet DMS ID and its optional construct."""
-    reference = read_reference(ref_sheet_path)
-    if not 0 <= row_id < reference.height:
-        raise ValueError(
-            f"Row ID {row_id} is outside the reference sheet's 0..{reference.height - 1} range"
-        )
-    row = reference.row(row_id, named=True)
-    return row["DMS_ID"], row["RAW_CONSTRUCT_SEQ"]
-
-
 def main(adapter: MaskedLMAdapter):
     """Load one checkpoint and score the selected assays under all fill strategies."""
     parser = build_parser(adapter)
@@ -111,9 +100,11 @@ def main(adapter: MaskedLMAdapter):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        reference = read_reference(ConfigFitness.REFERENCE_FILE, args.rows)
         loaded = False
-        for row_id in parse_row_ids(args.rows):
-            dms_id, construct = load_reference_row(ConfigFitness.REFERENCE_FILE, row_id)
+        for dms_id, construct in reference.select(
+            "DMS_ID", "RAW_CONSTRUCT_SEQ"
+        ).iter_rows():
             dms_df = load_dms_data(ConfigFitness.ASSAY_DIR, dms_id)
             missing_sequences = dms_df["sequence"].is_null() | dms_df[
                 "sequence"

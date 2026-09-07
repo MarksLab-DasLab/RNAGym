@@ -9,6 +9,10 @@ and fill-strategy tables. A separate checkpoint-free adapter exercises context
 construction, batching, scoring, validation and manifest output on the complete
 Domingo assay. No checkpoint or network access is required.
 
+The EVmutation predictions use the complete released Andreasson MSA, fitted on
+September 7, 2026. They test the comparison on covered variants and retain nulls
+for variants outside the modeled positions.
+
 `repeated/` contains the complete released Pitt 2010 ribozyme assay and its Evo2
 7B predictions. It checks that merging retains all 186 measurements and uses
 the first score for repeated mutations, matching the published leaderboard.

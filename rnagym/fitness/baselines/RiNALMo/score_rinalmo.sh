@@ -8,10 +8,10 @@ fitness_dir=$(cd -- "$script_dir/../.." && pwd)
 data_dir=${RNAGYM_DATA_DIR:-"$repository/data"}/fitness
 export PYTHONPATH="$fitness_dir/.pixi/model-sources/RiNALMo${PYTHONPATH:+:$PYTHONPATH}"
 
-row_id=${1:-${SLURM_ARRAY_TASK_ID:-0}}
+rows=${1:-${SLURM_ARRAY_TASK_ID:-all}}
 
 cd "$repository"
 python -m rnagym.fitness.baselines.RiNALMo.score_rinalmo_single_dms \
-	--rows "$row_id" \
+	--rows "$rows" \
 	--output "$data_dir/model_predictions/rinalmo_4fill" \
 	--checkpoint "$checkpoint_root/rinalmo/rinalmo_giga_pretrained.pt"
