@@ -21,35 +21,26 @@
   <a href="https://rnagym.org"><img src="https://img.shields.io/badge/website-rnagym.org-orange" alt="Website"></a>
 </p>
 
-[RNAGym][5] provides datasets, baseline models and evaluation workflows for RNA
-fitness, secondary structure and tertiary structure prediction.
-See the [leaderboards][3] for results and [releases][4] for stable versions.
+[RNAGym][5] provides datasets, baseline models and evaluation workflows for RNA fitness and structure prediction. See the [leaderboards][3] for results and [releases][4] for stable versions.
 
 ## Getting started
 
 <!-- TODO(MCA): Upload complete data files to this link -->
 
-All three benchmarks share the RNAGym v0.2 data archive. Download and extract
-it from the repository root:
+All three benchmarks share the RNAGym v0.2 data archive. Download and extract it from the repository root:
 
 ```bash
 wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
 tar -xJf data.tar.xz
 ```
 
-Data defaults to `data/`. Set `RNAGYM_DATA_DIR` to use another data directory.
-Then follow the setup and reproduction instructions for the [fitness][0],
-[2D structure][6], and [3D structure][7] benchmarks.
+Data defaults to `data/`. Set `RNAGYM_DATA_DIR` to use another data directory. Then follow the setup and reproduction instructions for the [fitness][0], [2D structure][6], and [3D structure][7] benchmarks.
 
-Set `RNAGYM_CHECKPOINT_DIR` for model weights and `RNAGYM_DATABASE_DIR` for
-reference databases. Both locations are shared across benchmarks. Model
-environments and source checkouts stay under each benchmark's `.pixi/` directory.
+Set `RNAGYM_CHECKPOINT_DIR` for model weights and `RNAGYM_DATABASE_DIR` for reference databases. Both locations are shared across benchmarks. Model environments and source checkouts stay under each benchmark's `.pixi/` directory.
 
 ## Contributing
 
-Contributions of models, datasets and fixes are welcome. Use the [issue tracker][2]
-to report a problem or propose a change. Run the relevant benchmark's tests and lint
-before submitting a pull request.
+Contributions of models, datasets and fixes are welcome. Use the [issue tracker][2] to report a problem or propose a change. Run the relevant benchmark's tests and lint before submitting a pull request.
 
 [0]: rnagym/fitness/README.md
 [2]: https://github.com/MarksLab-DasLab/RNAGym/issues/new/choose
