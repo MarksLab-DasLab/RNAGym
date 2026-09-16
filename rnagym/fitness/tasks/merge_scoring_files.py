@@ -56,7 +56,9 @@ def combine_csv_data(
         )
         if unknown:
             raise ValueError(
-                f"Processed assays are absent from the reference sheet: {unknown[:5]}"
+                f"Processed assays are absent from the reference sheet: {unknown[:5]}. "
+                "Delete the tables and predictions of retired assays, or restore "
+                "their reference rows."
             )
     if assay_group != "all":
         if assay_types is None:
