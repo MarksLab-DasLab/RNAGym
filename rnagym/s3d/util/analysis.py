@@ -24,7 +24,13 @@ from Bio.PDB import PDBIO, MMCIFParser
 from RNA_normalizer import mcannotate
 
 from rnagym.config import Config3D
-from rnagym.s3d.models import BASELINES, Baseline, homology_columns, prediction_path
+from rnagym.s3d.models import (
+    BASELINES,
+    Baseline,
+    homology_columns,
+    latest_training_cutoff,
+    prediction_path,
+)
 from rnagym.s3d.models.utils import valid_structure as valid_prediction
 from rnagym.s3d.util import ChainID
 from rnagym.s3d.util.polymer import canonical_residue
@@ -396,9 +402,12 @@ def _prepare_usalign_pdb(source: Path, output: Path) -> Path:
     return output
 
 
-def prep_usalign(
-    cutoff_col: str = "published", cutoff: str = Config3D.TARGET_CUTOFF
-) -> None:
+def _reference_cutoff() -> str:
+    """Return the latest publication date a homology reference may carry."""
+    return max(Config3D.TARGET_CUTOFF, latest_training_cutoff())
+
+
+def prep_usalign(cutoff_col: str = "published", cutoff: str | None = None) -> None:
     """Prepare pre-cutoff RNA chains for US-align.
 
     Parameters
@@ -408,6 +417,7 @@ def prep_usalign(
     cutoff : str
         Latest publication date included as a reference.
     """
+    cutoff = cutoff or _reference_cutoff()
     references_file = Config3D.USALIGN_REFERENCES_FILE
     rna_chains = (
         pl.read_parquet(
@@ -457,7 +467,7 @@ def prep_usalign(
 def add_tm_id(
     chains: pl.DataFrame,
     cutoff_col: str = "published",
-    cutoff: str = Config3D.TARGET_CUTOFF,
+    cutoff: str | None = None,
 ) -> pl.DataFrame:
     """Annotate chains with their closest pre-training structural homologs.
 
@@ -475,6 +485,7 @@ def add_tm_id(
     pl.DataFrame
         Input rows with model-specific homolog metadata and TM scores.
     """
+    cutoff = cutoff or _reference_cutoff()
     references = pl.read_parquet(Config3D.ANNOTATED_CHAINS_FILE).filter(
         pl.col(cutoff_col) <= cutoff
     )

@@ -11,6 +11,10 @@ MODELS = {
     "RF2NA": "RoseTTAFold2NA",
     "RHO": "RhoFold+",
     "TRRNA": "trRosettaRNA",
+    "OF3": "OpenFold3",
+    "PROTENIX": "Protenix-v1",
+    "RF3": "RoseTTAFold3",
+    "BOLTZ2": "Boltz-2",
 }
 DATASETS = ("monomer", "multimer")
 IDENTIFIERS = ["pdb_id", "asym_id", "auth_id"]

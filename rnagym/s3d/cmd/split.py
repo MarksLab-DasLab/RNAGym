@@ -32,16 +32,16 @@ def _add_cached_homology(targets: pl.DataFrame) -> pl.DataFrame:
     if not cached:
         return targets
 
-    annotations = (
-        pl.concat(cached, how="diagonal_relaxed")
-        .group_by(IDENTIFIERS)
-        .agg(pl.col(column).drop_nulls().last() for column in HOMOLOGY_COLUMNS)
+    merged = pl.concat(cached, how="diagonal_relaxed")
+    # A newly registered model has no cached annotations until US-align reruns
+    restored = [column for column in HOMOLOGY_COLUMNS if column in merged.columns]
+    annotations = merged.group_by(IDENTIFIERS).agg(
+        pl.col(column).drop_nulls().last() for column in restored
     )
     targets = targets.join(annotations, on=IDENTIFIERS, how="left", suffix="_cached")
     return targets.with_columns(
-        pl.coalesce(f"{column}_cached", column).alias(column)
-        for column in HOMOLOGY_COLUMNS
-    ).drop([f"{column}_cached" for column in HOMOLOGY_COLUMNS])
+        pl.coalesce(f"{column}_cached", column).alias(column) for column in restored
+    ).drop([f"{column}_cached" for column in restored])
 
 
 def _homology_fields() -> list[pl.Expr]:

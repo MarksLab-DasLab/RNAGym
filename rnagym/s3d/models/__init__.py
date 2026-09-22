@@ -42,8 +42,28 @@ BASELINES = {
         ),
         # https://doi.org/10.1038/s41467-023-42528-4
         Baseline("trRNA", "trrna", "model_1.pdb", False, "2022-01-01"),
+        # https://portal.openfold.io/reports/of3p2_technical_report.pdf
+        # The openfold3-p2 parameters follow AlphaFold 3's training cutoff
+        Baseline("of3", "of3", "prediction.cif", True, "2021-09-30"),
+        # https://doi.org/10.64898/2026.02.05.703733
+        Baseline("protenix", "protenix", "prediction.cif", True, "2021-09-30"),
+        # https://doi.org/10.1101/2025.08.14.670328
+        # The 09/21 benchmark checkpoint matches the AlphaFold 3 cutoff
+        Baseline("rf3", "rf3", "prediction.cif", True, "2021-09-30"),
+        # https://doi.org/10.1101/2025.06.14.659707
+        Baseline("boltz2", "boltz", "prediction.cif", True, "2023-06-01"),
     )
 }
+
+
+def latest_training_cutoff() -> str:
+    """Return the latest training cutoff across every evaluated model.
+
+    Structural homology references must reach this date: a model trained past
+    the benchmark's target cutoff is otherwise compared against an incomplete
+    reference set, which understates its homology score and inflates its ΔTM.
+    """
+    return max(baseline.training_cutoff for baseline in BASELINES.values())
 
 
 def homology_columns(model: str) -> tuple[str, str, str, str]:
