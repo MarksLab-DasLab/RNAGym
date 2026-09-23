@@ -73,6 +73,10 @@ To regenerate MSAs, run `pixi run riboseek-db` to prepare [Riboseek][4] database
 under `RNAGYM_DATABASE_DIR`. Once those jobs finish, run `pixi run riboseek` and
 wait for the alignments before predicting structures.
 
+Run `pixi run mmseqs` for nucleotide MSAs in `data/{3d,fitness}/msa/mmseqs/`.
+Both MSA workflows use the repository's `.cache/` for working files. Set
+`RNAGYM_CACHE_DIR` to select another shared scratch directory.
+
 [0]: https://github.com/marcellszi/rna3db/releases/tag/2026-01-05-full-release
 [1]: ../../leaderboard/3d/
 [2]: ../config.py

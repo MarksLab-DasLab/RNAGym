@@ -1,6 +1,7 @@
 """Build the shared RNAcentral and NCBI nt Riboseek databases."""
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -88,6 +89,7 @@ def create_nt(database: Path, work_dir: Path) -> None:
         split(f"riboseek databases NT {database} {work_dir} --threads {threads}"),
         check=True,
     )
+    shutil.rmtree(work_dir)
 
 
 def split_nt(directory: Path) -> None:

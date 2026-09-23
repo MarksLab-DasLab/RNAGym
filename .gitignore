@@ -1,4 +1,5 @@
 # Root
+/.cache/
 /.zed/
 /AGENTS.md
 /todo
