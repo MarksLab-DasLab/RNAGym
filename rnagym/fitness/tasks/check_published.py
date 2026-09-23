@@ -139,7 +139,7 @@ MODEL_FAMILIES = {
 
 
 def check_leaderboard(directory: Path, deadline: float) -> None:
-    """Rebuild all 31 ncRNA assays and compare every published category and model."""
+    """Rebuild all 29 ncRNA assays and compare every published category and model."""
     merged, reports = directory / "merged", directory / "reports"
     run_command(
         f"{shlex.quote(sys.executable)} -m rnagym.fitness.tasks.merge_scoring_files --output {shlex.quote(str(merged))}",

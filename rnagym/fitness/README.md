@@ -1,7 +1,7 @@
 # Fitness benchmark
 
-RNA fitness predictions evaluated against 70 experimental assays. The
-[leaderboard][0] uses signed Spearman correlation on 31 ncRNA assays, averaged
+RNA fitness predictions evaluated against 68 experimental assays. The
+[leaderboard][0] uses signed Spearman correlation on 29 ncRNA assays, averaged
 within ribozyme, tRNA and aptamer categories, then equally across categories.
 
 ## Setup
@@ -72,7 +72,7 @@ pixi run --locked -e default check-published
 ```
 
 The fast tests use real assay fixtures and need no checkpoints. The full check
-rebuilds both tables and scores 128 variants from each of the 31 ncRNA assays
+rebuilds both tables and scores 128 variants from each of the 29 ncRNA assays
 with all 20 checkpoints. Score ranks must have Spearman correlation of at least
 0.95 with the stored predictions. Install environments and weights first.
 The full run has a one-hour limit and needs two 80 GB GPUs for Evo2 40B.

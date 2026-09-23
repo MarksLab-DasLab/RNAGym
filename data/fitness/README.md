@@ -10,9 +10,17 @@
 | `reference_sheet_final.csv` | Assay metadata and wild-type constructs |
 | `reports/` | Supplemental fitness analysis tables |
 
+## Keeping the directory in step with the reference sheet
+
+`assays/` holds one CSV per row of `reference_sheet_final.csv`, and
+`merge_scoring_files` rejects any processed assay the sheet does not list. When
+an assay is retired from the sheet, delete its `assays/` table and its
+`model_predictions/*/` files before the next merge. Two assays were retired
+after v0.2, `Beck_2022_ribozyme` and `Kobori_2016_osa_ribozyme`, both duplicates
+of assays that remain.
+
 ## Assay lookup
 
-<!--TODO(MCA/TLC): Address the 2 duplicates -->
 Use the `DMS_ID` from
 [`reference_sheet_final.csv`](reference_sheet_final.csv)
 directly, for example `msa/by_assay/Kobori_2018_ribozyme.a3m`. The canonical
