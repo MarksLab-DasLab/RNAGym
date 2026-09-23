@@ -58,7 +58,7 @@ fail the merge.
 Sources and weights are fetched automatically, except for [GenSLM 2.5B][3].
 Download its checkpoint through authenticated Globus access to
 `$RNAGYM_CHECKPOINT_DIR/genslm/2.5B/`. EVmutation uses Riboseek MSAs under
-`data/fitness/msa/by_assay/` and leaves uncovered variants unscored.
+`data/fitness/msa/riboseek/by_assay/` and leaves uncovered variants unscored.
 
 GenSLM reports mean next-codon log likelihood, excluding padding. Masked models
 compute all four [fill strategies][4], with `wt-fill` used for the leaderboard.

@@ -59,6 +59,7 @@ riboseek-db = { cmd = "bash sh/riboseek-db.sh", depends-on = [
   "install-riboseek",
 ] }
 riboseek = { cmd = "bash sh/riboseek.sh", depends-on = ["install-riboseek"] }
+mmseqs = "bash sh/mmseqs.sh"
 usalign = "bash sh/usalign.sh"
 
 [feature.model.dependencies]

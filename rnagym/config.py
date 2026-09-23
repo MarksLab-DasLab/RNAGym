@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 _REPO_DIR = Path(__file__).resolve().parents[1]
+_CACHE_DIR = Path(os.environ.get("RNAGYM_CACHE_DIR", _REPO_DIR / ".cache"))
 _DATA_DIR = Path(os.environ.get("RNAGYM_DATA_DIR", _REPO_DIR / "data"))
 _DATABASE_DIR = Path(
     os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
@@ -73,7 +74,7 @@ class ConfigFitness(_Config):
     DATA_DIR = _DATA_DIR / "fitness"
     ASSAY_DIR = DATA_DIR / "assays"
     COMBINED_DIR = DATA_DIR / "merged"
-    MSA_DIR = DATA_DIR / "msa"
+    MSA_DIR = DATA_DIR / "msa" / "riboseek"
     PREDICTION_DIR = DATA_DIR / "model_predictions"
     REFERENCE_FILE = DATA_DIR / "reference_sheet_final.csv"
     REPORT_DIR = DATA_DIR / "reports"
@@ -82,7 +83,7 @@ class ConfigFitness(_Config):
 class ConfigRiboseek(_Config):
     """Shared Riboseek configuration."""
 
-    CACHE_DIR = _DATA_DIR / "riboseek" / "cache"
+    CACHE_DIR = _CACHE_DIR / "riboseek"
     RNACENTRAL_VERSION = "27.0"
     RNACENTRAL_DIR = _DATABASE_DIR / "RNAcentral" / RNACENTRAL_VERSION
     NT_VERSION = "2026-08-04"
@@ -102,6 +103,23 @@ class ConfigRiboseek(_Config):
     )
 
 
+class ConfigMMseqs(_Config):
+    """Traditional nucleotide MSAs paired with the existing Riboseek MSAs."""
+
+    WORK_DIR = _CACHE_DIR / "mmseqs"
+    CACHE_DIR = WORK_DIR / "cache"
+    QUERY_FILE = WORK_DIR / "queries.parquet"
+    DATABASES = (
+        ConfigRiboseek.RNACENTRAL_DIR / "mmseqs" / "sequences",
+        ConfigRiboseek.NT_DIR / "mmseqs" / "sequences",
+    )
+    DATABASE_NAMES = ("rnacentral", "nt")
+    EVALUE = 0.1
+    KMER_LENGTH = 15
+    MAX_SEQS = 30_000
+    STRANDS = (1, 2)
+
+
 class Config3D(_Config):
     """3D benchmark configuration."""
 
@@ -112,7 +130,7 @@ class Config3D(_Config):
     ANNOTATED_CHAINS_FILE = CURATION_DIR / "annotated_chains.parquet"
     TARGET_FILE = DATA_DIR / "rnagym_3d.parquet"
     SCORE_FILE = DATA_DIR / "rnagym_3d_scores.parquet"
-    MSA_DIR = DATA_DIR / "msa"
+    MSA_DIR = DATA_DIR / "msa" / "riboseek"
     PREDICTION_DIR = DATA_DIR / "predictions"
     USALIGN_DIR = DATA_DIR / "usalign"
     USALIGN_ANNOTATION_DIR = USALIGN_DIR / "annotations"
