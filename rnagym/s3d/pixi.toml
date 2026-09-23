@@ -197,6 +197,71 @@ einops = "==0.6.1"
 assets = "bash sh/fetch-assets.sh trrna"
 predict = { cmd = "bash sh/predict.sh trrna", depends-on = ["assets"] }
 
+[feature.of3.dependencies]
+pip = "*"
+python = "3.11.*"
+
+[feature.of3.pypi-dependencies]
+# The openfold3-p2 parameters require a release before 0.4.4
+openfold3 = "==0.4.3"
+
+[feature.of3.tasks]
+assets = "bash sh/fetch-assets.sh of3"
+predict = { cmd = "bash sh/predict.sh of3", depends-on = ["assets"] }
+
+[feature.protenix.dependencies]
+# Protenix JIT-builds a fused CUDA layer norm on first import, which needs a
+# full toolchain plus the math-library headers Torch's extension pulls in
+c-compiler = "1.*"
+cuda-nvcc = "12.6.*"
+cuda-cudart-dev = "12.6.*"
+cuda-version = "12.6.*"
+cxx-compiler = "1.*"
+libcublas-dev = "*"
+libcusolver-dev = "*"
+libcusparse-dev = "*"
+ninja = "1.*"
+# Protenix pins these exactly, and they must win over the shared model feature
+gemmi = "==0.6.7"
+numpy = "==2.4.1"
+hmmer = "3.*"
+kalign2 = "2.*"
+pip = "*"
+python = "3.11.*"
+
+[feature.protenix.pypi-dependencies]
+protenix = "==1.1.0"
+
+[feature.protenix.tasks]
+assets = "bash sh/fetch-assets.sh protenix"
+predict = { cmd = "bash sh/predict.sh protenix", depends-on = ["assets"] }
+
+[feature.rf3.dependencies]
+pip = "*"
+python = "3.12.*"
+
+[feature.rf3.pypi-dependencies]
+rc-foundry = { version = "==0.2.0", extras = ["all"] }
+
+[feature.rf3.tasks]
+assets = "bash sh/fetch-assets.sh rf3"
+predict = { cmd = "bash sh/predict.sh rf3", depends-on = ["assets"] }
+
+[feature.boltz.dependencies]
+# Boltz pins these, and they must win over the shared model feature
+gemmi = "==0.6.5"
+numpy = ">=1.26,<2"
+pip = "*"
+python = "3.11.*"
+
+[feature.boltz.pypi-dependencies]
+# The cuda extra supplies the triangle kernels Boltz enables by default
+boltz = { version = "==2.2.1", extras = ["cuda"] }
+
+[feature.boltz.tasks]
+assets = "bash sh/fetch-assets.sh boltz"
+predict = { cmd = "bash sh/predict.sh boltz", depends-on = ["assets"] }
+
 [environments]
 default = { solve-group = "default" }
 af3 = { features = ["model", "af3"], no-default-feature = true }
@@ -204,3 +269,7 @@ nufold = { features = ["model", "nufold"], no-default-feature = true }
 rhofold = { features = ["model", "rhofold"], no-default-feature = true }
 rf2na = { features = ["model", "rf2na"], no-default-feature = true }
 trrna = { features = ["model", "trrna"], no-default-feature = true }
+of3 = { features = ["model", "of3"], no-default-feature = true }
+protenix = { features = ["model", "protenix"], no-default-feature = true }
+rf3 = { features = ["model", "rf3"], no-default-feature = true }
+boltz = { features = ["model", "boltz"], no-default-feature = true }

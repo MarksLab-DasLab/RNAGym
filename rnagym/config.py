@@ -152,6 +152,17 @@ class Config3D(_Config):
     RF2NA_DATABASE = _DATABASE_DIR / "PDB100" / "latest" / "pdb100_2021Mar03"
     RF2NA_PARAM_FILE = _CHECKPOINT_DIR / "rosettafold2na" / "latest" / "RF2NA_apr23.pt"
     TRRNA_DIR = MODEL_SOURCE_DIR / "trRosettaRNA_v1.1"
+    OF3_PARAM_FILE = _CHECKPOINT_DIR / "openfold3" / "latest" / "of3-p2-155k.pt"
+    PROTENIX_DIR = _CHECKPOINT_DIR / "protenix" / "latest"
+    PROTENIX_ROOT_DIR = CACHE_DIR / "protenix"
+    PROTENIX_MODEL = "protenix_base_default_v1.0.0"
+    # Protenix reads weights from <root>/checkpoint, not from an option
+    PROTENIX_PARAM_FILE = PROTENIX_DIR / "checkpoint" / f"{PROTENIX_MODEL}.pt"
+    RF3_PARAM_FILE = (
+        _CHECKPOINT_DIR / "rosettafold3" / "latest" / "rf3_foundry_09_21_preprint.ckpt"
+    )
+    BOLTZ_CACHE_DIR = _CHECKPOINT_DIR / "boltz" / "latest"
+    BOLTZ_PARAM_FILE = BOLTZ_CACHE_DIR / "boltz2_conf.ckpt"
     IPKNOT = MODEL_SOURCE_DIR / "ipknot" / "ipknot-1.1.0-x86_64-linux" / "ipknot"
     MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 

@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# Keep shared predictions and caches group-writable
+umask 002
+
 module="$1"
 cd "$SLURM_SUBMIT_DIR"
 export PATH="$PWD/.pixi/envs/default/bin:$PATH"

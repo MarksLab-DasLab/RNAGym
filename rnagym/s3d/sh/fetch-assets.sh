@@ -79,6 +79,55 @@ trrna)
 	install_ipknot
 	link_latest trrosettarna v1.1
 	;;
+of3)
+	root="$checkpoint_root/openfold3/of3-p2"
+	download \
+		https://openfold3-data.s3.amazonaws.com/openfold3-parameters/of3-p2-155k.pt \
+		"$root/of3-p2-155k.pt" \
+		af09eac4f29cef856633af07558cb143226fe95ebbef2c20921769d4a5f4bee4
+	link_latest openfold3 of3-p2
+	;;
+protenix)
+	root="$checkpoint_root/protenix/v1.0.0/checkpoint"
+	download \
+		https://protenix.tos-cn-beijing.volces.com/checkpoint/protenix_base_default_v1.0.0.pt \
+		"$root/protenix_base_default_v1.0.0.pt" \
+		2b7d5a8b30494514fc47fd2271a16260528cdba170ba09cc112fdecd8f85ec04
+	link_latest protenix v1.0.0
+	;;
+rf3)
+	root="$checkpoint_root/rosettafold3/09-21"
+	download \
+		https://files.ipd.uw.edu/pub/rf3/rf3_foundry_09_21_preprint.ckpt \
+		"$root/rf3_foundry_09_21_preprint.ckpt" \
+		922901088366abb6e001bc5bd304f4002667fa7eb379cd901c94e4cac0bff762
+	link_latest rosettafold3 09-21
+	;;
+boltz)
+	root="$checkpoint_root/boltz/2.2.1"
+	download \
+		https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_conf.ckpt \
+		"$root/boltz2_conf.ckpt" \
+		090e82ac8c92f5e943fa1b39e7410a44027bea7243c0bbb3caa67a77fc1428e1
+	# Boltz downloads the affinity head even when only folding structures
+	download \
+		https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_aff.ckpt \
+		"$root/boltz2_aff.ckpt" \
+		dcc5cd3722b1c9eaa34267e4ae32f55cbbf1963f4c19319381ccfa30fdd2ca9e
+	download \
+		https://huggingface.co/boltz-community/boltz-2/resolve/main/mols.tar \
+		"$root/mols.tar" \
+		39e076d96dbec6b4e86982bbda16f3a53a2a60c9bdc17828d88f6f9a0c7d1fd7
+	if [[ ! -d "$root/mols" ]]; then
+		# Extract aside so an interrupted run cannot leave a partial cache
+		rm -rf "$root/mols.tmp"
+		mkdir -p "$root/mols.tmp"
+		tar -xf "$root/mols.tar" -C "$root/mols.tmp"
+		mv "$root/mols.tmp/mols" "$root/mols"
+		rmdir "$root/mols.tmp"
+	fi
+	link_latest boltz 2.2.1
+	;;
 *)
 	echo "Unknown model: $1" >&2
 	exit 2

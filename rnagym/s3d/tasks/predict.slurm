@@ -5,17 +5,27 @@
 
 set -euo pipefail
 
+# Keep shared predictions and caches group-writable
+umask 002
+
 cd "$SLURM_SUBMIT_DIR"
 environment=$1
 shift
 export PATH="$PWD/.pixi/envs/$environment/bin:$PATH"
+
+# rnagym/s3d/cmd shadows the standard library, but the legacy predictors run
+# their own source trees as scripts and need that directory on the path
+case $environment in
+af3 | boltz | of3 | protenix | rf3)
+	export PYTHONSAFEPATH=1
+	;;
+esac
 
 if [[ $environment == af3 ]]; then
 	# Use host memory when an input exceeds GPU memory
 	export XLA_PYTHON_CLIENT_PREALLOCATE=false
 	export TF_FORCE_UNIFIED_MEMORY=true
 	export XLA_CLIENT_MEM_FRACTION=3.2
-	export PYTHONSAFEPATH=1
 elif [[ $environment == rf2na ]]; then
 	# RF2NA imports sibling source trees as top-level modules
 	source_dir="$PWD/.pixi/model-sources/RoseTTAFold2NA"

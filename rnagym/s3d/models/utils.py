@@ -15,8 +15,11 @@ import gemmi
 import polars as pl
 
 from rnagym.config import Config3D
+from rnagym.s3d.models.inputs import config_dependencies
+from rnagym.s3d.models.inputs import targets as config_targets
 
 Predictor = Callable[[str, Path], Path]
+ConfigPredictor = Callable[[Path, str, Path], Path]
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,68 @@ def monomer_adapter(model: str, output: str, predictor: Predictor) -> Adapter:
         kinds=("monomers",),
         predict=partial(_predict_monomers, model, predictor),
         targets=monomer_targets,
+    )
+
+
+def _config_complete(model: str, output: str, config: Path) -> bool:
+    """Check whether one configuration-driven prediction completed."""
+    kind = config.parent.parent.name
+    work_dir = _config_work_dir(model, kind, config.parent.name)
+    return is_fresh(
+        work_dir / "SUCCESS", config_dependencies(config, kind)
+    ) and valid_structure(work_dir / output)
+
+
+def _config_work_dir(model: str, kind: str, name: str) -> Path:
+    """Return one configuration-driven prediction directory."""
+    return Config3D.PREDICTION_DIR / model / kind / name
+
+
+def _predict_configs(
+    model: str,
+    predictor: ConfigPredictor,
+    output: str,
+    configs: list[Path],
+    kind: str,
+    _shard: int,
+) -> None:
+    """Run one predictor over independent AF3-configuration targets."""
+    failures = []
+    for config in configs:
+        name = config.parent.name
+        work_dir = _config_work_dir(model, kind, name)
+        if work_dir.exists():
+            shutil.rmtree(work_dir)
+        try:
+            prediction = predictor(config, kind, work_dir)
+            destination = work_dir / output
+            if prediction != destination:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(prediction, destination)
+            if not valid_structure(destination):
+                raise RuntimeError(f"Invalid prediction: {destination}")
+            (work_dir / "SUCCESS").touch()
+        except Exception:
+            # Finish independent targets before failing the shard
+            traceback.print_exc()
+            failures.append(name)
+    if failures:
+        raise RuntimeError(f"Failed predictions: {', '.join(failures)}")
+
+
+def config_adapter(
+    model: str,
+    output: str,
+    predictor: ConfigPredictor,
+    setup: Callable[[], None] | None = None,
+) -> Adapter:
+    """Create an adapter for a model driven by AlphaFold 3 configurations."""
+    return Adapter(
+        complete=partial(_config_complete, model, output),
+        kinds=("monomers", "multimers"),
+        predict=partial(_predict_configs, model, predictor, output),
+        setup=setup,
+        targets=config_targets,
     )
 
 
