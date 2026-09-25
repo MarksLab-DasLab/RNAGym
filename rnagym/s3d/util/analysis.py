@@ -20,7 +20,6 @@ from typing import Dict, Tuple
 import gemmi
 import polars as pl
 import RNA_normalizer
-from Bio.PDB import PDBIO, MMCIFParser
 from RNA_normalizer import mcannotate
 
 from rnagym.config import Config3D
@@ -306,13 +305,12 @@ class Analysis:
                 prediction_pdb.parent.mkdir(parents=True, exist_ok=True)
                 temporary = prediction_pdb.with_suffix(".tmp")
                 if prediction.suffix == ".cif":
-                    structure = MMCIFParser(QUIET=True).get_structure(name, prediction)
+                    # gemmi also reads mmCIF without occupancies, as OpenFold3 writes
+                    structure = gemmi.read_structure(str(prediction))
                     for model in structure:
                         for chain in model:
-                            chain.id = "A"
-                    writer = PDBIO()
-                    writer.set_structure(structure)
-                    writer.save(str(temporary))
+                            chain.name = "A"
+                    structure.write_minimal_pdb(str(temporary))
                 else:
                     shutil.copy2(prediction, temporary)
                 temporary.replace(prediction_pdb)

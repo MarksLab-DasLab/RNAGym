@@ -21,6 +21,26 @@ IDENTIFIERS = ["pdb_id", "asym_id", "auth_id"]
 METRICS = ["tm_score", "inf_wc", "inf_nwc"]
 
 
+def aggregate_units(model_scores: pl.DataFrame, dataset: str) -> pl.DataFrame:
+    """Form scoring units before averaging within sequence clusters.
+
+    Monomers keep each metric's best match across observed conformations of
+    one sequence. Multimers keep every target chain as a separate unit.
+    Input metrics must already have failed predictions filled with zero.
+    """
+    if dataset == "monomer":
+        units = model_scores.group_by("cluster_rep", "sequence_id").agg(
+            pl.col(*METRICS, "tm_train").max()
+        )
+    elif dataset == "multimer":
+        units = model_scores.select("cluster_rep", *IDENTIFIERS, *METRICS, "tm_train")
+    else:
+        raise ValueError(f"Unknown 3D dataset: {dataset}")
+    return units.with_columns(
+        (pl.col("tm_score") - pl.col("tm_train")).alias("delta_tm")
+    )
+
+
 def score_dataset(dataset: str) -> pl.DataFrame:
     """Summarize every available model for one 3D dataset.
 
@@ -32,7 +52,7 @@ def score_dataset(dataset: str) -> pl.DataFrame:
     Returns
     -------
     pl.DataFrame
-        Cluster-macro model scores ordered by TM score.
+        Cluster-macro model scores ordered by ΔTM.
     """
     references = pl.read_parquet(Config3D.TARGET_FILE).filter(pl.col("type") == dataset)
     registry = pl.read_parquet(
@@ -81,19 +101,7 @@ def score_dataset(dataset: str) -> pl.DataFrame:
             pl.col(METRICS).fill_null(0),
             pl.col(tm_train_column).alias("tm_train"),
         )
-        if dataset == "monomer":
-            # One sequence prediction receives its best score across observed conformations
-            units = model_scores.group_by("cluster_rep", "sequence_id").agg(
-                pl.col(*METRICS, "tm_train").max()
-            )
-        else:
-            # Each complex is a distinct prediction even when target sequences match
-            units = model_scores.select(
-                "cluster_rep", *IDENTIFIERS, *METRICS, "tm_train"
-            )
-        units = units.with_columns(
-            (pl.col("tm_score") - pl.col("tm_train")).alias("delta_tm")
-        )
+        units = aggregate_units(model_scores, dataset)
         clusters = units.group_by("cluster_rep").agg(
             pl.col(*METRICS, "tm_train", "delta_tm").mean()
         )
@@ -104,8 +112,8 @@ def score_dataset(dataset: str) -> pl.DataFrame:
                 "samples": model_scores.height,
                 "clusters": clusters.height,
                 "completed": completed,
-                "tm_score": clusters["tm_score"].mean(),
                 "delta_tm": clusters["delta_tm"].mean(),
+                "tm_score": clusters["tm_score"].mean(),
                 "rho_tm": clusters.select(
                     pl.corr("tm_score", "tm_train", method="spearman")
                 ).item(),
@@ -118,7 +126,7 @@ def score_dataset(dataset: str) -> pl.DataFrame:
 
     return (
         pl.from_dicts(rows)
-        .sort("tm_score", "model", descending=[True, False])
+        .sort("delta_tm", "model", descending=[True, False])
         .with_row_index("rank", offset=1)
     )
 
@@ -126,14 +134,13 @@ def score_dataset(dataset: str) -> pl.DataFrame:
 def markdown_table(scores: pl.DataFrame) -> str:
     """Format one dataset leaderboard as Markdown."""
     lines = [
-        "| Rank | Model | TM | ΔTM | ρTM | INF-WC | INF-NWC |",
-        "| ---: | :--- | ---: | ---: | ---: | ---: | ---: |",
+        "| Rank | Model | ΔTM | TM | INF-WC | INF-NWC |",
+        "| ---: | :--- | ---: | ---: | ---: | ---: |",
     ]
     for row in scores.iter_rows(named=True):
         lines.append(
-            f"| {row['rank']} | {row['model']} | {row['tm_score']:.3f} | "
-            f"{row['delta_tm']:.3f} | {row['rho_tm']:.2f} | "
-            f"{row['inf_wc']:.2f} | {row['inf_nwc']:.2f} |"
+            f"| {row['rank']} | {row['model']} | {row['delta_tm']:.3f} | "
+            f"{row['tm_score']:.3f} | {row['inf_wc']:.2f} | {row['inf_nwc']:.2f} |"
         )
     return "\n".join(lines)
 
