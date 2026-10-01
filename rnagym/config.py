@@ -54,12 +54,15 @@ class Config2D(_Config):
     MMSEQS_THREADS = 1
     SCORE_BATCH_SIZE = 8192
     HEADLINE_MODIFIERS = ("1M7", "2A3", "DMS", "NMIA")
+    _BPRNA_TRAINED = {"mxfold2", "ribonanzanet", "rinalmo", "rna-fm", "ufold"}
+    # bpRNA-1m draws on PDB and PseudoBase structures, so training on it counts as
+    # training on both
     TRAINING_OVERLAP = {
         "mapping": {"eternafold", "ribonanzanet"},
-        "bprna": {"mxfold2", "ribonanzanet", "rinalmo", "rna-fm", "ufold"},
+        "bprna": _BPRNA_TRAINED,
         "efold_challenging": set(),
-        "pseudobase": set(),
-        "pdb": {"ribonanzanet", "rinalmo", "rna-fm", "ufold"},
+        "pseudobase": set(_BPRNA_TRAINED),
+        "pdb": {"ribonanzanet", "rinalmo", "rna-fm", "ufold"} | _BPRNA_TRAINED,
     }
     RFAM_VERSION = "15.1"
     RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION

@@ -270,6 +270,40 @@ def score_model(
     )
 
 
+# Benchmarks that share one decoder per model; PseudoBase keeps its own best so
+# pseudoknot decoders can win there
+SHARED_DECODER_MODALITIES = ("pdb", "bprna", "efold_challenging")
+
+
+def best_methods(leaderboard: pl.DataFrame) -> pl.DataFrame:
+    """Each model's leaderboard row per structure benchmark under its chosen decoder.
+
+    A model uses one decoder across the shared benchmarks, the one with the best
+    mean score over them, and its best decoder on every other benchmark.
+    """
+    structures = leaderboard.filter(pl.col("dataset") == "2d")
+    shared = pl.col("modality").is_in(SHARED_DECODER_MODALITIES)
+    chosen = (
+        structures.filter(shared)
+        .group_by("model", "method")
+        .agg(pl.col("score").mean().alias("combined"), pl.len().alias("benchmarks"))
+        .filter(pl.col("benchmarks") == len(SHARED_DECODER_MODALITIES))
+        .sort(["combined", "method"], descending=[True, False])
+        .group_by("model", maintain_order=True)
+        .first()
+        .select("model", "method")
+    )
+    consistent = structures.filter(shared).join(chosen, on=["model", "method"])
+    own = (
+        structures.filter(~shared)
+        .sort(["score", "method"], descending=[True, False])
+        .group_by("model", "modality", maintain_order=True)
+        .first()
+        .select(consistent.columns)
+    )
+    return pl.concat([consistent, own])
+
+
 def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
     """Update the compact table in the leaderboard README."""
     mapping = (
@@ -280,12 +314,8 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         .group_by("model")
         .agg(pl.col("score").mean().alias("mapping"))
     )
-    structures = (
-        leaderboard.filter(pl.col("dataset") == "2d")
-        .sort("score", descending=True)
-        .group_by("model", "modality", maintain_order=True)
-        .first()
-        .pivot(on="modality", index="model", values="score")
+    structures = best_methods(leaderboard).pivot(
+        on="modality", index="model", values="score"
     )
     structure_columns = [modality for modality, _ in STRUCTURE_MODALITIES]
     summary = (
