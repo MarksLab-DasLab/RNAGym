@@ -1,5 +1,7 @@
 """Generate the RNAGym 3D leaderboard from released scores."""
 
+from collections.abc import Iterator
+
 import polars as pl
 
 from rnagym.config import Config3D
@@ -41,6 +43,19 @@ def aggregate_units(model_scores: pl.DataFrame, dataset: str) -> pl.DataFrame:
     )
 
 
+def cluster_scores(model_scores: pl.DataFrame, dataset: str) -> pl.DataFrame:
+    """Average one model's scoring units within sequence clusters.
+
+    Failed predictions, held as null metrics, score 0.
+    """
+    units = aggregate_units(
+        model_scores.with_columns(pl.col(METRICS).fill_null(0)), dataset
+    )
+    return units.group_by("cluster_rep").agg(
+        pl.col(*METRICS, "tm_train", "delta_tm").mean()
+    )
+
+
 def score_dataset(dataset: str) -> pl.DataFrame:
     """Summarize every available model for one 3D dataset.
 
@@ -54,6 +69,42 @@ def score_dataset(dataset: str) -> pl.DataFrame:
     pl.DataFrame
         Cluster-macro model scores ordered by ΔTM.
     """
+    rows = []
+    for model, model_scores in target_scores(dataset):
+        clusters = cluster_scores(model_scores, dataset)
+        rows.append(
+            {
+                "dataset": dataset,
+                "model": MODELS[model],
+                "samples": model_scores.height,
+                "clusters": clusters.height,
+                "completed": model_scores["tm_score"].count(),
+                "delta_tm": clusters["delta_tm"].mean(),
+                "tm_score": clusters["tm_score"].mean(),
+                "rho_tm": clusters.select(
+                    pl.corr("tm_score", "tm_train", method="spearman")
+                ).item(),
+                "inf_wc": clusters["inf_wc"].mean(),
+                "inf_wc_samples": model_scores["inf_wc"].count(),
+                "inf_nwc": clusters["inf_nwc"].mean(),
+                "inf_nwc_samples": model_scores["inf_nwc"].count(),
+            }
+        )
+
+    return (
+        pl.from_dicts(rows)
+        .sort("delta_tm", "model", descending=[True, False])
+        .with_row_index("rank", offset=1)
+    )
+
+
+def target_scores(dataset: str) -> Iterator[tuple[str, pl.DataFrame]]:
+    """Yield each available model's validated scores for one 3D dataset.
+
+    Rows are target chains with cluster assignments and ``tm_train``, the TM of
+    the closest PDB chain from before the model's training cutoff. Failed
+    predictions keep null metrics.
+    """
     references = pl.read_parquet(Config3D.TARGET_FILE).filter(pl.col("type") == dataset)
     registry = pl.read_parquet(
         Config3D.SEQUENCE_FILE, columns=["sequence_id", "cluster_rep"]
@@ -66,7 +117,6 @@ def score_dataset(dataset: str) -> pl.DataFrame:
     if scores.select(*IDENTIFIERS, "model").is_duplicated().any():
         raise ValueError(f"Duplicate {dataset} score rows")
 
-    rows = []
     for key, model in MODELS.items():
         predictions = scores.filter(pl.col("model") == key)
         if predictions.is_empty():
@@ -94,41 +144,7 @@ def score_dataset(dataset: str) -> pl.DataFrame:
         )
         if model_scores.filter(invalid).height:
             raise ValueError(f"Invalid {dataset} score for {model}")
-        completed = model_scores.height - model_scores["tm_score"].null_count()
-        inf_wc_samples = model_scores.height - model_scores["inf_wc"].null_count()
-        inf_nwc_samples = model_scores.height - model_scores["inf_nwc"].null_count()
-        model_scores = model_scores.with_columns(
-            pl.col(METRICS).fill_null(0),
-            pl.col(tm_train_column).alias("tm_train"),
-        )
-        units = aggregate_units(model_scores, dataset)
-        clusters = units.group_by("cluster_rep").agg(
-            pl.col(*METRICS, "tm_train", "delta_tm").mean()
-        )
-        rows.append(
-            {
-                "dataset": dataset,
-                "model": model,
-                "samples": model_scores.height,
-                "clusters": clusters.height,
-                "completed": completed,
-                "delta_tm": clusters["delta_tm"].mean(),
-                "tm_score": clusters["tm_score"].mean(),
-                "rho_tm": clusters.select(
-                    pl.corr("tm_score", "tm_train", method="spearman")
-                ).item(),
-                "inf_wc": clusters["inf_wc"].mean(),
-                "inf_wc_samples": inf_wc_samples,
-                "inf_nwc": clusters["inf_nwc"].mean(),
-                "inf_nwc_samples": inf_nwc_samples,
-            }
-        )
-
-    return (
-        pl.from_dicts(rows)
-        .sort("delta_tm", "model", descending=[True, False])
-        .with_row_index("rank", offset=1)
-    )
+        yield key, model_scores.with_columns(pl.col(tm_train_column).alias("tm_train"))
 
 
 def markdown_table(scores: pl.DataFrame) -> str:
