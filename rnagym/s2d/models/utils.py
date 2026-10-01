@@ -16,10 +16,6 @@ from typing import TypedDict
 
 import numpy as np
 
-# Arnie requires a package variable even though its BPP decoders use none
-os.environ.setdefault("NUPACKHOME", "/tmp")
-from arnie.pk_predictors import _hungarian, _threshknot  # noqa: E402
-
 PAIRS = dict(zip("([{<", ")]}>"))
 
 
@@ -95,6 +91,11 @@ def pair_probability_matrix(
 
 def decode_pair_probabilities(probabilities: np.ndarray) -> list[Structure]:
     """Decode pair probabilities with Hungarian and ThreshKnot."""
+    # Arnie needs a package variable its decoders never use, and importing it
+    # creates ./tmp, so load it only when decoding
+    os.environ.setdefault("NUPACKHOME", "/tmp")
+    from arnie.pk_predictors import _hungarian, _threshknot
+
     # https://github.com/WaymentSteeleLab/arnie/blob/660de8139bd2198bbe115adadd5bc5f12183f9f4/src/arnie/pk_predictors.py#L72-L104
     # Match RibonanzaNet's official Hungarian parameters
     # https://github.com/DasLab/rnet-inference/blob/25996e720f25fc3c0c7e9679a45d54ff2d5f5500/src/rnet_2d.py#L110

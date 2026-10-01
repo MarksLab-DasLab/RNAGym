@@ -13,6 +13,7 @@ include-package-data = false
 [tool.setuptools.packages.find]
 include = [
   "rnagym",
+  "rnagym.figures*",
   "rnagym.fitness*",
   "rnagym.s2d",
   "rnagym.s2d.models",
