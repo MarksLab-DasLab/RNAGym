@@ -12,26 +12,26 @@ tables.
 
 | Rank | Model | ΔTM | TM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: |
-| 1 | Protenix-v1 | -0.109 | 0.510 | 0.87 | 0.47 |
-| 2 | OpenFold3 | -0.117 | 0.502 | 0.86 | 0.45 |
-| 3 | RoseTTAFold3 | -0.122 | 0.497 | 0.85 | 0.43 |
-| 4 | AlphaFold 3 | -0.128 | 0.491 | 0.85 | 0.43 |
-| 5 | NuFold | -0.139 | 0.484 | 0.79 | 0.32 |
-| 6 | RoseTTAFold2NA | -0.144 | 0.458 | 0.75 | 0.32 |
-| 7 | RhoFold+ | -0.168 | 0.457 | 0.53 | 0.09 |
-| 8 | Boltz-2 | -0.196 | 0.491 | 0.85 | 0.40 |
-| 9 | trRosettaRNA | -0.209 | 0.414 | 0.70 | 0.14 |
+| 1 | Protenix-v1 | -0.110 | 0.490 | 0.86 | 0.44 |
+| 2 | OpenFold3 | -0.121 | 0.480 | 0.85 | 0.42 |
+| 3 | RoseTTAFold3 | -0.128 | 0.472 | 0.84 | 0.41 |
+| 4 | AlphaFold 3 | -0.135 | 0.466 | 0.84 | 0.40 |
+| 5 | NuFold | -0.146 | 0.460 | 0.78 | 0.29 |
+| 6 | RoseTTAFold2NA | -0.155 | 0.430 | 0.74 | 0.29 |
+| 7 | RhoFold+ | -0.180 | 0.428 | 0.53 | 0.09 |
+| 8 | trRosettaRNA | -0.210 | 0.395 | 0.70 | 0.12 |
+| 9 | Boltz-2 | -0.212 | 0.464 | 0.83 | 0.37 |
 
 ### Multimers (n=455 structures)
 
 | Rank | Model | ΔTM | TM | INF-WC | INF-NWC |
 | ---: | :--- | ---: | ---: | ---: | ---: |
-| 1 | AlphaFold 3 | -0.096 | 0.403 | 0.89 | 0.67 |
-| 2 | Protenix-v1 | -0.098 | 0.400 | 0.89 | 0.66 |
-| 3 | RoseTTAFold3 | -0.115 | 0.383 | 0.88 | 0.64 |
-| 4 | OpenFold3 | -0.119 | 0.380 | 0.88 | 0.69 |
-| 5 | Boltz-2 | -0.193 | 0.395 | 0.87 | 0.66 |
-| 6 | RoseTTAFold2NA | -0.294 | 0.190 | 0.49 | 0.37 |
+| 1 | AlphaFold 3 | -0.098 | 0.393 | 0.88 | 0.67 |
+| 2 | Protenix-v1 | -0.100 | 0.390 | 0.88 | 0.66 |
+| 3 | RoseTTAFold3 | -0.121 | 0.370 | 0.87 | 0.65 |
+| 4 | OpenFold3 | -0.123 | 0.367 | 0.88 | 0.68 |
+| 5 | Boltz-2 | -0.191 | 0.383 | 0.87 | 0.65 |
+| 6 | RoseTTAFold2NA | -0.284 | 0.191 | 0.50 | 0.38 |
 <!-- END GENERATED TABLES -->
 
 **Metrics** (higher is better for all)
@@ -44,7 +44,7 @@ tables.
 
 **Scoring:** Monomers keep the best match across experimental structures of the
 same sequence, and each multimer chain counts separately. Scores are averaged
-within 40% sequence-identity clusters, then across clusters. Failed predictions
+within 50% sequence-identity clusters, then across clusters. Failed predictions
 score 0. Targets come from the [RNA3DB 2026-01-05 full release][1].
 
 [1]: https://github.com/marcellszi/rna3db/releases/tag/2026-01-05-full-release
