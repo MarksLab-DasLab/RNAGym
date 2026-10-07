@@ -60,10 +60,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def render_table(table: pl.DataFrame, coverage: pl.DataFrame) -> str:
     """Format category means, marking the baseline's partial coverage in the main table."""
-    headers = [
-        f"{name} (n={coverage.filter(pl.col('RNA_TYPE') == name).height})"
-        for name in CATEGORIES
-    ]
+    headers = []
+    for name in CATEGORIES:
+        assays = coverage.filter(pl.col("RNA_TYPE") == name)
+        molecules = assays["MOLECULE_ID"].n_unique()
+        headers.append(f"{name} ({assays.height} assays, {molecules} molecules)")
     lines = [
         "| Rank | Model | " + " | ".join(headers) + " | Macro (3 ncRNA) |",
         "|---:|:--|--:|--:|--:|--:|",
@@ -106,6 +107,18 @@ def write_tables(reports: Path, output: Path) -> None:
         if directory == reports:
             generated = render_table(table, coverage)
     coverage.write_csv(output / "evmutation_coverage.csv")
+    repeated = (
+        coverage.group_by("MOLECULE_ID", maintain_order=True)
+        .agg("DMS_ID")
+        .filter(pl.col("DMS_ID").list.len() > 1)["DMS_ID"]
+        .to_list()
+    )
+    if repeated:
+        pairs = ", ".join(f"{ids[0]} with {' and '.join(ids[1:])}" for ids in repeated)
+        generated += (
+            "\n\nAssays of the same RNA molecule are averaged before their category "
+            + f"({pairs}), as ProteinGym averages the assays of one protein."
+        )
     generated += (
         f"\n\n\\* EVmutation scores {covered.height}/{coverage.height} assays and "
         + f"{variants:,}/{total:,} variants ({variants / total:.1%}). "
