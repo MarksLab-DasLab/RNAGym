@@ -24,6 +24,8 @@ class _Config:
     MAX_SEQUENCE_LENGTH = 1_022
     RFAM_FILE = DATA_DIR / "rnagym_rfams.parquet"
     SEQUENCE_FILE = DATA_DIR / "rnagym_sequences.parquet"
+    # Riboseek search and clusters of each registry version (s3d/sh/cluster.sh)
+    CLUSTER_DIR = _CACHE_DIR / "clusters"
 
 
 class Config2D(_Config):
@@ -45,13 +47,15 @@ class Config2D(_Config):
     MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
     MC_ANNOTATE = MODEL_SOURCE_DIR / "RNA_assessment" / "MC-Annotate"
 
-    MIN_SEQUENCE_IDENTITY = 0.40
+    # Sequence clusters: hits with E < MAX_EVALUE and MIN_SEQUENCE_IDENTITY over
+    # MIN_COVERAGE of either sequence, among 80% representatives without FLANKS
+    MIN_SEQUENCE_IDENTITY = 0.50
     MIN_COVERAGE = 0.80
-    COVERAGE_MODE = 0
-    CLUSTER_MODE = 0
+    MAX_EVALUE = 1e-3
+    FLANKS = ("GGGAACGACUCGAGUAGAGUCGAAAA", "AAAAGAAACAACAACAACAAC")
+    SEARCH_BLOCKS = 10
     NUM_FOLDS = 5
     RANDOM_SEED = 42
-    MMSEQS_THREADS = 1
     SCORE_BATCH_SIZE = 8192
     HEADLINE_MODIFIERS = ("1M7", "2A3", "DMS", "NMIA")
     _BPRNA_TRAINED = {"mxfold2", "ribonanzanet", "rinalmo", "rna-fm", "ufold"}

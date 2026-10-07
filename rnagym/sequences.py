@@ -1,9 +1,10 @@
 """Maintain the shared RNAGym sequence registry and similarity clusters."""
 
-import os
+import hashlib
 import random
 import shlex
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -15,6 +16,7 @@ SEQUENCE_SCHEMA = pl.Schema({"sequence_id": pl.String, "sequence": pl.String})
 REGISTRY_SCHEMA = pl.Schema(
     {**SEQUENCE_SCHEMA, "cluster_rep": pl.String, "fold": pl.UInt8}
 )
+SEARCH_FIELDS = "query,target,fident,alnlen,qcov,tcov,evalue,bits"
 
 
 def fitness_assays() -> pl.DataFrame:
@@ -98,65 +100,181 @@ def write_fasta(sequences: pl.DataFrame, path: Path) -> None:
         )
 
 
-def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
-    """Cluster sequences with MMseqs2."""
-    sequence_table = sequence_table.sort("sequence")
+def riboseek(arguments: str) -> None:
+    """Run a Riboseek command quietly."""
+    subprocess.run(shlex.split(f"riboseek {arguments} -v 1"), check=True)
 
-    with tempfile.TemporaryDirectory(prefix="rnagym-mmseqs-") as temporary_dir:
-        work_dir = Path(temporary_dir)
-        fasta_path = work_dir / "sequences.fasta"
-        cluster_prefix = work_dir / "clusters"
-        mmseqs_tmp = work_dir / "tmp"
 
-        print(f"Clustering {sequence_table.height:,} unique sequences with MMseqs2")
-        write_fasta(sequence_table, fasta_path)
+def read_tsv(path: Path | str, *columns: str) -> pl.DataFrame:
+    """Read the leading columns of a headerless Riboseek TSV as strings."""
+    return pl.read_csv(
+        path,
+        separator="\t",
+        has_header=False,
+        new_columns=list(columns),
+        infer_schema=False,
+    ).select(columns)
 
-        command = (
-            f"mmseqs easy-cluster {fasta_path} {cluster_prefix} {mmseqs_tmp} "
-            f"--min-seq-id {Config2D.MIN_SEQUENCE_IDENTITY} -c {Config2D.MIN_COVERAGE} "
-            f"--cov-mode {Config2D.COVERAGE_MODE} --cluster-mode {Config2D.CLUSTER_MODE} "
-            f"--threads {Config2D.MMSEQS_THREADS} -v 3"
+
+def clusters_path(work_dir: Path) -> Path:
+    """Clusters of one registry version at the configured cuts."""
+    identity, coverage = Config2D.MIN_SEQUENCE_IDENTITY, Config2D.MIN_COVERAGE
+    return work_dir / f"clusters_id{identity:g}_cov{coverage:g}.parquet"
+
+
+def prepare(work_dir: Path) -> None:
+    """Cluster sequences without library flanks at 80%, then split the
+    representatives into blocks for the all-against-all search."""
+    db = work_dir / "db"
+    if (db / "representatives.index").is_file():
+        return
+    db.mkdir()
+    five, three = Config2D.FLANKS
+    trimmed = pl.col("sequence").str.strip_prefix(five).str.strip_suffix(three)
+    write_fasta(
+        pl.read_parquet(work_dir / "sequences.parquet").with_columns(
+            # Keep sequences too short to align without their flanks
+            pl.when(trimmed.str.len_chars() >= 20).then(trimmed).otherwise("sequence")
+        ),
+        work_dir / "trimmed.fasta",
+    )
+    riboseek(f"createdb {work_dir}/trimmed.fasta {db}/sequences")
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        riboseek(
+            f"linclust {db}/sequences {db}/clusters {temporary_dir} -c 0.8 --min-seq-id 0.8"
         )
+    riboseek(f"createsubdb {db}/clusters {db}/sequences {db}/representatives")
+    keys = [
+        int(line.split("\t")[0])
+        for line in (db / "representatives.index").read_text().splitlines()
+    ]
+    for block in range(Config2D.SEARCH_BLOCKS):
+        block_dir = work_dir / "blocks" / str(block)
+        block_dir.mkdir(parents=True)
+        (block_dir / "keys").write_text(
+            "".join(f"{k}\n" for k in keys if k % Config2D.SEARCH_BLOCKS == block)
+        )
+        riboseek(f"createsubdb {block_dir}/keys {db}/representatives {block_dir}/db")
 
-        # Keep the MMseqs2 progress bars without its full log
-        # Nonfatal set-cover errors are expected: https://github.com/soedinglab/MMseqs2/issues/765
-        with subprocess.Popen(
-            shlex.split(command),
-            stdout=subprocess.PIPE,
-            text=True,
-            env={**os.environ, "TTY": "1"},
-        ) as process:
-            description = ""
-            for line in process.stdout:
-                line = line.rstrip()
-                if line.startswith("[") and "%" in line:
-                    if "] 0.00%" in line:
-                        print(description)
-                    print(line, end="\n" if "100.00%" in line else "\r", flush=True)
-                elif line:
-                    description = line.split()[0] if f" {work_dir}/" in line else line
-        if process.returncode:
-            raise subprocess.CalledProcessError(process.returncode, process.args)
 
-        cluster_members = pl.read_csv(
-            cluster_prefix.with_name(f"{cluster_prefix.name}_cluster.tsv"),
+def search(work_dir: Path, shard: int, num_shards: int) -> None:
+    """Search query block i against target block j for this shard's i <= j, so
+    each pair is searched once. Each block holds 1 / SEARCH_BLOCKS of the
+    representatives, so the E-value cut is divided by SEARCH_BLOCKS."""
+    blocks = range(Config2D.SEARCH_BLOCKS)
+    pairs = [(i, j) for i in blocks for j in blocks if i <= j]
+    (work_dir / "search").mkdir(exist_ok=True)
+    for i, j in pairs[shard::num_shards]:
+        out = work_dir / "search" / f"{i}_{j}.tsv"
+        if out.is_file():
+            continue
+        query, target = work_dir / f"blocks/{i}/db", work_dir / f"blocks/{j}/db"
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            riboseek(
+                f"search {query} {target} {temporary_dir}/aln {temporary_dir}/tmp "
+                f"-a --max-seqs 3000 --num-iterations 1 --prefilter-mode 1 "
+                f"--search-type 3 --strand 1 "
+                f"-e {Config2D.MAX_EVALUE / Config2D.SEARCH_BLOCKS}"
+            )
+            riboseek(
+                f"convertalis {query} {target} {temporary_dir}/aln {out}.tmp "
+                f"--search-type 3 --format-output {SEARCH_FIELDS}"
+            )
+        Path(f"{out}.tmp").replace(out)
+
+
+def write_clusters(work_dir: Path) -> None:
+    """Greedy set cover of the representatives' hits, as in Riboseek cluster.
+    Sequences join their 80% representative's cluster."""
+    db = work_dir / "db"
+    keys = (
+        read_tsv(db / "sequences.lookup", "key", "name")
+        .join(read_tsv(db / "representatives.index", "key"), on="key")
+        .select(pl.col("key").cast(pl.Int64), "name")
+    )
+    hits = (
+        pl.scan_csv(
+            work_dir / "search" / "*.tsv",
             separator="\t",
             has_header=False,
-            new_columns=["cluster_rep", "sequence_id"],
+            new_columns=SEARCH_FIELDS.split(","),
+            schema_overrides={"query": pl.String, "target": pl.String},
+        )
+        .filter(
+            (pl.col("query") != pl.col("target"))
+            & (pl.col("fident") >= Config2D.MIN_SEQUENCE_IDENTITY)
+            & (pl.max_horizontal("qcov", "tcov") >= Config2D.MIN_COVERAGE)
+        )
+        .select(
+            "query", "target", pl.col("bits").round().cast(pl.Int64), "fident", "evalue"
+        )
+        .collect()
+    )
+    # Mirror hits, since each pair was searched once, and give every representative
+    # a self hit so that singletons stay in
+    self_hits = keys.select(
+        query="name",
+        target="name",
+        bits=pl.lit(1_000_000, pl.Int64),
+        fident=1.0,
+        evalue=0.0,
+    )
+    alignments = (
+        pl.concat(
+            [self_hits, hits, hits.rename({"query": "target", "target": "query"})],
+            how="diagonal",
+        )
+        .join(keys.rename({"key": "query_key"}), left_on="query", right_on="name")
+        .join(keys.rename({"key": "target_key"}), left_on="target", right_on="name")
+        .sort("query_key", "target_key", "bits", descending=[False, False, True])
+        .unique(["query_key", "target_key"], keep="first", maintain_order=True)
+        # Alignment results: target, bits, identity, E-value, then six positions
+        .select(
+            "query_key",
+            "target_key",
+            "bits",
+            "fident",
+            "evalue",
+            *(pl.lit(0).alias(f"position_{k}") for k in range(6)),
+        )
+    )
+    with tempfile.TemporaryDirectory(dir=work_dir) as tmp:
+        alignments.write_csv(f"{tmp}/aln.tsv", separator="\t", include_header=False)
+        riboseek(f"tsv2db {tmp}/aln.tsv {tmp}/aln --output-dbtype 5")
+        riboseek(f"clust {db}/representatives {tmp}/aln {tmp}/clusters")
+        riboseek(
+            f"createtsv {db}/representatives {db}/representatives {tmp}/clusters {tmp}/clusters.tsv"
+        )
+        riboseek(
+            f"createtsv {db}/sequences {db}/sequences {db}/clusters {tmp}/members.tsv"
+        )
+        clusters = read_tsv(f"{tmp}/clusters.tsv", "cluster_rep", "representative")
+        members = read_tsv(f"{tmp}/members.tsv", "representative", "sequence_id")
+    members.join(clusters, on="representative").select(
+        "sequence_id", "cluster_rep"
+    ).write_parquet(clusters_path(work_dir))
+
+
+def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
+    """Load sequence clusters, built per registry version by sh/cluster.sh."""
+    sequence_table = sequence_table.select("sequence_id", "sequence").sort(
+        "sequence_id"
+    )
+    fingerprint = hashlib.sha256(
+        "".join(f"{i}\t{s}\n" for i, s in sequence_table.iter_rows()).encode()
+    ).hexdigest()[:16]
+    work_dir = Config2D.CLUSTER_DIR / fingerprint
+    if not clusters_path(work_dir).is_file():
+        work_dir.mkdir(parents=True, exist_ok=True)
+        sequence_table.write_parquet(work_dir / "sequences.parquet")
+        raise RuntimeError(
+            f"Missing sequence clusters: run `pixi run cluster {work_dir}` in rnagym/s3d"
         )
 
-    if (
-        cluster_members.height != sequence_table.height
-        or cluster_members["sequence_id"].n_unique() != sequence_table.height
-    ):
-        raise RuntimeError("MMseqs2 output does not assign every sequence exactly once")
-
-    assignments = sequence_table.join(
-        cluster_members, on="sequence_id", how="left"
-    ).select("sequence_id", "cluster_rep")
-    if assignments["cluster_rep"].null_count():
-        raise RuntimeError("Some sequences did not receive a cluster assignment")
-    print(f"MMseqs2 clusters: {assignments['cluster_rep'].n_unique():,}")
+    assignments = pl.read_parquet(clusters_path(work_dir))
+    if not assignments["sequence_id"].sort().equals(sequence_table["sequence_id"]):
+        raise RuntimeError("Clusters do not assign every sequence exactly once")
+    print(f"Sequence clusters: {assignments['cluster_rep'].n_unique():,}")
     return assignments
 
 
@@ -198,11 +316,7 @@ def update_registry(modalities: pl.DataFrame) -> pl.DataFrame:
         "sequence_id", "modality"
     )
 
-    assignments = (
-        previous.select("sequence_id", "cluster_rep")
-        if registry.height == previous.height
-        else cluster_sequences(registry)
-    )
+    assignments = cluster_sequences(registry)
     folds = assign_folds(assignments, modalities)
     previous_folds = previous.select(
         "sequence_id", pl.col("fold").alias("previous_fold")
@@ -218,3 +332,11 @@ def update_registry(modalities: pl.DataFrame) -> pl.DataFrame:
     if registry["fold"].null_count():
         raise RuntimeError("Some sequences did not receive a fold assignment")
     return registry
+
+
+if __name__ == "__main__":
+    # Steps of sh/cluster.sh: STEP WORK_DIR [SHARD NUM_SHARDS]
+    step, work_dir, *shard = sys.argv[1:]
+    {"prepare": prepare, "search": search, "cluster": write_clusters}[step](
+        Path(work_dir), *map(int, shard)
+    )
