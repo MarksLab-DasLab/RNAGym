@@ -21,6 +21,7 @@ from rnagym.fitness.tasks.model_registry import (
     STRATEGIES,
     resolve_source,
 )
+from rnagym.fitness.tasks.performance_fitness import MOLECULE, check_molecules
 
 NCRNA = ASSAY_GROUPS["ncRNA"]
 
@@ -44,7 +45,9 @@ def checkpoints():
     return grouped
 
 
-def collect(expected: Sequence[str], rna_type: dict[str, str]):
+def collect(
+    expected: Sequence[str], rna_type: dict[str, str], molecule: dict[str, str]
+):
     """Per-assay signed Spearman for every checkpoint and strategy."""
     records = []
     for name, entries in checkpoints().items():
@@ -115,6 +118,7 @@ def collect(expected: Sequence[str], rna_type: dict[str, str]):
                         "strategy": strategy,
                         "assay": assay,
                         "RNA_TYPE": rna_type[assay],
+                        MOLECULE: molecule[assay],
                         "n": int(usable.sum()),
                         "spearman": rho,
                     }
@@ -123,10 +127,14 @@ def collect(expected: Sequence[str], rna_type: dict[str, str]):
 
 
 def macro_table(per_assay: pl.DataFrame):
+    # Assays of one molecule count once, as on the leaderboard
+    per_molecule = per_assay.group_by(
+        "model", "strategy", "RNA_TYPE", MOLECULE, maintain_order=True
+    ).agg(pl.col("spearman").mean())
     rows = []
-    for (model, strategy), group in per_assay.sort("model", "strategy").group_by(
+    for (model, strategy), group in per_molecule.sort(
         "model", "strategy", maintain_order=True
-    ):
+    ).group_by("model", "strategy", maintain_order=True):
         by_type = {
             t: cast(
                 float | None, group.filter(pl.col("RNA_TYPE") == t)["spearman"].mean()
@@ -152,10 +160,12 @@ def main(argv: Sequence[str] | None = None):
     """Compare masked-marginal fill strategies."""
     args = parse_args(argv)
     ref = read_reference(ConfigFitness.REFERENCE_FILE)
+    check_molecules(ref)
     rna_type = dict(ref.select("DMS_ID", "RNA_TYPE").iter_rows())
+    molecule = dict(ref.select("DMS_ID", MOLECULE).iter_rows())
     expected = sorted(d for d, t in rna_type.items() if t in NCRNA)
 
-    per_assay = collect(expected, rna_type)
+    per_assay = collect(expected, rna_type, molecule)
     if per_assay.is_empty():
         raise SystemExit("No complete checkpoint found in the predictions folder")
     macro = macro_table(per_assay)

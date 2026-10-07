@@ -15,7 +15,7 @@ from scipy import stats
 from sklearn.metrics import matthews_corrcoef, roc_auc_score
 
 from rnagym.config import ConfigFitness
-from rnagym.fitness.data import read_reference
+from rnagym.fitness.data import read_reference, require_columns
 from rnagym.fitness.tasks.model_registry import ALL_MODELS, ASSAY_GROUPS
 
 logging.basicConfig(level=logging.WARNING)
@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 DEPTHS = ("single", "multiple")
 METRICS = ("Spearman", "AUC", "MCC")
+# Reference sheet column naming the RNA molecule each assay measures
+MOLECULE = "MOLECULE_ID"
 RNA_TYPES = ("mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme")
 
 
@@ -41,6 +43,7 @@ def _add_depth(data: pl.DataFrame) -> pl.DataFrame:
 def _metric_rows(
     dms_id: str,
     rna_type: str,
+    molecule: str,
     results: dict[str, dict[str, float]],
     depth: str | None = None,
 ) -> list[dict[str, object]]:
@@ -50,6 +53,7 @@ def _metric_rows(
         row: dict[str, object] = {
             "DMS_ID": dms_id,
             "RNA_TYPE": rna_type,
+            MOLECULE: molecule,
             "Model": model,
         }
         if depth is not None:
@@ -60,16 +64,20 @@ def _metric_rows(
 
 
 def aggregate_by_depth(depth_metrics: pl.DataFrame, models: list[str]) -> pl.DataFrame:
-    """Average assay metrics within each mutation depth."""
+    """Average molecule metrics within each mutation depth."""
+    molecules = average_molecules(depth_metrics, ("Model", "Depth"))
     means: dict[str, dict[str, dict[str, float | None]]] = {}
     for model in models:
         means[model] = {}
         for depth in DEPTHS:
-            assays = depth_metrics.filter(
+            cells = molecules.filter(
                 (pl.col("Model") == model) & (pl.col("Depth") == depth)
             )
             means[model][depth] = {
-                metric: cast(float | None, assays[metric].mean()) for metric in METRICS
+                # A filtered column can be split into thread-dependent chunks, which
+                # changes the floating point sum, so make it one chunk first
+                metric: cast(float | None, cells[metric].rechunk().mean())
+                for metric in METRICS
             }
         means[model]["All"] = {
             metric: cast(
@@ -97,10 +105,11 @@ def aggregate_by_rna_type(
     models: list[str],
     rna_types: list[str],
 ) -> pl.DataFrame:
-    """Average assay metrics by RNA type and equally across RNA types."""
+    """Average molecule metrics by RNA type and equally across RNA types."""
     grouped = {
         (row["Model"], row["RNA_TYPE"]): row
-        for row in assay_metrics.group_by("Model", "RNA_TYPE")
+        for row in average_molecules(assay_metrics, ("Model", "RNA_TYPE"))
+        .group_by("Model", "RNA_TYPE")
         .agg(pl.col(*METRICS).mean())
         .iter_rows(named=True)
     }
@@ -131,10 +140,11 @@ def aggregate_by_rna_type(
 def aggregate_by_type_and_depth(
     depth_metrics: pl.DataFrame, models: list[str], rna_types: list[str]
 ) -> pl.DataFrame:
-    """Average metrics by RNA type and mutation depth."""
+    """Average molecule metrics by RNA type and mutation depth."""
     grouped = {
         (row["Model"], row["Depth"], row["RNA_TYPE"]): row
-        for row in depth_metrics.group_by("Model", "Depth", "RNA_TYPE")
+        for row in average_molecules(depth_metrics, ("Model", "Depth", "RNA_TYPE"))
+        .group_by("Model", "Depth", "RNA_TYPE")
         .agg(pl.col(*METRICS).mean())
         .iter_rows(named=True)
     }
@@ -166,6 +176,18 @@ def aggregate_by_type_and_depth(
     return pl.DataFrame(rows, infer_schema_length=None)
 
 
+def average_molecules(metrics: pl.DataFrame, keys: Sequence[str]) -> pl.DataFrame:
+    """Average the assays of each molecule, so a molecule assayed twice counts once.
+
+    This is the RNA counterpart of ProteinGym averaging the assays of one UniProt
+    ID before any other aggregate. Every later mean weights molecules, not assays.
+    """
+    # A fixed group order fixes the order of later sums, so tables are bitwise stable
+    return metrics.group_by(*keys, MOLECULE, maintain_order=True).agg(
+        pl.col(*METRICS).mean()
+    )
+
+
 def calculate_metrics(
     assay_scores: np.ndarray, model_scores: np.ndarray
 ) -> dict[str, float]:
@@ -181,6 +203,26 @@ def calculate_metrics(
         "AUC": float(roc_auc_score(binary_assay, model_scores)),
         "MCC": matthews_corrcoef(binary_assay, binary_model),
     }
+
+
+def check_molecules(reference: pl.DataFrame) -> None:
+    """Require one molecule ID per assay, each confined to a single RNA type."""
+    path = ConfigFitness.REFERENCE_FILE
+    require_columns(reference, (MOLECULE,), path)
+    if (
+        reference[MOLECULE].is_null().any()
+        or reference[MOLECULE].str.strip_chars().eq("").any()
+    ):
+        raise ValueError(f"{path} has missing {MOLECULE} values")
+    mixed = (
+        reference.group_by(MOLECULE)
+        .agg(pl.col("RNA_TYPE").n_unique())
+        .filter(pl.col("RNA_TYPE") > 1)[MOLECULE]
+    )
+    if mixed.len():
+        raise ValueError(
+            f"{path} gives molecules more than one RNA type: {mixed.to_list()}"
+        )
 
 
 def cli(argv: Sequence[str] | None = None) -> None:
@@ -264,6 +306,7 @@ def load_assay_metrics(
             {
                 "DMS_ID": assay_info["DMS_ID"],
                 "RNA_TYPE": assay_info["RNA_TYPE"],
+                MOLECULE: assay_info[MOLECULE],
                 "variants": assay.height,
                 "scored_variants": filtered.height,
                 "evaluated_variants": filtered.height if evaluable else 0,
@@ -283,30 +326,14 @@ def load_assay_metrics(
                 f"{assay_path} has undefined Spearman correlation for {undefined}. "
                 "Each selected assay requires varying measurements and predictions."
             )
-        assay_rows.extend(
-            _metric_rows(assay_info["DMS_ID"], assay_info["RNA_TYPE"], filtered_results)
-        )
-
-        depth_rows.extend(
-            _metric_rows(
-                assay_info["DMS_ID"],
-                assay_info["RNA_TYPE"],
-                filtered_results,
-                "overall",
-            )
-        )
+        keys = (assay_info["DMS_ID"], assay_info["RNA_TYPE"], assay_info[MOLECULE])
+        assay_rows.extend(_metric_rows(*keys, filtered_results))
+        depth_rows.extend(_metric_rows(*keys, filtered_results, "overall"))
         for depth in DEPTHS:
             depth_results = get_performance_dataset(
                 filtered.filter(pl.col("Depth") == depth), "DMS_score", score_columns
             )
-            depth_rows.extend(
-                _metric_rows(
-                    assay_info["DMS_ID"],
-                    assay_info["RNA_TYPE"],
-                    depth_results,
-                    depth,
-                )
-            )
+            depth_rows.extend(_metric_rows(*keys, depth_results, depth))
 
     if not assay_rows:
         raise ValueError("No assays have enough scored variants with varying fitness")
@@ -319,7 +346,9 @@ def load_assay_metrics(
 
 def main(args: argparse.Namespace) -> pl.DataFrame:
     """Write the fitness metrics and return category means."""
-    reference = select_assays(read_reference(ConfigFitness.REFERENCE_FILE), args.type)
+    reference = read_reference(ConfigFitness.REFERENCE_FILE)
+    check_molecules(reference)
+    reference = select_assays(reference, args.type)
     if reference.is_empty():
         raise ValueError(f"No assays found for type {args.type!r}")
     models = list(args.models or ALL_MODELS)

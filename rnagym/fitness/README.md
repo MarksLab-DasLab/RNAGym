@@ -2,7 +2,8 @@
 
 RNA fitness predictions evaluated against 68 experimental assays. The
 [leaderboard][0] uses signed Spearman correlation on 29 ncRNA assays, averaged
-within ribozyme, tRNA and aptamer categories, then equally across categories.
+within each RNA molecule, then within ribozyme, tRNA and aptamer categories, then
+equally across categories.
 
 ## Setup
 
