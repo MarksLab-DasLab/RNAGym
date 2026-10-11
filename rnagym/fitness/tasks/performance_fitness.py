@@ -22,7 +22,9 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 DEPTHS = ("single", "multiple")
-METRICS = ("Spearman", "AUC", "MCC")
+METRICS = ("Spearman", "AUC", "MCC", "Depth_Spearman")
+# Depth_Spearman leaves out mutation counts with fewer variants, too few to rank
+MIN_DEPTH_VARIANTS = 30
 # Reference sheet column naming the RNA molecule each assay measures
 MOLECULE = "MOLECULE_ID"
 RNA_TYPES = ("mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme")
@@ -189,19 +191,20 @@ def average_molecules(metrics: pl.DataFrame, keys: Sequence[str]) -> pl.DataFram
 
 
 def calculate_metrics(
-    assay_scores: np.ndarray, model_scores: np.ndarray
+    assay_scores: np.ndarray, model_scores: np.ndarray, depths: np.ndarray
 ) -> dict[str, float]:
-    """Calculate directed Spearman, AUC, and MCC.
+    """Calculate directed Spearman, AUC, MCC and Spearman within mutation counts.
 
     AUC binarizes assay scores at their median. MCC binarizes both score vectors
-    at their respective medians.
+    at their respective medians. Depth_Spearman is ``depth_spearman``.
     """
     binary_assay = assay_scores > np.median(assay_scores)
     binary_model = model_scores > np.median(model_scores)
     return {
-        "Spearman": stats.spearmanr(assay_scores, model_scores).correlation,
+        "Spearman": spearman(assay_scores, model_scores),
         "AUC": float(roc_auc_score(binary_assay, model_scores)),
         "MCC": matthews_corrcoef(binary_assay, binary_model),
+        "Depth_Spearman": depth_spearman(assay_scores, model_scores, depths),
     }
 
 
@@ -234,11 +237,35 @@ def cli(argv: Sequence[str] | None = None) -> None:
     print(f"Saved metrics to {args.output}")
 
 
+def depth_spearman(
+    assay_scores: np.ndarray, model_scores: np.ndarray, depths: np.ndarray
+) -> float:
+    """Average Spearman within each mutation count of ``MIN_DEPTH_VARIANTS`` or more.
+
+    Counts weigh equally, so ranking variants by their number of mutations alone
+    scores zero. Counts whose fitness never varies are skipped, and an assay with
+    no count left is NaN.
+
+    Examples
+    --------
+    >>> depths = np.repeat([1, 2], 30)
+    >>> depth_spearman(np.arange(60.0), -depths.astype(float), depths)
+    0.0
+    """
+    values = [
+        spearman(assay_scores[group], model_scores[group])
+        for group in (depths == depth for depth in np.unique(depths))
+        if group.sum() >= MIN_DEPTH_VARIANTS and np.ptp(assay_scores[group]) > 0
+    ]
+    return float(np.mean(values)) if values else np.nan
+
+
 def get_performance_dataset(
     data: pl.DataFrame, assay_column: str, score_columns: list[str]
 ) -> dict[str, dict[str, float]]:
     """Calculate each model's metrics from complete finite values."""
     data = data.drop_nulls("mutant")
+    depths = data["mutant"].str.count_matches(",").to_numpy() + 1
     missing_metrics = dict.fromkeys(METRICS, np.nan)
     results = {}
 
@@ -262,7 +289,7 @@ def get_performance_dataset(
 
         try:
             results[score_column] = calculate_metrics(
-                pairs[assay_column].to_numpy(), pairs[score_column].to_numpy()
+                pairs[assay_column].to_numpy(), pairs[score_column].to_numpy(), depths
             )
         except (TypeError, ValueError) as error:
             logger.warning("Could not calculate %s: %s", score_column, error)
@@ -324,7 +351,7 @@ def load_assay_metrics(
         if undefined:
             raise ValueError(
                 f"{assay_path} has undefined Spearman correlation for {undefined}. "
-                "Each selected assay requires varying measurements and predictions."
+                "Each selected assay requires varying measurements."
             )
         keys = (assay_info["DMS_ID"], assay_info["RNA_TYPE"], assay_info[MOLECULE])
         assay_rows.extend(_metric_rows(*keys, filtered_results))
@@ -445,6 +472,13 @@ def select_assays(reference: pl.DataFrame, assay_type: str) -> pl.DataFrame:
     if assay_type == "all":
         return reference.clone()
     return reference.filter(pl.col("RNA_TYPE").is_in(ASSAY_GROUPS[assay_type]))
+
+
+def spearman(assay_scores: np.ndarray, model_scores: np.ndarray) -> float:
+    """Spearman correlation, zero for constant predictions, which rank nothing."""
+    if np.ptp(model_scores) == 0:
+        return 0.0
+    return float(stats.spearmanr(assay_scores, model_scores).statistic)
 
 
 if __name__ == "__main__":

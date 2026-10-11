@@ -12,6 +12,7 @@ import polars as pl
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.tasks import performance_fitness
+from rnagym.fitness.tasks.model_registry import BASELINE_MODELS
 
 CATEGORIES = ("Ribozyme", "tRNA", "Aptamer")
 MODEL_LABELS = {
@@ -28,11 +29,13 @@ MODEL_LABELS = {
     "evo2_40b": "Evo 2 (40B)",
     "EVmutation": "EVmutation",
     "GenSLM": "GenSLM (2.5B)",
+    "mutation_count": "Mutation count",
     "ntv3_8m": "Nucleotide Transformer v3 (8M)",
     "ntv3_100m": "Nucleotide Transformer v3 (100M)",
     "ntv3_650m": "Nucleotide Transformer v3 (650M)",
     "orthrus": "Orthrus",
     "rinalmo": "RiNALMo",
+    "RNA-2Di": "RNA-2Di",
     "RNAErnie": "RNA-ERNIE",
     "RNA-FM": "RNA-FM",
     "rnagenesis": "RNAGenesis",
@@ -59,23 +62,30 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 
 def render_table(table: pl.DataFrame, coverage: pl.DataFrame) -> str:
-    """Format category means, marking the baseline's partial coverage in the main table."""
-    headers = []
-    for name in CATEGORIES:
-        assays = coverage.filter(pl.col("RNA_TYPE") == name)
-        molecules = assays["MOLECULE_ID"].n_unique()
-        headers.append(f"{name} ({assays.height} assays, {molecules} molecules)")
+    """Format category means to two decimals, with baselines in italics.
+
+    EVmutation's partial coverage is marked for the footnote.
+    """
+    headers = [
+        f"{name} (n={coverage.filter(pl.col('RNA_TYPE') == name).height})"
+        for name in CATEGORIES
+    ]
     lines = [
-        "| Rank | Model | " + " | ".join(headers) + " | Macro (3 ncRNA) |",
-        "|---:|:--|--:|--:|--:|--:|",
+        "| Rank | Model | "
+        + " | ".join(headers)
+        + " | Macro (3 ncRNA) | Depth macro |",
+        "|---:|:--|--:|--:|--:|--:|--:|",
     ]
     for rank, row in enumerate(table.iter_rows(named=True), 1):
         model = MODEL_LABELS[row["model"]]
+        if row["model"] in BASELINE_MODELS:
+            model = f"_{model}_"
         if row["model"] == "EVmutation":
-            model += "*"
+            model += "\\*"
+        # Adding 0.0 prints a correlation that rounds to -0.0 as 0.00
         values = [
-            "-" if row[column] is None else f"{row[column]:.4f}"
-            for column in (*CATEGORIES, "macro_3ncRNA")
+            "-" if row[column] is None else f"{round(row[column], 2) + 0.0:.2f}"
+            for column in (*CATEGORIES, "macro_3ncRNA", "depth_macro_3ncRNA")
         ]
         place = str(rank) if row["macro_3ncRNA"] is not None else "-"
         lines.append(f"| {place} | {model} | " + " | ".join(values) + " |")
@@ -100,6 +110,7 @@ def write_tables(reports: Path, output: Path) -> None:
                 pl.col("Model").str.strip_suffix("_score").alias("model"),
                 *[pl.col(f"Spearman_{name}_Mean").alias(name) for name in CATEGORIES],
                 pl.col("Spearman_All_Mean").alias("macro_3ncRNA"),
+                pl.col("Depth_Spearman_All_Mean").alias("depth_macro_3ncRNA"),
             )
             .sort("macro_3ncRNA", descending=True, nulls_last=True)
         )

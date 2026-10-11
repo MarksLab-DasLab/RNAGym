@@ -3,7 +3,11 @@
 Signed Spearman correlation with experimental fitness on 29 ncRNA assays of 27
 RNA molecules. Assays of the same molecule are averaged first, as ProteinGym
 averages the assays of one protein. Columns then average molecules within each
-category, and Macro weights the three categories equally. Higher is better.
+category, and Macro weights the three categories equally. Depth macro instead
+computes Spearman separately at each mutation count, then averages. This
+measures how well models rank variants when the naive prior that more mutations
+are worse (see Mutation count) no longer helps. Italic rows are simple baselines
+without pretraining. Higher is better.
 
 <!-- BEGIN GENERATED TABLES -->
 | Rank | Model | Ribozyme (24 assays, 23 molecules) | tRNA (3 assays, 2 molecules) | Aptamer (2 assays, 2 molecules) | Macro (3 ncRNA) |
@@ -45,7 +49,11 @@ Masked language models use `wt-fill`: mask each mutated position in the wild-typ
 sequence and sum `log p(mutant) - log p(wild type)`. This follows the [ESM][1]
 and [ProteinGym][2] implementations. All four [fill strategies][3] are available
 in the prediction files. RNA-ERNIE uses unmasked wild-type probability changes.
-GenSLM uses mean next-codon log likelihood, excluding padding.
+GenSLM uses mean next-codon log likelihood, excluding padding. EVmutation
+scores the change in statistical energy of a pairwise model fitted to each
+assay's Riboseek MSA. RNA-2Di sums Riboseek's dinucleotide [substitution log
+odds][7] over the dinucleotides a variant changes. Mutation count is the
+negative number of substitutions.
 
 ## Reproduce
 
@@ -66,3 +74,4 @@ pixi run --locked -e default check-published
 [4]: ../../rnagym/fitness/README.md
 [5]: evmutation_coverage.csv
 [6]: leaderboard_evmutation.csv
+[7]: https://github.com/steineggerlab/riboseek/blob/ef28e4bd0d023f683d9ba40a871a99baecb2bfcf/data/dinuc.out
