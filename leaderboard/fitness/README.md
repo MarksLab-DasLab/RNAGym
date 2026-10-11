@@ -3,32 +3,38 @@
 Signed Spearman correlation with experimental fitness on 29 ncRNA assays of 27
 RNA molecules. Assays of the same molecule are averaged first, as ProteinGym
 averages the assays of one protein. Columns then average molecules within each
-category, and Macro weights the three categories equally. Higher is better.
+category, and Macro weights the three categories equally. Depth macro instead
+computes Spearman separately at each mutation count, then averages. This
+measures how well models rank variants when the naive prior that more mutations
+are worse (see Mutation count) no longer helps. Italic rows are simple baselines
+without pretraining. Higher is better.
 
 <!-- BEGIN GENERATED TABLES -->
-| Rank | Model | Ribozyme (24 assays, 23 molecules) | tRNA (3 assays, 2 molecules) | Aptamer (2 assays, 2 molecules) | Macro (3 ncRNA) |
-|---:|:--|--:|--:|--:|--:|
-| 1 | EVmutation* | 0.2474 | 0.4397 | 0.1371 | 0.2747 |
-| 2 | AIDO.RNA (650M) | 0.0610 | 0.4663 | 0.0934 | 0.2069 |
-| 3 | Evo 2 (20B) | 0.1037 | 0.4206 | 0.0937 | 0.2060 |
-| 4 | Evo 2 (40B) | 0.1012 | 0.4177 | 0.0970 | 0.2053 |
-| 5 | AIDO.RNA (1.6B) | 0.0475 | 0.4656 | 0.0718 | 0.1950 |
-| 6 | Evo 2 (7B) | 0.0636 | 0.3790 | 0.1192 | 0.1873 |
-| 7 | Evo 2 (1B base) | 0.0016 | 0.4197 | 0.1334 | 0.1849 |
-| 8 | RNA-ERNIE | 0.1363 | 0.3757 | 0.0306 | 0.1809 |
-| 9 | RNAGenesis | 0.0684 | 0.4264 | 0.0343 | 0.1764 |
-| 10 | RiNALMo | -0.0156 | 0.4654 | 0.0459 | 0.1652 |
-| 11 | AIDO.RNA (300M) | -0.0236 | 0.4332 | 0.0372 | 0.1489 |
-| 12 | AIDO.RNA (25M) | -0.0199 | 0.4289 | 0.0348 | 0.1479 |
-| 13 | Evo 1.5 | 0.0562 | 0.3515 | -0.0010 | 0.1356 |
-| 14 | Nucleotide Transformer v3 (8M) | -0.0075 | 0.2713 | 0.0988 | 0.1209 |
-| 15 | RNA-FM | -0.0083 | 0.3709 | -0.0043 | 0.1194 |
-| 16 | Nucleotide Transformer v3 (650M) | -0.0186 | 0.3254 | 0.0436 | 0.1168 |
-| 17 | Nucleotide Transformer v3 (100M) | -0.0128 | 0.2415 | 0.1001 | 0.1096 |
-| 18 | AIDO.RNA (1M) | 0.0105 | 0.1383 | 0.0626 | 0.0705 |
-| 19 | Orthrus | -0.0427 | 0.0778 | 0.1578 | 0.0643 |
-| 20 | Evo 1 | -0.0104 | 0.0882 | 0.0300 | 0.0359 |
-| 21 | GenSLM (2.5B) | -0.0205 | 0.0528 | 0.0620 | 0.0315 |
+| Rank | Model | Ribozyme (n=24) | tRNA (n=3) | Aptamer (n=2) | Macro (3 ncRNA) | Depth macro |
+|---:|:--|--:|--:|--:|--:|--:|
+| 1 | _EVmutation_\* | 0.25 | 0.44 | 0.14 | 0.27 | 0.14 |
+| 2 | _RNA-2Di_ | 0.25 | 0.47 | -0.07 | 0.22 | 0.12 |
+| 3 | AIDO.RNA (650M) | 0.06 | 0.47 | 0.09 | 0.21 | 0.07 |
+| 4 | Evo 2 (20B) | 0.10 | 0.42 | 0.09 | 0.21 | 0.09 |
+| 5 | Evo 2 (40B) | 0.10 | 0.42 | 0.10 | 0.21 | 0.09 |
+| 6 | AIDO.RNA (1.6B) | 0.05 | 0.47 | 0.07 | 0.19 | 0.06 |
+| 7 | Evo 2 (7B) | 0.06 | 0.38 | 0.12 | 0.19 | 0.07 |
+| 8 | Evo 2 (1B base) | 0.00 | 0.42 | 0.13 | 0.18 | 0.07 |
+| 9 | _Mutation count_ | 0.20 | 0.46 | -0.12 | 0.18 | 0.00 |
+| 10 | RNA-ERNIE | 0.14 | 0.38 | 0.03 | 0.18 | 0.10 |
+| 11 | RNAGenesis | 0.07 | 0.43 | 0.03 | 0.18 | 0.03 |
+| 12 | RiNALMo | -0.02 | 0.47 | 0.05 | 0.17 | 0.05 |
+| 13 | AIDO.RNA (300M) | -0.02 | 0.43 | 0.04 | 0.15 | 0.03 |
+| 14 | AIDO.RNA (25M) | -0.02 | 0.43 | 0.03 | 0.15 | 0.04 |
+| 15 | Evo 1.5 | 0.06 | 0.35 | 0.00 | 0.14 | 0.05 |
+| 16 | Nucleotide Transformer v3 (8M) | -0.01 | 0.27 | 0.10 | 0.12 | 0.05 |
+| 17 | RNA-FM | -0.01 | 0.37 | 0.00 | 0.12 | -0.01 |
+| 18 | Nucleotide Transformer v3 (650M) | -0.02 | 0.33 | 0.04 | 0.12 | 0.03 |
+| 19 | Nucleotide Transformer v3 (100M) | -0.01 | 0.24 | 0.10 | 0.11 | 0.05 |
+| 20 | AIDO.RNA (1M) | 0.01 | 0.14 | 0.06 | 0.07 | 0.04 |
+| 21 | Orthrus | -0.04 | 0.08 | 0.16 | 0.06 | 0.05 |
+| 22 | Evo 1 | -0.01 | 0.09 | 0.03 | 0.04 | -0.01 |
+| 23 | GenSLM (2.5B) | -0.02 | 0.05 | 0.06 | 0.03 | 0.03 |
 
 Assays of the same RNA molecule are averaged before their category (Domingo_2018_tRNA with Li_2016_tRNA, Zhang_2024_line1_mini_ribozyme with Zhang_2024_line1_full_ribozyme), as ProteinGym averages the assays of one protein.
 
@@ -45,7 +51,11 @@ Masked language models use `wt-fill`: mask each mutated position in the wild-typ
 sequence and sum `log p(mutant) - log p(wild type)`. This follows the [ESM][1]
 and [ProteinGym][2] implementations. All four [fill strategies][3] are available
 in the prediction files. RNA-ERNIE uses unmasked wild-type probability changes.
-GenSLM uses mean next-codon log likelihood, excluding padding.
+GenSLM uses mean next-codon log likelihood, excluding padding. EVmutation
+scores the change in statistical energy of a pairwise model fitted to each
+assay's Riboseek MSA. RNA-2Di sums Riboseek's dinucleotide [substitution log
+odds][7] over the dinucleotides a variant changes. Mutation count is the
+negative number of substitutions.
 
 ## Reproduce
 
@@ -66,3 +76,4 @@ pixi run --locked -e default check-published
 [4]: ../../rnagym/fitness/README.md
 [5]: evmutation_coverage.csv
 [6]: leaderboard_evmutation.csv
+[7]: https://github.com/steineggerlab/riboseek/blob/ef28e4bd0d023f683d9ba40a871a99baecb2bfcf/data/dinuc.out
