@@ -172,3 +172,46 @@ def test_genslm_scoring(fitness_data) -> None:
         atol=1e-5,
         rtol=1e-6,
     )
+
+
+def test_substitution_scoring(fitness_data) -> None:
+    """Reproduce released baseline scores and recompute them one variant at a time."""
+    if MODEL not in {None, "default"}:
+        pytest.skip("Run the substitution baselines in the default environment")
+    from rnagym.fitness.baselines.substitution import compute_fitness as scorer
+
+    scorer.main([])
+    matrix, scale = scorer.load_matrix()
+    pairs = [a + b for a in "ACGU" for b in "ACGU"] + [f"{a}N" for a in "ACGU"]
+    index = {pair: i for i, pair in enumerate(pairs)}
+
+    def dinucleotides(sequence: str) -> list[int]:
+        padded = sequence.upper().replace("T", "U") + "N"
+        return [index[padded[i : i + 2]] for i in range(len(sequence))]
+
+    released = pl.read_parquet(FIXTURE_DIR / "predictions.parquet")
+    reference = pl.read_csv(ConfigFitness.REFERENCE_FILE)
+    for name, wild_type in reference.select("DMS_ID", "RAW_CONSTRUCT_SEQ").iter_rows():
+        assay = pl.read_csv(ConfigFitness.ASSAY_DIR / f"{name}.csv").drop_nulls(
+            "mutant"
+        )
+        wt = dinucleotides(wild_type)
+        expected = {
+            "RNA-2Di": [
+                scale
+                * sum(matrix[a, b] - matrix[a, a] for a, b in zip(wt, dinucleotides(s)))
+                for s in assay["sequence"]
+            ],
+            "mutation_count": -assay["mutant"].str.count_matches(",").cast(int) - 1,
+        }
+        for model, values in expected.items():
+            folder, column = resolve_source(SCORE_COLS, model)
+            path = ConfigFitness.PREDICTION_DIR / folder / f"{name}.csv"
+            scored = pl.read_csv(path).drop_nulls("mutant")[column]
+            np.testing.assert_allclose(scored, values, rtol=0, atol=1e-9)
+            np.testing.assert_array_equal(
+                scored,
+                released.filter(
+                    (pl.col("model") == model) & (pl.col("DMS_ID") == name)
+                )["score"],
+            )

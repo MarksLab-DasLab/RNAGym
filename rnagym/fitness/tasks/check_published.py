@@ -300,6 +300,7 @@ def fingerprint() -> str:
         "baselines/*/*.sh",
         "baselines/*/src/*",
         "baselines/masked_lm/*.py",
+        "baselines/substitution/riboseek/*",
     ):
         paths.update(path for path in ConfigFitness.DIR.glob(pattern) if path.is_file())
     for path in sorted(paths):

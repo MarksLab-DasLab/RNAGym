@@ -28,6 +28,7 @@ Replace `<env>` with a model environment from [pixi.toml][2]:
 
 | Environment | Model |
 | --- | --- |
+| `default` | RNA-2Di and mutation count |
 | `aido-rna` | AIDO.RNA |
 | `evmutation` | EVmutation |
 | `evo` | Evo 1 / 1.5 |
@@ -60,6 +61,8 @@ Sources and weights are fetched automatically, except for [GenSLM 2.5B][3].
 Download its checkpoint through authenticated Globus access to
 `$RNAGYM_CHECKPOINT_DIR/genslm/2.5B/`. EVmutation uses Riboseek MSAs under
 `data/fitness/msa/riboseek/by_assay/` and leaves uncovered variants unscored.
+The RNA-2Di matrix ships with the package, from Riboseek v1.0.1 under its MIT
+license.
 
 GenSLM reports mean next-codon log likelihood, excluding padding. Masked models
 compute all four [fill strategies][4], with `wt-fill` used for the leaderboard.
