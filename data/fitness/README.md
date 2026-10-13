@@ -8,7 +8,7 @@
 | `msa/riboseek/` | Riboseek alignments for unique ncRNA fitness sequences |
 | `msa/mmseqs/` | Conventional nucleotide MMseqs2 comparison alignments |
 | `msa/riboseek/by_assay/`, `msa/mmseqs/by_assay/` | Alignment symlinks named by the paper's `DMS_ID` assay key |
-| `reference_sheet_final.csv` | Assay metadata, wild-type constructs and the molecule each assay measures |
+| `reference_sheet_final.csv` | Assay metadata, wild-type constructs, alignment queries and the molecule each assay measures |
 | `reports/` | Supplemental fitness analysis tables |
 
 ## Keeping the directory in step with the reference sheet
@@ -32,6 +32,24 @@ and ProteinGym keeps orthologs apart. Coding assays use their UniProt entry
 name. A data directory set up before this column existed needs the current
 `reference_sheet_final.csv`, or `performance_fitness` stops with a missing
 column error.
+
+## Alignment queries
+
+`ALIGNMENT_QUERY_SEQ` is `RAW_CONSTRUCT_SEQ` with every position that must not
+recruit homologs replaced by `N`: T7 leaders, PCR primer constants, Illumina
+adapters and cloning sites. Left in, they recruit hits from other SELEX
+libraries and adapter-contaminated database entries.
+
+Positions any variant mutates are never masked, and neither are tracts of 6 nt
+or fewer, which are too short to recruit hits.
+
+The column masks rather than trims, so it is the same length as the construct
+and variant positions still map directly.
+
+The 29 scored ncRNA assays carry a query; 9 of them are masked and 20 are
+fully biological and carry the unmasked construct. Rows without an assessment
+are empty. Nothing reads the column yet: `rnagym/sequences.py` still builds
+alignment queries from `RAW_CONSTRUCT_SEQ`.
 
 ## Assay lookup
 
