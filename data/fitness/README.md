@@ -37,27 +37,16 @@ column error.
 
 `ALIGNMENT_QUERY_SEQ` is `RAW_CONSTRUCT_SEQ` with every position that must not
 recruit homologs replaced by `N`: T7 leaders, PCR primer constants, Illumina
-adapters, cloning sites, vector context and designed linkers. Allowed into a
-homology search, those tracts recruit hits on generic experimental identity,
-such as other members of the same SELEX library or any adapter-contaminated
-database entry, and the resulting alignment describes the experiment rather
-than the RNA.
+adapters and cloning sites. Left in, they recruit hits from other SELEX
+libraries and adapter-contaminated database entries.
 
-The test is whether a tract can independently recruit sequence through generic
-experimental context. Neither whether it folds nor whether it is mutated
-settles that: Kobori's randomized communication bases are all those assays
-measure and are still designed synthetic sequence, and Janzen's three-prime
-constant carries the mapped aminoacylation site and is still 24 nt shared
-across the whole N21 library.
+Positions any variant mutates are never masked, and neither are tracts of 6 nt
+or fewer, which are too short to recruit hits.
 
 The column masks rather than trims, so it is the same length as the construct
-and variant positions still map directly. Two masked regions are internal,
-`Kobori_2015_ribozyme_j12` 30-33 and `Kobori_2015_ribozyme_p4` 105-108, where
-trimming would splice the HDV-like scaffold onto the guanine aptamer and make a
-junction present in no real molecule. Coordinates are one-based and inclusive,
-as the `mutant` labels are.
+and variant positions still map directly.
 
-The 29 scored ncRNA assays carry a query; 14 of them are masked and 15 are
+The 29 scored ncRNA assays carry a query; 9 of them are masked and 20 are
 fully biological and carry the unmasked construct. Rows without an assessment
 are empty. Nothing reads the column yet: `rnagym/sequences.py` still builds
 alignment queries from `RAW_CONSTRUCT_SEQ`.
