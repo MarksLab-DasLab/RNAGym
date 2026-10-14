@@ -187,7 +187,9 @@ def main(adapter: MaskedLMAdapter):
                     wild_type,
                 )
                 # Keep both outputs from the same writer when assay jobs finish together
-                with (output_dir / ".write.lock").open("a") as lock:
+                lock_file = ConfigFitness.CACHE_DIR / f"{output_dir.name}.lock"
+                lock_file.parent.mkdir(parents=True, exist_ok=True)
+                with lock_file.open("a") as lock:
                     fcntl.flock(lock, fcntl.LOCK_EX)
                     temporary.replace(output_file)
                     manifest_temporary.replace(manifest_file)

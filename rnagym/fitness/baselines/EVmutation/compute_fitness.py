@@ -31,6 +31,7 @@ def build_config(
     sequence_id: str,
     work_dir: Path,
     cpu_count: int,
+    first_index: int,
 ) -> dict[str, Any]:
     """Build the EVcouplings existing-alignment pipeline configuration."""
     return {
@@ -49,7 +50,7 @@ def build_config(
             "alphabet": "dna",
             "protocol": "existing",
             "input_alignment": str(alignment_file),
-            "first_index": 1,
+            "first_index": first_index,
             "sequence_id": sequence_id,
             "seqid_filter": None,
             "focus_sequence": sequence_id,
@@ -123,7 +124,9 @@ def infer_model(config: dict[str, Any]) -> CouplingsModel:
     """Fit DNA couplings with the alignment's coverage mask and query coordinates."""
     alignment = execute(**(config | {"stages": ["align"]}))
     positions = prepare_dna_alignment(
-        Path(alignment["alignment_file"]), alignment["focus_sequence"]
+        Path(alignment["alignment_file"]),
+        alignment["focus_sequence"],
+        config["align"]["first_index"],
     )
     # Preserve upstream (L - 1)(q - 1) scaling after replacing masked bases with gaps
     couplings = config["couplings"] | {
@@ -141,7 +144,7 @@ def main() -> None:
     """Score selected reference-sheet assays with released Riboseek MSAs."""
     args = parse_args()
     msa_dir = ConfigFitness.MSA_DIR / "by_assay"
-    work_dir = ConfigFitness.DATA_DIR / "tmp/evmutation"
+    work_dir = ConfigFitness.CACHE_DIR / "evmutation"
     if args.cpu < 1:
         raise ValueError("--cpu must be positive")
     if not msa_dir.is_dir():
@@ -155,8 +158,10 @@ def main() -> None:
     for name, raw_sequence in reference.select(
         "DMS_ID", "RAW_CONSTRUCT_SEQ"
     ).iter_rows():
-        alignment_file = msa_dir / f"{name}.a3m"
-        query_file = msa_dir / f"{name}.fa"
+        # Prefer the alignment of the construct without its masked ends
+        stem = f"{name}_masked" if (msa_dir / f"{name}_masked.a3m").is_file() else name
+        alignment_file = msa_dir / f"{stem}.a3m"
+        query_file = msa_dir / f"{stem}.fa"
         if not alignment_file.is_file() and not query_file.is_file():
             continue
         if not alignment_file.is_file() or not query_file.is_file():
@@ -233,7 +238,7 @@ def parse_mutations(mutant: str | None, wild_type: str) -> list[tuple[int, str, 
     return mutations
 
 
-def prepare_dna_alignment(path: Path, focus_id: str) -> list[int]:
+def prepare_dna_alignment(path: Path, focus_id: str, first_index: int) -> list[int]:
     """Convert protein A2M gaps and focus masking to PLMC's DNA representation."""
     # PLMC handles dot gaps and lowercase focus masking only for its protein alphabet
     # https://github.com/debbiemarkslab/plmc/blob/9152c483e18263a90cbe79082a61e83cf6dd70a1/src/plm.c#L248-L258
@@ -252,7 +257,7 @@ def prepare_dna_alignment(path: Path, focus_id: str) -> list[int]:
                     # Gap-reduced PLMC excludes query gaps while retaining original indices
                     line = "".join("-" if base.islower() else base for base in line)
                 output.write(line.upper().replace(".", "-"))
-    positions = [i + 1 for i, base in enumerate(query) if base in "ACGT"]
+    positions = [first_index + i for i, base in enumerate(query) if base in "ACGT"]
     if not positions:
         raise ValueError("Alignment has no covered query positions")
     destination.replace(path)
@@ -275,7 +280,13 @@ def score_assay(
         raise ValueError(f"The Riboseek MSA and query identifiers differ for {name}")
     aligned_query = normalize_sequence(aligned_query)
     query_sequence = normalize_sequence(query_sequence)
-    if aligned_query != wild_type or query_sequence != wild_type:
+    # A masked query is the construct without its masked ends
+    offset = wild_type.find(aligned_query)
+    if (
+        query_sequence != aligned_query
+        or offset < 0
+        or wild_type.count(aligned_query) != 1
+    ):
         raise ValueError(f"The Riboseek MSA query does not match {name}")
 
     dna_alignment_file = work_dir / "alignment.a3m"
@@ -289,6 +300,7 @@ def score_assay(
         sequence_id,
         work_dir,
         cpu_count,
+        offset + 1,
     )
     model = infer_model(config)
 

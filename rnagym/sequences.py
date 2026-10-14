@@ -20,25 +20,39 @@ SEARCH_FIELDS = "query,target,fident,alnlen,qcov,tcov,evalue,bits"
 
 
 def fitness_assays() -> pl.DataFrame:
-    """Load ncRNA fitness assay keys and sequences."""
-    return (
+    """Load ncRNA fitness assay keys, sequences and masked sequences."""
+    query = pl.col("ALIGNMENT_QUERY_SEQ")
+    assays = (
         pl.read_csv(ConfigFitness.REFERENCE_FILE)
         .filter(pl.col("RNA_TYPE") != "mRNA-coding")
         .select(
             "DMS_ID",
-            pl.col("RAW_CONSTRUCT_SEQ")
+            pl.col("RAW_CONSTRUCT_SEQ", "ALIGNMENT_QUERY_SEQ")
             .str.to_uppercase()
-            .str.replace_all("T", "U")
-            .alias("sequence"),
+            .str.replace_all("T", "U"),
+        )
+        .select(
+            "DMS_ID",
+            sequence="RAW_CONSTRUCT_SEQ",
+            # Search the construct without its masked ends
+            masked_sequence=pl.when(query.str.contains("N")).then(
+                query.str.strip_chars("N")
+            ),
         )
     )
+    if assays["masked_sequence"].str.contains("N").any():
+        raise RuntimeError("Alignment query masks must be terminal")
+    return assays
 
 
 def fitness_sequences() -> pl.DataFrame:
-    """Load the unique ncRNA fitness assay sequences."""
+    """Load the unique ncRNA fitness assay sequences and masked sequences."""
+    assays = fitness_assays()
     return (
-        fitness_assays()
-        .select("sequence")
+        pl.concat(
+            [assays.select("sequence"), assays.select(sequence="masked_sequence")]
+        )
+        .drop_nulls()
         .unique()
         .with_columns(pl.lit("fitness").alias("modality"))
     )

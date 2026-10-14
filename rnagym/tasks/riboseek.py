@@ -67,10 +67,14 @@ def _link_fitness_alignments(sequence_ids: set[str]) -> None:
     """Link assay keys to their shared sequence alignments."""
     alias_dir = ConfigFitness.MSA_DIR / "by_assay"
     alias_dir.mkdir(parents=True, exist_ok=True)
-    assays = fitness_assays().join(
-        load_registry(ConfigRiboseek.SEQUENCE_FILE), on="sequence"
-    )
-    for assay, sequence_id in assays.select("DMS_ID", "sequence_id").iter_rows():
+    assays = fitness_assays()
+    aliases = pl.concat(
+        [
+            assays.select("DMS_ID", "sequence"),
+            assays.select(pl.col("DMS_ID") + "_masked", sequence="masked_sequence"),
+        ]
+    ).join(load_registry(ConfigRiboseek.SEQUENCE_FILE), on="sequence")
+    for assay, sequence_id in aliases.select("DMS_ID", "sequence_id").iter_rows():
         if sequence_id not in sequence_ids:
             continue
         for suffix in (".a3m", ".afa", ".fa"):
