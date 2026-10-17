@@ -11,7 +11,12 @@ from shlex import split
 import polars as pl
 
 from rnagym.config import Config3D, ConfigFitness, ConfigRiboseek
-from rnagym.sequences import fitness_assays, fitness_sequences, load_registry
+from rnagym.sequences import (
+    fitness_aliases,
+    fitness_sequences,
+    load_registry,
+    prune_fitness_aliases,
+)
 
 MSA_DESCRIPTION = "Riboseek CM 30k x3"
 
@@ -67,10 +72,11 @@ def _link_fitness_alignments(sequence_ids: set[str]) -> None:
     """Link assay keys to their shared sequence alignments."""
     alias_dir = ConfigFitness.MSA_DIR / "by_assay"
     alias_dir.mkdir(parents=True, exist_ok=True)
-    assays = fitness_assays().join(
+    prune_fitness_aliases(alias_dir)
+    aliases = fitness_aliases().join(
         load_registry(ConfigRiboseek.SEQUENCE_FILE), on="sequence"
     )
-    for assay, sequence_id in assays.select("DMS_ID", "sequence_id").iter_rows():
+    for assay, sequence_id in aliases.select("DMS_ID", "sequence_id").iter_rows():
         if sequence_id not in sequence_ids:
             continue
         for suffix in (".a3m", ".afa", ".fa"):

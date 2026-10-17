@@ -48,8 +48,8 @@ and variant positions still map directly.
 
 The 29 scored ncRNA assays carry a query; 9 of them are masked and 20 are
 fully biological and carry the unmasked construct. Rows without an assessment
-are empty. Nothing reads the column yet: `rnagym/sequences.py` still builds
-alignment queries from `RAW_CONSTRUCT_SEQ`.
+are empty. Riboseek searches each masked query without its `N` ends, and
+`msa/riboseek/by_assay/{DMS_ID}_masked.a3m` links the result.
 
 ## Assay lookup
 

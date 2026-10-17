@@ -19,29 +19,60 @@ REGISTRY_SCHEMA = pl.Schema(
 SEARCH_FIELDS = "query,target,fident,alnlen,qcov,tcov,evalue,bits"
 
 
+def fitness_aliases() -> pl.DataFrame:
+    """Key each ncRNA fitness sequence by its assay, and each masked sequence by
+    its assay with a `_masked` suffix."""
+    assays = fitness_assays()
+    return pl.concat(
+        [
+            assays.select("DMS_ID", "sequence"),
+            assays.select(pl.col("DMS_ID") + "_masked", sequence="masked_sequence"),
+        ]
+    ).drop_nulls()
+
+
 def fitness_assays() -> pl.DataFrame:
-    """Load ncRNA fitness assay keys and sequences."""
-    return (
+    """Load ncRNA fitness assay keys, sequences and masked sequences."""
+    query = pl.col("ALIGNMENT_QUERY_SEQ")
+    assays = (
         pl.read_csv(ConfigFitness.REFERENCE_FILE)
         .filter(pl.col("RNA_TYPE") != "mRNA-coding")
         .select(
             "DMS_ID",
-            pl.col("RAW_CONSTRUCT_SEQ")
+            pl.col("RAW_CONSTRUCT_SEQ", "ALIGNMENT_QUERY_SEQ")
             .str.to_uppercase()
-            .str.replace_all("T", "U")
-            .alias("sequence"),
+            .str.replace_all("T", "U"),
+        )
+        .select(
+            "DMS_ID",
+            sequence="RAW_CONSTRUCT_SEQ",
+            # Search the construct without its masked ends
+            masked_sequence=pl.when(query.str.contains("N")).then(
+                query.str.strip_chars("N")
+            ),
         )
     )
+    if assays["masked_sequence"].str.contains("N").any():
+        raise RuntimeError("Alignment query masks must be terminal")
+    return assays
 
 
 def fitness_sequences() -> pl.DataFrame:
-    """Load the unique ncRNA fitness assay sequences."""
+    """Load the unique ncRNA fitness assay sequences and masked sequences."""
     return (
-        fitness_assays()
+        fitness_aliases()
         .select("sequence")
         .unique()
         .with_columns(pl.lit("fitness").alias("modality"))
     )
+
+
+def prune_fitness_aliases(directory: Path) -> None:
+    """Delete alignment links whose assay or mask left the reference sheet."""
+    current = set(fitness_aliases()["DMS_ID"])
+    for link in directory.glob("*"):
+        if link.is_symlink() and link.stem not in current:
+            link.unlink()
 
 
 def load_registry(path: Path, required: bool = True) -> pl.DataFrame:

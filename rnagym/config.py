@@ -78,6 +78,7 @@ class ConfigFitness(_Config):
 
     DIR = _REPO_DIR / "rnagym" / "fitness"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "fitness"
+    CACHE_DIR = _CACHE_DIR / "fitness"
     DATA_DIR = _DATA_DIR / "fitness"
     ASSAY_DIR = DATA_DIR / "assays"
     COMBINED_DIR = DATA_DIR / "merged"
