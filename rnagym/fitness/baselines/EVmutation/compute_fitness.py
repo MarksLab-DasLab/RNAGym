@@ -155,25 +155,37 @@ def main() -> None:
     work_dir.mkdir(parents=True, exist_ok=True)
     completed = 0
     rejected = 0
-    for name, raw_sequence in reference.select(
-        "DMS_ID", "RAW_CONSTRUCT_SEQ"
+    for name, raw_sequence, alignment_query in reference.select(
+        "DMS_ID", "RAW_CONSTRUCT_SEQ", "ALIGNMENT_QUERY_SEQ"
     ).iter_rows():
-        # Prefer the alignment of the construct without its masked ends
-        stem = f"{name}_masked" if (msa_dir / f"{name}_masked.a3m").is_file() else name
+        if raw_sequence is None:
+            raise ValueError(f"{name} has no reference sequence")
+        wild_type = normalize_sequence(raw_sequence)
+        # A masked assay is aligned as its construct without the N ends
+        masked = normalize_sequence(alignment_query or "")
+        masked = masked if "N" in masked else ""
+        query = masked.strip("N") if masked else wild_type
+        offset = len(masked) - len(masked.lstrip("N"))
+        if (
+            (masked and len(masked) != len(wild_type))
+            or not query
+            or "N" in query
+            or wild_type[offset : offset + len(query)] != query
+        ):
+            raise ValueError(f"{name} has an invalid alignment query")
+        stem = f"{name}_masked" if masked else name
         alignment_file = msa_dir / f"{stem}.a3m"
         query_file = msa_dir / f"{stem}.fa"
-        if not alignment_file.is_file() and not query_file.is_file():
+        if not masked and not alignment_file.is_file() and not query_file.is_file():
             continue
         if not alignment_file.is_file() or not query_file.is_file():
-            raise FileNotFoundError(f"Incomplete Riboseek MSA files for {name}")
+            raise FileNotFoundError(f"Incomplete Riboseek MSA files for {stem}")
         assay_file = ConfigFitness.ASSAY_DIR / f"{name}.csv"
         if not assay_file.is_file():
             raise FileNotFoundError(f"Fitness assay is missing: {assay_file}")
         output_file = args.output / assay_file.name
-        if output_file.exists():
+        if output_file.exists() and not args.force:
             continue
-        if raw_sequence is None:
-            raise ValueError(f"{name} has no reference sequence")
 
         print(f"Scoring {name}", flush=True)
         try:
@@ -182,13 +194,16 @@ def main() -> None:
                     assay_file,
                     alignment_file,
                     query_file,
-                    normalize_sequence(raw_sequence),
+                    wild_type,
+                    query,
+                    offset,
                     name,
                     Path(path),
                     args.cpu,
                 )
         except BailoutException as error:
             print(f"Skipped {name}: {error}", flush=True)
+            output_file.unlink(missing_ok=True)
             rejected += 1
             continue
         write_csv_atomically(result, output_file)
@@ -211,6 +226,9 @@ def parse_args() -> argparse.Namespace:
         "--output", type=Path, default=ConfigFitness.PREDICTION_DIR / "EVmutation"
     )
     parser.add_argument("--cpu", type=int, default=4)
+    parser.add_argument(
+        "--force", action="store_true", help="Rescore assays that already have output"
+    )
     return parser.parse_args()
 
 
@@ -269,6 +287,8 @@ def score_assay(
     alignment_file: Path,
     query_file: Path,
     wild_type: str,
+    query: str,
+    offset: int,
     name: str,
     work_dir: Path,
     cpu_count: int,
@@ -280,13 +300,7 @@ def score_assay(
         raise ValueError(f"The Riboseek MSA and query identifiers differ for {name}")
     aligned_query = normalize_sequence(aligned_query)
     query_sequence = normalize_sequence(query_sequence)
-    # A masked query is the construct without its masked ends
-    offset = wild_type.find(aligned_query)
-    if (
-        query_sequence != aligned_query
-        or offset < 0
-        or wild_type.count(aligned_query) != 1
-    ):
+    if aligned_query != query or query_sequence != query:
         raise ValueError(f"The Riboseek MSA query does not match {name}")
 
     dna_alignment_file = work_dir / "alignment.a3m"

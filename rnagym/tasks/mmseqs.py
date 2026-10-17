@@ -16,7 +16,7 @@ from shlex import quote, split
 import polars as pl
 
 from rnagym.config import Config3D, ConfigFitness, ConfigMMseqs, ConfigRiboseek
-from rnagym.sequences import fitness_assays, load_registry
+from rnagym.sequences import fitness_aliases, load_registry, prune_fitness_aliases
 from rnagym.tasks.prepare_mmseqs import run
 from rnagym.tasks.riboseek import normalize_query, read_alignment
 
@@ -304,7 +304,8 @@ def finish() -> None:
                     }
                 )
 
-        aliases = fitness_assays().join(
+        prune_fitness_aliases(ConfigFitness.MSA_DIR.with_name("mmseqs") / "by_assay")
+        aliases = fitness_aliases().join(
             queries.filter(pl.col("benchmark") == "fitness"), on="sequence"
         )
         for row in aliases.iter_rows(named=True):
@@ -315,6 +316,7 @@ def finish() -> None:
                 target = Path("..") / f"{row['sequence_id']}{suffix}"
                 if link.is_symlink() and link.readlink() == target:
                     continue
+                link.unlink(missing_ok=True)
                 link.symlink_to(target)
         pl.DataFrame(report).sort("benchmark", "sequence_id").write_csv(
             ConfigMMseqs.WORK_DIR / "summary.csv"

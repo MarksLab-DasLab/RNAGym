@@ -19,6 +19,18 @@ REGISTRY_SCHEMA = pl.Schema(
 SEARCH_FIELDS = "query,target,fident,alnlen,qcov,tcov,evalue,bits"
 
 
+def fitness_aliases() -> pl.DataFrame:
+    """Key each ncRNA fitness sequence by its assay, and each masked sequence by
+    its assay with a `_masked` suffix."""
+    assays = fitness_assays()
+    return pl.concat(
+        [
+            assays.select("DMS_ID", "sequence"),
+            assays.select(pl.col("DMS_ID") + "_masked", sequence="masked_sequence"),
+        ]
+    ).drop_nulls()
+
+
 def fitness_assays() -> pl.DataFrame:
     """Load ncRNA fitness assay keys, sequences and masked sequences."""
     query = pl.col("ALIGNMENT_QUERY_SEQ")
@@ -47,15 +59,20 @@ def fitness_assays() -> pl.DataFrame:
 
 def fitness_sequences() -> pl.DataFrame:
     """Load the unique ncRNA fitness assay sequences and masked sequences."""
-    assays = fitness_assays()
     return (
-        pl.concat(
-            [assays.select("sequence"), assays.select(sequence="masked_sequence")]
-        )
-        .drop_nulls()
+        fitness_aliases()
+        .select("sequence")
         .unique()
         .with_columns(pl.lit("fitness").alias("modality"))
     )
+
+
+def prune_fitness_aliases(directory: Path) -> None:
+    """Delete alignment links whose assay or mask left the reference sheet."""
+    current = set(fitness_aliases()["DMS_ID"])
+    for link in directory.glob("*"):
+        if link.is_symlink() and link.stem not in current:
+            link.unlink()
 
 
 def load_registry(path: Path, required: bool = True) -> pl.DataFrame:
