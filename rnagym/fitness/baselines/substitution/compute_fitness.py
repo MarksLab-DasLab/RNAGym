@@ -8,6 +8,7 @@ changes, relative to the wild type's own scores.
 from __future__ import annotations
 
 import argparse
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -25,6 +26,29 @@ BASES = str.maketrans("ACGTU", "01233")
 LETTERS = "CGLQDFRKMAPIENHS" + "TVWY"
 # Riboseek v1.0.1 RNA-2Di_avg, vendored with its MIT license
 MATRIX_FILE = Path(__file__).with_name("riboseek") / "dinuc.out"
+NUCLEOTIDES = "^[ACGTUacgtu]+$"
+
+
+def check_sequences(name: str, wild_type: str, sequences: pl.Series) -> None:
+    """Require every sequence to be the wild type's length in A, C, G, T or U.
+
+    ``encode`` reshapes all sequences at once, so a wrong length would shift bases
+    between rows and any other character would be read as a base, both silently.
+    """
+    if re.fullmatch(NUCLEOTIDES, wild_type) is None:
+        raise ValueError(
+            f"{name} has a wild type with letters other than A, C, G, T or U"
+        )
+    invalid = (
+        ~sequences.str.contains(NUCLEOTIDES)
+        | (sequences.str.len_chars() != len(wild_type))
+    ).fill_null(True)
+    if invalid.any():
+        rows = invalid.arg_true().head(5).to_list()
+        raise ValueError(
+            f"{name} rows {rows} (zero-based) are not {len(wild_type)} nt "
+            "of A, C, G, T or U"
+        )
 
 
 def dinucleotides(codes: np.ndarray) -> np.ndarray:
@@ -70,6 +94,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     reference = read_reference(ConfigFitness.REFERENCE_FILE, rows)
     for name, wild_type in reference.select("DMS_ID", "RAW_CONSTRUCT_SEQ").iter_rows():
         assay = read_assay(ConfigFitness.ASSAY_DIR / f"{name}.csv")
+        check_sequences(name, wild_type, assay["sequence"])
         codes, wt_codes = encode(assay["sequence"].to_list()), encode([wild_type])
         mt, (wt,) = dinucleotides(codes), dinucleotides(wt_codes)
         # A changed dinucleotide wt -> mt adds S(wt, mt) - S(wt, wt)

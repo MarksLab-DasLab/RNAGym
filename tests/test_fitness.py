@@ -130,6 +130,36 @@ def test_fitness_workflow(fitness_data) -> None:
         assert_frame_equal(merged.select(assay.columns), assay)
 
 
+def test_substitution_rejects_malformed_sequences(fitness_data) -> None:
+    """Refuse rows that would shift bases between variants or read a non-base as one."""
+    if MODEL not in {None, "default"}:
+        pytest.skip("Run the substitution baselines in the default environment")
+    from rnagym.fitness.baselines.substitution import compute_fitness as scorer
+
+    scorer.check_sequences("assay", "ACGU", pl.Series(["acgt", "UGCA"]))
+    # Ragged rows whose total length still divides evenly, digits, other letters,
+    # and missing or empty sequences
+    for sequences in (["ACG", "UACGU"], ["A1GU"], ["ACGN"], [None], [""]):
+        with pytest.raises(ValueError, match="assay rows"):
+            scorer.check_sequences(
+                "assay", "ACGU", pl.Series(sequences, dtype=pl.String)
+            )
+    with pytest.raises(ValueError, match="wild type"):
+        scorer.check_sequences("assay", "AC1U", pl.Series(["ACGU"]))
+
+    # The scorer itself refuses an assay with a truncated variant
+    path = sorted(ConfigFitness.ASSAY_DIR.glob("*.csv"))[0]
+    assay = pl.read_csv(path)
+    row = assay["mutant"].is_not_null().arg_true()[0]
+    assay.with_columns(
+        pl.when(pl.int_range(pl.len()) == row)
+        .then(pl.col("sequence").str.slice(1))
+        .otherwise(pl.col("sequence"))
+    ).write_csv(path)
+    with pytest.raises(ValueError, match=f"{path.stem} rows"):
+        scorer.main([])
+
+
 def test_mutation_count_spearman() -> None:
     """Rank within each mutation count, skip small or flat counts, never pool them."""
     from rnagym.fitness.tasks.performance_fitness import (
