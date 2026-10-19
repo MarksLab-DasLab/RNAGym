@@ -12,8 +12,11 @@ import polars as pl
 
 from rnagym.config import ConfigFitness
 from rnagym.fitness.tasks import performance_fitness
+from rnagym.fitness.tasks.model_registry import BASELINE_MODELS
 
 CATEGORIES = ("Ribozyme", "tRNA", "Aptamer")
+# Mutation counts in the README tables; deeper counts rest on one or two molecules
+TABLE_MUTATIONS = range(1, 10)
 MODEL_LABELS = {
     "aido_rna": "AIDO.RNA (1.6B)",
     "aido_rna_1m": "AIDO.RNA (1M)",
@@ -28,11 +31,13 @@ MODEL_LABELS = {
     "evo2_40b": "Evo 2 (40B)",
     "EVmutation": "EVmutation",
     "GenSLM": "GenSLM (2.5B)",
+    "mutation_count": "Mutation count",
     "ntv3_8m": "Nucleotide Transformer v3 (8M)",
     "ntv3_100m": "Nucleotide Transformer v3 (100M)",
     "ntv3_650m": "Nucleotide Transformer v3 (650M)",
     "orthrus": "Orthrus",
     "rinalmo": "RiNALMo",
+    "RNA-2Di": "RNA-2Di",
     "RNAErnie": "RNA-ERNIE",
     "RNA-FM": "RNA-FM",
     "rnagenesis": "RNAGenesis",
@@ -58,8 +63,67 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Wrote fitness tables to {args.output}")
 
 
+def label(model: str) -> str:
+    """Display name, with baselines in italics and EVmutation marked for the footnote."""
+    name = MODEL_LABELS[model]
+    if model in BASELINE_MODELS:
+        name = f"_{name}_"
+    if model == "EVmutation":
+        name += "\\*"
+    return name
+
+
+def number(value: float | None) -> str:
+    """Two decimals, printing a correlation that rounds to -0.0 as 0.00."""
+    return "-" if value is None else f"{round(value, 2) + 0.0:.2f}"
+
+
+def render_count_tables(counts: pl.DataFrame, order: list[str]) -> str:
+    """Format Spearman within each mutation count, one table per RNA category.
+
+    Mutation count is constant within a count, so it scores zero and is left out.
+    """
+    sections = []
+    for name in CATEGORIES:
+        category = counts.filter(
+            (pl.col("RNA_TYPE") == name)
+            & pl.col("mutations").is_in(list(TABLE_MUTATIONS))
+        )
+        # Molecules at each count, from the models scored on every variant
+        molecules = dict(
+            category.filter(pl.col("model") != "EVmutation")
+            .group_by("mutations")
+            .agg(pl.col("molecules").max())
+            .iter_rows()
+        )
+        columns = sorted(molecules)
+        if not columns:
+            sections.append(f"{name}: no mutation count has enough variants.")
+            continue
+        values = {
+            (row["model"], row["mutations"]): row["spearman"]
+            for row in category.iter_rows(named=True)
+        }
+        lines = [
+            f"{name}, by mutation count (molecules):",
+            "",
+            "| Model | " + " | ".join(f"{m} ({molecules[m]})" for m in columns) + " |",
+            "|:--|" + "--:|" * len(columns),
+        ]
+        for model in order:
+            if model == "mutation_count":
+                continue
+            cells = [number(values.get((model, m))) for m in columns]
+            lines.append(f"| {label(model)} | " + " | ".join(cells) + " |")
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
+
+
 def render_table(table: pl.DataFrame, coverage: pl.DataFrame) -> str:
-    """Format category means, marking the baseline's partial coverage in the main table."""
+    """Format category means to two decimals, with baselines in italics.
+
+    EVmutation's partial coverage is marked for the footnote.
+    """
     headers = []
     for name in CATEGORIES:
         assays = coverage.filter(pl.col("RNA_TYPE") == name)
@@ -70,15 +134,11 @@ def render_table(table: pl.DataFrame, coverage: pl.DataFrame) -> str:
         "|---:|:--|--:|--:|--:|--:|",
     ]
     for rank, row in enumerate(table.iter_rows(named=True), 1):
-        model = MODEL_LABELS[row["model"]]
-        if row["model"] == "EVmutation":
-            model += "*"
-        values = [
-            "-" if row[column] is None else f"{row[column]:.4f}"
-            for column in (*CATEGORIES, "macro_3ncRNA")
-        ]
+        values = [number(row[column]) for column in (*CATEGORIES, "macro_3ncRNA")]
         place = str(rank) if row["macro_3ncRNA"] is not None else "-"
-        lines.append(f"| {place} | {model} | " + " | ".join(values) + " |")
+        lines.append(
+            f"| {place} | {label(row['model'])} | " + " | ".join(values) + " |"
+        )
     return "\n".join(lines)
 
 
@@ -89,6 +149,8 @@ def write_tables(reports: Path, output: Path) -> None:
     variants = int(coverage["evaluated_variants"].sum())
     total = int(coverage["variants"].sum())
     generated = ""
+    # Rows of the main table, in its rank order
+    order: list[str] = []
     output.mkdir(parents=True, exist_ok=True)
     for directory, filename in (
         (reports, "leaderboard_signed_3ncRNA.csv"),
@@ -106,6 +168,7 @@ def write_tables(reports: Path, output: Path) -> None:
         table.write_csv(output / filename)
         if directory == reports:
             generated = render_table(table, coverage)
+            order = table["model"].to_list()
     coverage.write_csv(output / "evmutation_coverage.csv")
     repeated = (
         coverage.group_by("MOLECULE_ID", maintain_order=True)
@@ -125,12 +188,32 @@ def write_tables(reports: Path, output: Path) -> None:
         + "Its row uses those variants. [Coverage by assay][5]. "
         + "[Compare all models on those variants][6]."
     )
+    counts = pl.read_csv(reports / "results_by_rna_type_and_mutation_count.csv").select(
+        pl.col("Model").str.strip_suffix("_score").alias("model"),
+        "RNA_TYPE",
+        pl.col("Mutations").alias("mutations"),
+        pl.col("Spearman_Mean").alias("spearman"),
+        pl.col("Molecules").alias("molecules"),
+    )
+    counts.write_csv(output / "leaderboard_by_mutation_count.csv")
+    generated += (
+        "\n\n### By mutation count\n\n"
+        + "Spearman among variants with the same number of mutations within each "
+        + "assay, for counts with at least 30 variants and varying measured fitness, "
+        + "so the number of mutations alone ranks nothing. Assays of one molecule are "
+        + "averaged first, then molecules within each category. Counts are never "
+        + "averaged together. Molecule counts are those of the models scored on every "
+        + "variant. EVmutation\\* uses only the variants it scores, so its cells can "
+        + "rest on fewer molecules. Mutation count is left out, as it is constant "
+        + "within a count. [All counts][8].\n\n"
+        + render_count_tables(counts, order)
+    )
     readme = output / "README.md"
     start, end = "<!-- BEGIN GENERATED TABLES -->", "<!-- END GENERATED TABLES -->"
     text = (
         readme.read_text()
         if readme.exists()
-        else f"# Fitness leaderboard\n\n{start}\n{end}\n\n[5]: evmutation_coverage.csv\n[6]: leaderboard_evmutation.csv\n"
+        else f"# Fitness leaderboard\n\n{start}\n{end}\n\n[5]: evmutation_coverage.csv\n[6]: leaderboard_evmutation.csv\n[8]: leaderboard_by_mutation_count.csv\n"
     )
     before, rest = text.split(start)
     _, after = rest.split(end)

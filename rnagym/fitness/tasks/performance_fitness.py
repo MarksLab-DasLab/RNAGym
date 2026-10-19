@@ -23,8 +23,20 @@ logger = logging.getLogger(__name__)
 
 DEPTHS = ("single", "multiple")
 METRICS = ("Spearman", "AUC", "MCC")
+# Spearman within one mutation count leaves out counts with fewer variants, too few to rank
+MIN_COUNT_VARIANTS = 30
 # Reference sheet column naming the RNA molecule each assay measures
 MOLECULE = "MOLECULE_ID"
+# One row per assay, model and mutation count
+COUNT_SCHEMA = {
+    "DMS_ID": pl.String,
+    "RNA_TYPE": pl.String,
+    MOLECULE: pl.String,
+    "Model": pl.String,
+    "Mutations": pl.Int64,
+    "Spearman": pl.Float64,
+    "Variants": pl.Int64,
+}
 RNA_TYPES = ("mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme")
 
 
@@ -98,6 +110,25 @@ def aggregate_by_depth(depth_metrics: pl.DataFrame, models: list[str]) -> pl.Dat
             )
             rows.append(row)
     return pl.DataFrame(rows, infer_schema_length=None)
+
+
+def aggregate_by_mutation_count(count_metrics: pl.DataFrame) -> pl.DataFrame:
+    """Average Spearman within each mutation count over the molecules of each RNA type.
+
+    Assays of one molecule are averaged first. Counts are never averaged together.
+    """
+    keys = ("Model", "RNA_TYPE", "Mutations")
+    # A fixed group order fixes the order of the sums, so the table is bitwise stable
+    return (
+        count_metrics.group_by(*keys, MOLECULE, maintain_order=True)
+        .agg(pl.col("Spearman").mean())
+        .group_by(*keys, maintain_order=True)
+        .agg(
+            pl.col("Spearman").mean().alias("Spearman_Mean"),
+            pl.len().alias("Molecules"),
+        )
+        .sort(keys)
+    )
 
 
 def aggregate_by_rna_type(
@@ -199,7 +230,7 @@ def calculate_metrics(
     binary_assay = assay_scores > np.median(assay_scores)
     binary_model = model_scores > np.median(model_scores)
     return {
-        "Spearman": stats.spearmanr(assay_scores, model_scores).correlation,
+        "Spearman": spearman(assay_scores, model_scores),
         "AUC": float(roc_auc_score(binary_assay, model_scores)),
         "MCC": matthews_corrcoef(binary_assay, binary_model),
     }
@@ -232,6 +263,43 @@ def cli(argv: Sequence[str] | None = None) -> None:
     with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4):
         print(summary)
     print(f"Saved metrics to {args.output}")
+
+
+def mutation_count_rows(
+    dms_id: str,
+    rna_type: str,
+    molecule: str,
+    data: pl.DataFrame,
+    score_columns: list[str],
+) -> list[dict[str, object]]:
+    """Spearman within each mutation count of ``MIN_COUNT_VARIANTS`` or more variants.
+
+    Only variants with the same number of mutations are ranked against each other,
+    so ranking by the number of mutations alone scores zero. Counts whose measured
+    fitness never varies are skipped.
+    """
+    data = data.drop_nulls("mutant")
+    counts = data["mutant"].str.count_matches(",").to_numpy() + 1
+    measured = data["DMS_score"].cast(pl.Float64).to_numpy()
+    rows: list[dict[str, object]] = []
+    for count in np.unique(counts):
+        group = counts == count
+        if group.sum() < MIN_COUNT_VARIANTS or np.ptp(measured[group]) == 0:
+            continue
+        for column in score_columns:
+            scores = data[column].cast(pl.Float64).to_numpy()
+            rows.append(
+                {
+                    "DMS_ID": dms_id,
+                    "RNA_TYPE": rna_type,
+                    MOLECULE: molecule,
+                    "Model": column,
+                    "Mutations": int(count),
+                    "Spearman": spearman(measured[group], scores[group]),
+                    "Variants": int(group.sum()),
+                }
+            )
+    return rows
 
 
 def get_performance_dataset(
@@ -276,10 +344,11 @@ def load_assay_metrics(
     combined_dir: str | Path,
     score_columns: list[str],
     msa_only: bool = False,
-) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Calculate assay metrics and record the evaluated variant counts."""
     assay_rows = []
     depth_rows = []
+    count_rows = []
     combined_dir = Path(combined_dir)
     coverage = []
 
@@ -324,11 +393,12 @@ def load_assay_metrics(
         if undefined:
             raise ValueError(
                 f"{assay_path} has undefined Spearman correlation for {undefined}. "
-                "Each selected assay requires varying measurements and predictions."
+                "Each selected assay requires varying measurements."
             )
         keys = (assay_info["DMS_ID"], assay_info["RNA_TYPE"], assay_info[MOLECULE])
         assay_rows.extend(_metric_rows(*keys, filtered_results))
         depth_rows.extend(_metric_rows(*keys, filtered_results, "overall"))
+        count_rows.extend(mutation_count_rows(*keys, filtered, score_columns))
         for depth in DEPTHS:
             depth_results = get_performance_dataset(
                 filtered.filter(pl.col("Depth") == depth), "DMS_score", score_columns
@@ -341,6 +411,7 @@ def load_assay_metrics(
         pl.DataFrame(assay_rows).with_columns(pl.col(*METRICS).fill_nan(None)),
         pl.DataFrame(depth_rows).with_columns(pl.col(*METRICS).fill_nan(None)),
         pl.DataFrame(coverage),
+        pl.DataFrame(count_rows, schema=COUNT_SCHEMA),
     )
 
 
@@ -363,14 +434,16 @@ def main(args: argparse.Namespace) -> pl.DataFrame:
     ]
     assays: list[pl.DataFrame] = []
     depths: list[pl.DataFrame] = []
+    counts: list[pl.DataFrame] = []
     if complete_columns:
-        assay_metrics, depth_metrics, _ = load_assay_metrics(
+        assay_metrics, depth_metrics, _, count_metrics = load_assay_metrics(
             reference, args.input, complete_columns
         )
         assays.append(assay_metrics)
         depths.append(depth_metrics)
+        counts.append(count_metrics)
     if "EVmutation" in models:
-        shared_assays, shared_depths, coverage = load_assay_metrics(
+        shared_assays, shared_depths, coverage, shared_counts = load_assay_metrics(
             reference, args.input, score_columns, msa_only=True
         )
         save_results(
@@ -384,9 +457,14 @@ def main(args: argparse.Namespace) -> pl.DataFrame:
         baseline = pl.col("Model") == "EVmutation_score"
         assays.append(shared_assays.filter(baseline))
         depths.append(shared_depths.filter(baseline))
+        # EVmutation is ranked within each count on the variants it scores
+        counts.append(shared_counts.filter(baseline))
     assay_metrics, depth_metrics = pl.concat(assays), pl.concat(depths)
     by_rna_type = save_results(
         args.output, assay_metrics, depth_metrics, score_columns, rna_types
+    )
+    aggregate_by_mutation_count(pl.concat(counts)).write_csv(
+        args.output / "results_by_rna_type_and_mutation_count.csv"
     )
     return by_rna_type.select(
         "Model",
@@ -445,6 +523,13 @@ def select_assays(reference: pl.DataFrame, assay_type: str) -> pl.DataFrame:
     if assay_type == "all":
         return reference.clone()
     return reference.filter(pl.col("RNA_TYPE").is_in(ASSAY_GROUPS[assay_type]))
+
+
+def spearman(assay_scores: np.ndarray, model_scores: np.ndarray) -> float:
+    """Spearman correlation, zero for constant predictions, which rank nothing."""
+    if np.ptp(model_scores) == 0:
+        return 0.0
+    return float(stats.spearmanr(assay_scores, model_scores).statistic)
 
 
 if __name__ == "__main__":

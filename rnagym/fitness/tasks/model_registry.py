@@ -26,7 +26,9 @@ CHECKPOINT_MODELS = (
     "aido_rna_300m",
     "aido_rna_650m",
 )
-ALL_MODELS = (*CHECKPOINT_MODELS, "EVmutation")
+# Reference baselines rather than pretrained models, set in italics on the leaderboard
+BASELINE_MODELS = ("EVmutation", "RNA-2Di", "mutation_count")
+ALL_MODELS = (*CHECKPOINT_MODELS, *BASELINE_MODELS)
 
 ASSAY_GROUPS = {
     "ncRNA": ("Ribozyme", "tRNA", "Aptamer"),
@@ -62,6 +64,8 @@ SCORE_COLS: dict[str, str | dict[str, str]] = {
     "GenSLM": "logit_scores",
     "RNAErnie": "Mutation_Scores",
     "EVmutation": "prediction_epistatic",
+    "RNA-2Di": "rna2di_score",
+    "mutation_count": "mutation_count_score",
 }
 
 FOUR_FILL_SPECS = {

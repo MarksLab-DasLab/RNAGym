@@ -154,6 +154,7 @@ def check_leaderboard(directory: Path, deadline: float) -> None:
     for name in (
         "leaderboard_signed_3ncRNA.csv",
         "leaderboard_evmutation.csv",
+        "leaderboard_by_mutation_count.csv",
         "evmutation_coverage.csv",
     ):
         assert_frame_equal(
@@ -300,6 +301,7 @@ def fingerprint() -> str:
         "baselines/*/*.sh",
         "baselines/*/src/*",
         "baselines/masked_lm/*.py",
+        "baselines/substitution/riboseek/*",
     ):
         paths.update(path for path in ConfigFitness.DIR.glob(pattern) if path.is_file())
     for path in sorted(paths):
