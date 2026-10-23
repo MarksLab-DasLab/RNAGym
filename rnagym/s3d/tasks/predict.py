@@ -2,6 +2,7 @@
 
 import importlib
 import sys
+from pathlib import Path
 
 from rnagym.s3d.models.utils import Adapter
 
@@ -30,13 +31,18 @@ def main() -> None:
     targets = adapter.targets(kind)
     if not targets:
         raise RuntimeError(f"No {kind} targets found for {environment}")
+    target_file = Path(sys.argv[4])
     if action == "check":
-        missing = sum(not adapter.complete(target) for target in targets)
-        print(f"Missing {missing}/{len(targets)} {environment} {kind} predictions")
+        missing = [target for target in targets if not adapter.complete(target)]
+        print(f"Missing {len(missing)}/{len(targets)} {environment} {kind} predictions")
+        # Array tasks shard this list, which stays fixed as they finish targets
+        target_file.write_text("".join(f"{target}\n" for target in missing))
         raise SystemExit(bool(missing))
 
-    shard, num_shards = map(int, sys.argv[4:6])
-    assigned = targets[shard::num_shards]
+    shard, num_shards = map(int, sys.argv[5:7])
+    by_name = {str(target): target for target in targets}
+    frozen = target_file.read_text().splitlines()
+    assigned = [by_name[name] for name in frozen[shard::num_shards]]
     assigned = [target for target in assigned if not adapter.complete(target)]
     if not assigned:
         print("All assigned predictions are complete")

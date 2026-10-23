@@ -58,7 +58,7 @@ def inventory() -> pl.DataFrame:
     registry = load_registry(ConfigMMseqs.SEQUENCE_FILE)
     rows = []
     for benchmark, source in (
-        ("3d", Config3D.MSA_DIR),
+        ("3d", Config3D.RIBOSEEK_MSA_DIR),
         ("fitness", ConfigFitness.MSA_DIR),
     ):
         for path in sorted(source.glob("*.a3m")):

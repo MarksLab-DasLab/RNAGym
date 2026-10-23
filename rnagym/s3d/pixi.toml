@@ -42,9 +42,11 @@ rnagym = { path = "../..", editable = true }
 fmt = "bash sh/format.sh"
 lint = "bash sh/lint.sh"
 rna3db = "bash sh/fetch-rna3db.sh"
-pipeline = { cmd = "python -m rnagym.s3d.gym", depends-on = ["rna3db"] }
+ccd = "bash sh/fetch-ccd.sh"
+pipeline = { cmd = "python -m rnagym.s3d.gym", depends-on = ["rna3db", "ccd"] }
 annotate = { cmd = "python -m rnagym.s3d.gym annotate", depends-on = [
   "rna3db",
+  "ccd",
 ] }
 split = "python -m rnagym.s3d.gym split"
 leaderboard = "python -m rnagym.s3d.tasks.score"
@@ -52,6 +54,7 @@ test = "cd ../.. && python -m pytest tests/test_s3d.py"
 rna-assessment-source = "bash sh/fetch-source.sh rna-assessment"
 score = { cmd = "python -m rnagym.s3d.tasks.score_predictions", depends-on = [
   "rna-assessment-source",
+  "ccd",
 ] }
 # TODO(MCA): Replace this installer once Riboseek is available through Bioconda
 install-riboseek = "bash sh/fetch-riboseek.sh"
@@ -101,7 +104,11 @@ zstandard = "*"
 [feature.af3.tasks]
 source = "bash sh/fetch-source.sh"
 build = { cmd = "bash sh/build-af3.sh", depends-on = ["source"] }
-predict = { cmd = "bash sh/predict.sh af3", depends-on = ["build"] }
+predict = { cmd = "bash sh/predict.sh af3", depends-on = [
+  "build",
+  # Setup canonicalizes chain sequences, which reads the CCD bases
+  { task = "ccd", environment = "default" },
+] }
 
 [feature.nufold.dependencies]
 biopython = "1.81.*"

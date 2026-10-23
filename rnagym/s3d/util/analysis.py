@@ -264,7 +264,7 @@ class Analysis:
             raise FileNotFoundError(f"Missing {baseline.name} prediction")
         reference = Config3D.chain_file(self.pdb_id, self.asym_id)
         cache = (
-            Config3D.CACHE_DIR
+            Config3D.RUN_CACHE_DIR
             / "scores"
             / "usalign"
             / baseline.name
@@ -296,7 +296,7 @@ class Analysis:
 
         # Cache model interactions once across repeated experimental structures
         name = f"{self.pdb_id}_{self.asym_id}" if multimer else self.sequence_id
-        prediction_pdb = Config3D.CACHE_DIR / "inf" / baseline.name / f"{name}.pdb"
+        prediction_pdb = Config3D.RUN_CACHE_DIR / "inf" / baseline.name / f"{name}.pdb"
         with _cache_lock(prediction_pdb):
             if (
                 not prediction_pdb.is_file()

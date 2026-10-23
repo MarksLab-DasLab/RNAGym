@@ -173,7 +173,7 @@ def _recover() -> None:
     for kind in ("monomers", "multimers"):
         configs = list(_PREDICTION_DIR.glob(f"{kind}/*/config.json"))
         task_root = _PREDICTION_DIR / ".tasks" / kind
-        input_cache = Config3D.CACHE_DIR / "af3_inputs" / kind
+        input_cache = Config3D.RUN_CACHE_DIR / "af3_inputs" / kind
         completed = cached = 0
         for output_dir in task_root.glob("*/output"):
             completed += _collect(configs, output_dir)
@@ -225,7 +225,7 @@ def complete(config: Path) -> bool:
 def predict(configs: list[Path], kind: str, shard: int) -> None:
     """Run one AF3 shard as a batch."""
     task_dir = _PREDICTION_DIR / ".tasks" / kind / str(shard)
-    input_cache = Config3D.CACHE_DIR / "af3_inputs" / kind
+    input_cache = Config3D.RUN_CACHE_DIR / "af3_inputs" / kind
     cache_dir = Config3D.CACHE_DIR / "af3_compilation"
     cache_dir.mkdir(parents=True, exist_ok=True)
     if task_dir.exists():

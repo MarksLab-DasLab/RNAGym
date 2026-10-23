@@ -44,7 +44,7 @@ def _input_dependencies(config: Path, kind: str) -> tuple[Path, ...]:
     )
     if kind == "multimers":
         dependencies.append(
-            Config3D.CACHE_DIR / "af3_inputs" / kind / f"{raw['name']}.json"
+            Config3D.RUN_CACHE_DIR / "af3_inputs" / kind / f"{raw['name']}.json"
         )
     return tuple(dependencies)
 
@@ -144,7 +144,7 @@ def _write_inputs(config: Path, input_dir: Path, kind: str) -> list[str]:
     raw = json.loads(config.read_text())
     prepared = None
     if kind == "multimers":
-        path = Config3D.CACHE_DIR / "af3_inputs" / kind / f"{raw['name']}.json"
+        path = Config3D.RUN_CACHE_DIR / "af3_inputs" / kind / f"{raw['name']}.json"
         if not path.is_file():
             raise FileNotFoundError(f"Missing AF3-prepared input: {path}")
         prepared = json.loads(path.read_text())

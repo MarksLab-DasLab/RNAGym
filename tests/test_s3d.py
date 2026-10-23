@@ -8,6 +8,7 @@ from polars.testing import assert_frame_equal
 from rnagym.config import Config2D, Config3D
 from rnagym.s3d.cmd import split
 from rnagym.s3d.tasks import score
+from rnagym.sequences import cluster_dir, clusters_path
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "s3d"
 
@@ -40,9 +41,13 @@ def test_3d_workflow(tmp_path, monkeypatch) -> None:
     pl.DataFrame(schema={"uid": pl.String, "sequence": pl.String}).write_parquet(
         Config2D.STRUCTURE_FILE
     )
-    pl.read_parquet(FIXTURE_DIR / "sequences.parquet").write_parquet(
-        Config2D.SEQUENCE_FILE
-    )
+    registry = pl.read_parquet(FIXTURE_DIR / "sequences.parquet")
+    registry.write_parquet(Config2D.SEQUENCE_FILE)
+    # Reuse the fixture's clusters instead of the all-against-all search
+    monkeypatch.setattr(Config2D, "CLUSTER_DIR", tmp_path / "clusters")
+    clusters = clusters_path(cluster_dir(registry))
+    clusters.parent.mkdir(parents=True)
+    registry.select("sequence_id", "cluster_rep").write_parquet(clusters)
     Config3D.LEADERBOARD_DIR.mkdir()
     Config3D.LEADERBOARD_README.write_text(
         "# Test leaderboard\n\n"
