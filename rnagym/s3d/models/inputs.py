@@ -31,7 +31,7 @@ def _find_prepared(prepared: dict, chain_id: str) -> dict:
 
 def _prepared_file(name: str, kind: str) -> Path:
     """Return the cached AF3 inputs holding generated partner-chain MSAs."""
-    return Config3D.CACHE_DIR / "af3_inputs" / kind / f"{name}.json"
+    return Config3D.RUN_CACHE_DIR / "af3_inputs" / kind / f"{name}.json"
 
 
 def _write_text(path: Path, contents: str) -> None:

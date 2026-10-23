@@ -171,7 +171,11 @@ def write_readme(scores: pl.DataFrame) -> None:
 
     start = "<!-- BEGIN GENERATED TABLES -->"
     end = "<!-- END GENERATED TABLES -->"
-    readme = Config3D.LEADERBOARD_README.read_text()
+    # A non-default alignment source starts from the released layout
+    readme = Config3D.LEADERBOARD_README
+    readme = (
+        readme if readme.is_file() else Config3D.LEADERBOARD_DIR / "README.md"
+    ).read_text()
     before, generated = readme.split(start)
     _, after = generated.split(end)
     tables = "\n\n".join(sections)

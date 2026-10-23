@@ -49,6 +49,13 @@ checkpoint for RoseTTAFold3. Boltz-2 has no such checkpoint — its training set
 runs to 2023-06-01 and so covers 128 of the 1,422 targets — and it applies
 alignments to protein chains only, so its RNA chains fold from sequence alone.
 
+## Alignment source
+
+Predictions use the Riboseek alignments by default. Export
+`RNAGYM_MSA_SOURCE=mmseqs` before `predict`, `score` and `leaderboard` to run
+the whole workflow on `data/3d/msa/mmseqs/`, with its own predictions, caches
+and scores.
+
 Prediction jobs use the Slurm settings in [sh/predict.sh][6]. Once they finish:
 
 ```bash
@@ -62,8 +69,9 @@ CSV and README.
 ## Rebuild data
 
 To regenerate the shared datasets, check the paths in [Config3D][2], then run
-`pixi run pipeline`. It downloads and filters RNA3DB and requires Rfam 15.0
-with a pressed `Rfam.cm` and `family.txt.gz`.
+`pixi run pipeline`. It downloads and filters RNA3DB, downloads the pinned
+wwPDB Chemical Component Dictionary into `RNAGYM_DATABASE_DIR`, and requires
+Rfam 15.0 with a pressed `Rfam.cm` and `family.txt.gz`.
 
 `pixi run usalign` submits comparisons against each model's training structures.
 Once those jobs finish, run `pixi run split` to add the results to

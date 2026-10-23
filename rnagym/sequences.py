@@ -286,15 +286,21 @@ def write_clusters(work_dir: Path) -> None:
     ).write_parquet(clusters_path(work_dir))
 
 
+def cluster_dir(sequence_table: pl.DataFrame) -> Path:
+    """Return the clustering work directory of one registry version."""
+    rows = sequence_table.select("sequence_id", "sequence").sort("sequence_id")
+    fingerprint = hashlib.sha256(
+        "".join(f"{i}\t{s}\n" for i, s in rows.iter_rows()).encode()
+    ).hexdigest()[:16]
+    return Config2D.CLUSTER_DIR / fingerprint
+
+
 def cluster_sequences(sequence_table: pl.DataFrame) -> pl.DataFrame:
     """Load sequence clusters, built per registry version by sh/cluster.sh."""
     sequence_table = sequence_table.select("sequence_id", "sequence").sort(
         "sequence_id"
     )
-    fingerprint = hashlib.sha256(
-        "".join(f"{i}\t{s}\n" for i, s in sequence_table.iter_rows()).encode()
-    ).hexdigest()[:16]
-    work_dir = Config2D.CLUSTER_DIR / fingerprint
+    work_dir = cluster_dir(sequence_table)
     if not clusters_path(work_dir).is_file():
         work_dir.mkdir(parents=True, exist_ok=True)
         sequence_table.write_parquet(work_dir / "sequences.parquet")

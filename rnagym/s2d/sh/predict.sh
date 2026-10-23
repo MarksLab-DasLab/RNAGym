@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=../sh/slurm.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../sh/slurm.sh"
+
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 ACCOUNT="marks_dsm1"
 CPU_PARTITION="short"
@@ -53,6 +56,10 @@ for dataset in mapping 2d; do
 		echo "Skipping $environment $dataset: all shards complete"
 		continue
 	fi
-	sbatch "${resources[@]}" --account="$ACCOUNT" --array="0-$((shards - 1))%32" \
-		-- tasks/predict.slurm "$environment" "$dataset"
+	dependency=""
+	if [[ -v gpu ]]; then
+		dependency=$(gpu_array_dependency)
+	fi
+	sbatch ${dependency:+"--dependency=$dependency"} "${resources[@]}" --account="$ACCOUNT" \
+		--array="0-$((shards - 1))%32" -- tasks/predict.slurm "$environment" "$dataset"
 done

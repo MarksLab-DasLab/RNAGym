@@ -5,6 +5,10 @@ from pathlib import Path
 
 _REPO_DIR = Path(__file__).resolve().parents[1]
 _CACHE_DIR = Path(os.environ.get("RNAGYM_CACHE_DIR", _REPO_DIR / ".cache"))
+# Alignment source for structure prediction. Anything derived from one
+# source gets its own tree, so runs never share predictions or caches
+_MSA_SOURCE = os.environ.get("RNAGYM_MSA_SOURCE", "riboseek")
+_RUN_SUFFIX = "" if _MSA_SOURCE == "riboseek" else f"_{_MSA_SOURCE}"
 _DATA_DIR = Path(os.environ.get("RNAGYM_DATA_DIR", _REPO_DIR / "data"))
 _DATABASE_DIR = Path(
     os.environ.get("RNAGYM_DATABASE_DIR", "/n/lw_groups/marks/databases")
@@ -135,24 +139,36 @@ class Config3D(_Config):
     DATA_DIR = _DATA_DIR / "3d"
     CURATION_DIR = DATA_DIR / "curation"
     CACHE_DIR = CURATION_DIR / ".cache"
+    # Caches holding alignment-derived work are scoped to the source, while the
+    # PDB assemblies, compilation cache and model roots beside them are not
+    RUN_CACHE_DIR = CACHE_DIR / f"run{_RUN_SUFFIX}" if _RUN_SUFFIX else CACHE_DIR
     ANNOTATED_CHAINS_FILE = CURATION_DIR / "annotated_chains.parquet"
     TARGET_FILE = DATA_DIR / "rnagym_3d.parquet"
-    SCORE_FILE = DATA_DIR / "rnagym_3d_scores.parquet"
-    MSA_DIR = DATA_DIR / "msa" / "riboseek"
-    PREDICTION_DIR = DATA_DIR / "predictions"
+    SCORE_FILE = DATA_DIR / f"rnagym_3d_scores{_RUN_SUFFIX}.parquet"
+    # Prediction follows the selector, but alignment generation must not, or a
+    # generator would overwrite the very set it was told to read
+    MSA_DIR = DATA_DIR / "msa" / _MSA_SOURCE
+    RIBOSEEK_MSA_DIR = DATA_DIR / "msa" / "riboseek"
+    PREDICTION_DIR = DATA_DIR / f"predictions{_RUN_SUFFIX}"
     USALIGN_DIR = DATA_DIR / "usalign"
     USALIGN_ANNOTATION_DIR = USALIGN_DIR / "annotations"
     USALIGN_BINARY = "USalign"
     USALIGN_REFERENCES_FILE = USALIGN_DIR / "references.txt"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "3d"
-    LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
-    LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
+    LEADERBOARD_FILE = LEADERBOARD_DIR / f"leaderboard{_RUN_SUFFIX}.csv"
+    LEADERBOARD_README = LEADERBOARD_DIR / f"README{_RUN_SUFFIX}.md"
 
     RNA3DB_RELEASE = "2026-01-05-full-release"
     RNA3DB_DIR = CACHE_DIR / "rna3db" / RNA3DB_RELEASE
     RNA3DB_JSON_DIR = RNA3DB_DIR / "jsons"
     RNA3DB_CMSCAN_DIR = RNA3DB_DIR / "cmscans"
     RNA3DB_PARSE_FILE = RNA3DB_JSON_DIR / "parse.json"
+    # The wwPDB Chemical Component Dictionary alone types nucleotides and
+    # assigns their bases, from the snapshot matching the RNA3DB release
+    CCD_SNAPSHOT = "20260101"
+    CCD_DIR = _DATABASE_DIR / "CCD" / CCD_SNAPSHOT
+    CCD_FILE = CCD_DIR / "components.cif.gz"
+    CCD_TABLE_FILE = CCD_DIR / "components.tsv"
     RFAM_VERSION = "15.0"  # Matches the bundled RNA3DB annotations
     RFAM_DIR = _DATABASE_DIR / "Rfam" / RFAM_VERSION
     RFAM_CM = RFAM_DIR / "Rfam.cm"

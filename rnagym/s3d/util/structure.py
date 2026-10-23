@@ -27,7 +27,11 @@ from gemmi.cif import Document
 
 from rnagym.config import Config3D
 from rnagym.s3d.util import ChainID, Residues
-from rnagym.s3d.util.polymer import canonical_polymer_sequence
+from rnagym.s3d.util.polymer import (
+    STANDARD_NUCLEOTIDES,
+    canonical_polymer_sequence,
+    nucleic_acid,
+)
 from rnagym.s3d.util.sequence import FamHits
 
 
@@ -65,25 +69,13 @@ class ResidueType(Enum):
 
         # NOTE(MCA): Gemmi has its own implementation of residue/polymer
         #   typing, but it has limited awareness of modified protein/nucleic
-        #   acid residues
-        if is_polymer and residue in Residues.RNA:
-            residue_type = ResidueType.RNA
-        elif is_polymer and residue in Residues.DNA:
-            residue_type = ResidueType.DNA
+        #   acid residues, so nucleotides are typed by the CCD
+        acid = nucleic_acid(residue) if is_polymer else ""
+        if acid:
+            modified = residue not in STANDARD_NUCLEOTIDES
+            residue_type = ResidueType[f"MOD_{acid}" if modified else acid]
         elif is_polymer and residue in Residues.Protein:
             residue_type = ResidueType.PROTEIN
-        elif (
-            is_polymer
-            and residue in Residues.ModNA
-            and not Residues.ModNA[residue].startswith("D")
-        ):
-            residue_type = ResidueType.MOD_RNA
-        elif (
-            is_polymer
-            and residue in Residues.ModNA
-            and Residues.ModNA[residue].startswith("D")
-        ):
-            residue_type = ResidueType.MOD_DNA
         elif is_polymer and residue in Residues.ModProtein:
             residue_type = ResidueType.MOD_PROTEIN
         elif (
@@ -396,7 +388,7 @@ def get_contact_annotations(
                         cofactor_residues[neighbor].add(residue)
                         continue
 
-                    is_nucleic = neighbor.name in Residues.NA
+                    is_nucleic = bool(nucleic_acid(neighbor.name))
                     if neighbor.subchain != residue.subchain and is_nucleic:
                         neighbors[residue.subchain].add(neighbor.subchain)
                     if neighbor.subchain == residue.subchain:

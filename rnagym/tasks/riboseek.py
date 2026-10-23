@@ -180,7 +180,7 @@ def load_queries(task_id: int, task_count: int) -> tuple[pl.DataFrame, pl.DataFr
     targets = (
         pl.read_parquet(Config3D.TARGET_FILE, columns=["sequence_id", "sequence"])
         .unique(maintain_order=True)
-        .with_columns(pl.lit(str(Config3D.MSA_DIR)).alias("msa_dir"))
+        .with_columns(pl.lit(str(Config3D.RIBOSEEK_MSA_DIR)).alias("msa_dir"))
     )
     fitness_source = fitness_sequences()
     fitness = fitness_source.join(

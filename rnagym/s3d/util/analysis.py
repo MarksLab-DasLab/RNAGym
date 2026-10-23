@@ -264,19 +264,20 @@ class Analysis:
             raise FileNotFoundError(f"Missing {baseline.name} prediction")
         reference = Config3D.chain_file(self.pdb_id, self.asym_id)
         cache = (
-            Config3D.CACHE_DIR
+            Config3D.RUN_CACHE_DIR
             / "scores"
             / "usalign"
             / baseline.name
             / ("multimers" if multimer else "monomers")
             / f"{self.pdb_id}_{self.asym_id}.out"
         )
-        fresh = cache.is_file() and cache.stat().st_mtime >= max(
-            prediction.stat().st_mtime, reference.stat().st_mtime
+        result = cache.read_text() if cache.is_file() else ""
+        # A chain can move to another sequence's prediction, older than its cache
+        fresh = f"Name of Structure_1: {prediction}:" in result and (
+            cache.stat().st_mtime
+            >= max(prediction.stat().st_mtime, reference.stat().st_mtime)
         )
-        if fresh:
-            result = cache.read_text()
-        else:
+        if not fresh:
             command = f"{Config3D.USALIGN_BINARY} {prediction} {reference}"
             result = subprocess.run(
                 shlex.split(command), capture_output=True, text=True, check=True
@@ -296,7 +297,7 @@ class Analysis:
 
         # Cache model interactions once across repeated experimental structures
         name = f"{self.pdb_id}_{self.asym_id}" if multimer else self.sequence_id
-        prediction_pdb = Config3D.CACHE_DIR / "inf" / baseline.name / f"{name}.pdb"
+        prediction_pdb = Config3D.RUN_CACHE_DIR / "inf" / baseline.name / f"{name}.pdb"
         with _cache_lock(prediction_pdb):
             if (
                 not prediction_pdb.is_file()
