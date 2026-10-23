@@ -271,12 +271,13 @@ class Analysis:
             / ("multimers" if multimer else "monomers")
             / f"{self.pdb_id}_{self.asym_id}.out"
         )
-        fresh = cache.is_file() and cache.stat().st_mtime >= max(
-            prediction.stat().st_mtime, reference.stat().st_mtime
+        result = cache.read_text() if cache.is_file() else ""
+        # A chain can move to another sequence's prediction, older than its cache
+        fresh = f"Name of Structure_1: {prediction}:" in result and (
+            cache.stat().st_mtime
+            >= max(prediction.stat().st_mtime, reference.stat().st_mtime)
         )
-        if fresh:
-            result = cache.read_text()
-        else:
+        if not fresh:
             command = f"{Config3D.USALIGN_BINARY} {prediction} {reference}"
             result = subprocess.run(
                 shlex.split(command), capture_output=True, text=True, check=True
