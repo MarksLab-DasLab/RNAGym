@@ -1,0 +1,17 @@
+name,cohort,predictor,rows_scored_by_all_models,consequence_groups,consequence_macro_auroc,consequence_macro_ci_low,consequence_macro_ci_high,consequence_macro_invalid_draws,gene_macro_auroc,gene_macro_ci_low,gene_macro_ci_high,gene_macro_invalid_draws,missense_gene_macro_auroc,missense_gene_macro_ci_low,missense_gene_macro_ci_high,missense_gene_macro_invalid_draws,genes,missense_genes
+premrna_10101_indel,nonsnv,rna_fm,84,3,0.46527777777777773,0.37434339149412676,0.578403846153846,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,rinalmo,84,3,0.41898148148148157,0.31845613944878653,0.5229591569922453,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,rnagenesis,84,3,0.4375,0.36117575779340483,0.5596585359085359,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,aido_rna_1m,84,3,0.49074074074074076,0.38738135211349495,0.5966076884402676,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,aido_rna_25m,84,3,0.4375,0.32253827871474927,0.5702676948491427,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,aido_rna_300m,84,3,0.47685185185185186,0.3902875759861054,0.6057059121277164,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,aido_rna_650m,84,3,0.41203703703703703,0.27545040335481513,0.5157052967457378,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,aido_rna,84,3,0.4398148148148148,0.3316004097346009,0.5360365866432043,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,ntv3_8m,84,3,0.5648148148148148,0.3948455366995283,0.678455785667324,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,ntv3_100m,84,3,0.5925925925925926,0.4564032201847328,0.6786013006601241,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,ntv3_650m,84,3,0.6435185185185185,0.5564074909295498,0.7521660002805834,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,orthrus,84,3,0.47453703703703703,0.38565583619811555,0.5783469791374203,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,evo2_1b_base,84,3,0.7870370370370371,0.6720161782661783,0.8803629148629148,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,evo2_7b,84,3,0.7939814814814815,0.6624751348188848,0.8873933231120731,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,evo2_20b,84,3,0.7615740740740741,0.6827876348188848,0.8525047799422799,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+premrna_10101_indel,nonsnv,evo2_40b,84,3,0.7685185185185186,0.6945696606634106,0.858325051106301,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0

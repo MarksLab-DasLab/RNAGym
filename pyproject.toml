@@ -13,6 +13,7 @@ include-package-data = false
 [tool.setuptools.packages.find]
 include = [
   "rnagym",
+  "rnagym.clinical*",
   "rnagym.figures*",
   "rnagym.fitness*",
   "rnagym.s2d",
@@ -27,6 +28,7 @@ include = [
 ]
 
 [tool.setuptools.package-data]
+"rnagym.clinical" = ["README.md", "pixi.lock", "pixi.toml", "sh/*.sh"]
 "rnagym.fitness" = [
   "README.md",
   "baselines/*/*.sh",
@@ -51,7 +53,7 @@ source = ["rnagym.fitness"]
 
 [tool.pyrefly]
 preset = "strict"
-project-includes = ["rnagym/fitness"]
+project-includes = ["rnagym/clinical", "rnagym/fitness"]
 python-interpreter-path = "rnagym/fitness/.pixi/envs/default/bin/python"
 # Model libraries live in separate Pixi environments and are tested by reproduction
 ignore-missing-imports = [

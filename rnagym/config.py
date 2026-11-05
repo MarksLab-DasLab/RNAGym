@@ -92,6 +92,25 @@ class ConfigFitness(_Config):
     REPORT_DIR = DATA_DIR / "reports"
 
 
+class ConfigClinical(_Config):
+    """Clinical variant benchmark configuration."""
+
+    DIR = _REPO_DIR / "rnagym" / "clinical"
+    LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "clinical"
+    CACHE_DIR = _CACHE_DIR / "clinical"
+    # Local checkpoint digests, keyed by file identity, so each file is hashed once
+    CHECKPOINT_HASH_FILE = CACHE_DIR / "checkpoint_sha256.json"
+    # Identities of checkpoint files that passed their upstream check
+    VERIFIED_FILE = CACHE_DIR / "verified_checkpoints.json"
+    DATA_DIR = _DATA_DIR / "clinical"
+    # The released ClinVar and MITOMAP files and their export summaries
+    VARIANT_DIR = DATA_DIR / "variants"
+    STAGED_DIR = DATA_DIR / "staged"
+    SCORE_DIR = DATA_DIR / "scores"
+    MERGED_DIR = DATA_DIR / "merged"
+    EVALUATION_DIR = DATA_DIR / "evaluation"
+
+
 class ConfigRiboseek(_Config):
     """Shared Riboseek configuration."""
 
