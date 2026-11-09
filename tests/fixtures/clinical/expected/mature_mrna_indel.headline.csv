@@ -1,0 +1,17 @@
+name,cohort,predictor,rows_scored_by_all_models,consequence_groups,consequence_macro_auroc,consequence_macro_ci_low,consequence_macro_ci_high,consequence_macro_invalid_draws,gene_macro_auroc,gene_macro_ci_low,gene_macro_ci_high,gene_macro_invalid_draws,missense_gene_macro_auroc,missense_gene_macro_ci_low,missense_gene_macro_ci_high,missense_gene_macro_invalid_draws,genes,missense_genes
+mature_mrna_indel,nonsnv,rna_fm,84,3,0.3703703703703704,0.2844727097768542,0.5467710154428904,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,rinalmo,84,3,0.3680555555555556,0.23253945976862644,0.5089057036713286,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,rnagenesis,84,3,0.41898148148148145,0.26933823529411766,0.5850833734167067,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,aido_rna_1m,84,3,0.48148148148148145,0.36835474283836583,0.6152645852921587,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,aido_rna_25m,84,3,0.41435185185185186,0.3039928529951926,0.6143022168803418,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,aido_rna_300m,84,3,0.44675925925925924,0.316696016105107,0.6271252185314684,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,aido_rna_650m,84,3,0.3541666666666667,0.21474756235050352,0.5045981641814975,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,aido_rna,84,3,0.34953703703703703,0.18326325091030973,0.5091426889083138,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,ntv3_8m,84,3,0.5300925925925926,0.4241650098267745,0.645320256782675,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,ntv3_100m,84,3,0.46990740740740744,0.35584483995942334,0.5915102162497996,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,ntv3_650m,84,3,0.5879629629629629,0.4926927896388124,0.7089932707089569,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,orthrus,84,3,0.44675925925925924,0.3939161220043573,0.5514206259426847,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,evo2_1b_base,84,3,0.7407407407407408,0.6633333333333333,0.8242988287432732,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,evo2_7b,84,3,0.7847222222222222,0.7074499900970489,0.8776243201243201,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,evo2_20b,84,3,0.7939814814814815,0.7208288770053475,0.9021047008547008,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0
+mature_mrna_indel,nonsnv,evo2_40b,84,3,0.7916666666666666,0.7171504258268964,0.8949394355644354,0,NaN,NaN,NaN,20,NaN,NaN,NaN,20,0,0

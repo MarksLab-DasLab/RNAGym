@@ -7,6 +7,7 @@
   <br>
   <sub><sup>
     <a href="leaderboard/fitness/">Fitness</a>&nbsp;&nbsp;·&nbsp;&nbsp;
+    <a href="leaderboard/clinical/">Clinical variants</a>&nbsp;&nbsp;·&nbsp;&nbsp;
     <a href="leaderboard/2d/">2D structure</a>&nbsp;&nbsp;·&nbsp;&nbsp;
     <a href="leaderboard/3d/">3D structure</a>
   </sup></sub>
@@ -17,24 +18,25 @@
   <a href="https://www.biorxiv.org/content/10.1101/2025.06.16.660049v1"><img src="https://img.shields.io/badge/bioRxiv-2025.06.16.660049v1-success.svg" alt="bioRxiv"></a>
   <a href="https://github.com/MarksLab-DasLab/RNAGym/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MarksLab-DasLab/RNAGym" alt="License"></a>
   <a href="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/fitness.yml"><img src="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/fitness.yml/badge.svg" alt="Fitness CI"></a>
+  <a href="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/clinical.yml"><img src="https://github.com/MarksLab-DasLab/RNAGym/actions/workflows/clinical.yml/badge.svg" alt="Clinical CI"></a>
   <a href="rnagym/fitness/README.md#quality-checks"><img src="https://img.shields.io/badge/coverage-required_80%25-blue" alt="Full fitness coverage requires 80 percent"></a>
   <a href="https://rnagym.org"><img src="https://img.shields.io/badge/website-rnagym.org-orange" alt="Website"></a>
 </p>
 
-[RNAGym][5] provides datasets, baseline models and evaluation workflows for RNA fitness and structure prediction. See the [leaderboards][3] for results and [releases][4] for stable versions.
+[RNAGym][5] provides datasets, baseline models and evaluation workflows for RNA fitness, clinical variant effect and structure prediction. See the [leaderboards][3] for results and [releases][4] for stable versions.
 
 ## Getting started
 
 <!-- TODO(MCA): Upload complete data files to this link -->
 
-All three benchmarks share the RNAGym v0.2 data archive. Download and extract it from the repository root:
+All four benchmarks share the RNAGym v0.2 data archive. Download and extract it from the repository root:
 
 ```bash
 wget https://marks.hms.harvard.edu/rnagym/v0.2/data.tar.xz
 tar -xJf data.tar.xz
 ```
 
-Data defaults to `data/`. Set `RNAGYM_DATA_DIR` to use another data directory. Then follow the setup and reproduction instructions for the [fitness][0], [2D structure][6], and [3D structure][7] benchmarks.
+Data defaults to `data/`. Set `RNAGYM_DATA_DIR` to use another data directory. Then follow the setup and reproduction instructions for the [fitness][0], [clinical variant][8], [2D structure][6], and [3D structure][7] benchmarks.
 
 Set `RNAGYM_CHECKPOINT_DIR` for model weights and `RNAGYM_DATABASE_DIR` for reference databases. Both locations are shared across benchmarks. Model environments and source checkouts stay under each benchmark's `.pixi/` directory.
 
@@ -49,3 +51,4 @@ Contributions of models, datasets and fixes are welcome. Use the [issue tracker]
 [5]: https://rnagym.org/
 [6]: rnagym/s2d/README.md
 [7]: rnagym/s3d/README.md
+[8]: rnagym/clinical/README.md

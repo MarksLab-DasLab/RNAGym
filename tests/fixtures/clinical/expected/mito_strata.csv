@@ -1,0 +1,7 @@
+unit,stratum,n_pathogenic,n_benign,reportable
+mito,tRNA,44,18,true
+mito,missense_variant,41,74,true
+mito,lof_or_indel_coding,7,1,false
+mito,rRNA,2,36,false
+mito,synonymous_variant,1,178,false
+mito,other_coding,0,3,false
