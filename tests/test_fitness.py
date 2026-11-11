@@ -316,3 +316,67 @@ def test_substitution_scoring(fitness_data) -> None:
                     (pl.col("model") == model) & (pl.col("DMS_ID") == name)
                 )["score"],
             )
+
+
+def test_vienna_scoring(fitness_data) -> None:
+    """Reproduce fixture MSA scores and compare ensemble folding with pr_energy."""
+    if MODEL != "vienna":
+        pytest.skip("Run through the ViennaRNA environment")
+    import RNA
+
+    from rnagym.fitness.baselines.ViennaRNA import compute_fitness as scorer
+
+    by_assay = ConfigFitness.MSA_DIR / "by_assay"
+    by_assay.mkdir(parents=True)
+    name = "Domingo_2018_tRNA"
+    (by_assay / f"{name}.a3m").symlink_to((FIXTURE_DIR / f"{name}.a3m").resolve())
+    reference = pl.read_csv(ConfigFitness.REFERENCE_FILE)
+    wt = reference.filter(pl.col("DMS_ID") == name)["RAW_CONSTRUCT_SEQ"][0]
+    empty = "Andreasson_2020_ribozyme"
+    empty_wt = reference.filter(pl.col("DMS_ID") == empty)["RAW_CONSTRUCT_SEQ"][0]
+    (by_assay / f"{empty}.a3m").write_text(f">{empty}\n{empty_wt}\n")
+
+    scorer.main(["--cpu", "2"])
+
+    released = pl.read_parquet(FIXTURE_DIR / "predictions.parquet")
+    assay = pl.read_csv(ConfigFitness.ASSAY_DIR / f"{name}.csv")
+    for model in ("ViennaRNA", "ViennaRNA_MSA"):
+        folder, column = resolve_source(SCORE_COLS, model)
+        result = pl.read_csv(ConfigFitness.PREDICTION_DIR / folder / f"{name}.csv")
+        assert_frame_equal(result.select(assay.columns), assay)
+        np.testing.assert_array_equal(
+            result[column],
+            released.filter((pl.col("model") == model) & (pl.col("DMS_ID") == name))[
+                "score"
+            ],
+        )
+
+    # Compare ViennaRNA scores against native RNA.pr_energy on the sampled ensemble
+    RNA.init_rand(1)
+    wt_fc = RNA.fold_compound(wt, RNA.md(uniq_ML=1))
+    wt_fc.pf()
+    samples = wt_fc.pbacktrack(scorer.N_SAMPLES)
+    wt_pr = wt_fc.pr_energy(
+        sum(wt_fc.eval_structure(s) for s in samples) / len(samples)
+    )
+    expected = []
+    for seq in assay["sequence"]:
+        fc = RNA.fold_compound(seq)
+        fc.pf()
+        mean_e = sum(
+            fc.eval_structure(scorer._open_mismatches(seq, s, scorer._pairs(s)))
+            for s in samples
+        ) / len(samples)
+        expected.append(min(0.0, float(np.log(fc.pr_energy(mean_e) / wt_pr))))
+    vienna_col = resolve_source(SCORE_COLS, "ViennaRNA")[1]
+    msa_col = resolve_source(SCORE_COLS, "ViennaRNA_MSA")[1]
+    scored = pl.read_csv(ConfigFitness.PREDICTION_DIR / "ViennaRNA" / f"{name}.csv")
+    np.testing.assert_allclose(scored[vienna_col], expected, rtol=0, atol=1e-5)
+
+    # With no homologs, Potts terms vanish and the wild-type row scores zero
+    single = pl.read_csv(ConfigFitness.PREDICTION_DIR / "ViennaRNA" / f"{empty}.csv")
+    coupled = pl.read_csv(
+        ConfigFitness.PREDICTION_DIR / "ViennaRNA_MSA" / f"{empty}.csv"
+    )
+    np.testing.assert_array_equal(coupled[msa_col], single[vienna_col])
+    assert single.filter(pl.col("mutant").is_null())[vienna_col][0] == 0.0

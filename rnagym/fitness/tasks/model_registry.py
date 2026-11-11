@@ -27,7 +27,13 @@ CHECKPOINT_MODELS = (
     "aido_rna_650m",
 )
 # Reference baselines rather than pretrained models, set in italics on the leaderboard
-BASELINE_MODELS = ("EVmutation", "RNA-2Di", "mutation_count")
+BASELINE_MODELS = (
+    "EVmutation",
+    "RNA-2Di",
+    "ViennaRNA",
+    "ViennaRNA_MSA",
+    "mutation_count",
+)
 ALL_MODELS = (*CHECKPOINT_MODELS, *BASELINE_MODELS)
 
 ASSAY_GROUPS = {
@@ -65,6 +71,8 @@ SCORE_COLS: dict[str, str | dict[str, str]] = {
     "RNAErnie": "Mutation_Scores",
     "EVmutation": "prediction_epistatic",
     "RNA-2Di": "rna2di_score",
+    "ViennaRNA": "viennarna_score",
+    "ViennaRNA_MSA": "viennarna_msa_score",
     "mutation_count": "mutation_count_score",
 }
 

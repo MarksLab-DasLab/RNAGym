@@ -135,6 +135,9 @@ MODEL_FAMILIES = {
         "baselines/RNAGenesis/score_rnagenesis.sh", (("rnagenesis", None),)
     ),
     "rinalmo": ModelFamily("baselines/RiNALMo/score_rinalmo.sh", (("rinalmo", None),)),
+    "vienna": ModelFamily(
+        "baselines/ViennaRNA/run.sh", (), native_test="test_vienna_scoring"
+    ),
 }
 
 

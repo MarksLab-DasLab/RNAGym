@@ -12,29 +12,31 @@ pretraining. Higher is better.
 <!-- BEGIN GENERATED TABLES -->
 | Rank | Model | Ribozyme (24 assays, 23 molecules) | tRNA (3 assays, 2 molecules) | Aptamer (2 assays, 2 molecules) | Macro (3 ncRNA) |
 |---:|:--|--:|--:|--:|--:|
-| 1 | _EVmutation_\* | 0.32 | 0.45 | 0.14 | 0.30 |
-| 2 | _RNA-2Di_ | 0.25 | 0.47 | -0.07 | 0.22 |
-| 3 | AIDO.RNA (650M) | 0.06 | 0.48 | 0.09 | 0.21 |
-| 4 | Evo 2 (40B) | 0.10 | 0.42 | 0.10 | 0.21 |
-| 5 | Evo 2 (20B) | 0.10 | 0.42 | 0.09 | 0.21 |
-| 6 | Evo 2 (7B) | 0.06 | 0.41 | 0.12 | 0.20 |
-| 7 | AIDO.RNA (1.6B) | 0.05 | 0.47 | 0.07 | 0.20 |
-| 8 | Evo 2 (1B base) | 0.00 | 0.45 | 0.13 | 0.20 |
-| 9 | RNA-ERNIE | 0.14 | 0.39 | 0.03 | 0.19 |
-| 10 | RNAGenesis | 0.07 | 0.45 | 0.03 | 0.18 |
-| 11 | _Mutation count_ | 0.20 | 0.46 | -0.12 | 0.18 |
-| 12 | RiNALMo | -0.02 | 0.48 | 0.05 | 0.17 |
-| 13 | AIDO.RNA (25M) | -0.02 | 0.46 | 0.03 | 0.16 |
-| 14 | RNA-FM | -0.01 | 0.48 | 0.00 | 0.15 |
-| 15 | AIDO.RNA (300M) | -0.02 | 0.45 | 0.04 | 0.15 |
-| 16 | Evo 1.5 | 0.06 | 0.39 | 0.00 | 0.15 |
-| 17 | Nucleotide Transformer v3 (650M) | -0.02 | 0.36 | 0.04 | 0.13 |
-| 18 | Nucleotide Transformer v3 (8M) | -0.01 | 0.27 | 0.10 | 0.12 |
-| 19 | Nucleotide Transformer v3 (100M) | -0.01 | 0.25 | 0.10 | 0.11 |
-| 20 | AIDO.RNA (1M) | 0.01 | 0.24 | 0.06 | 0.11 |
-| 21 | Orthrus | -0.04 | 0.08 | 0.16 | 0.06 |
-| 22 | Evo 1 | -0.01 | 0.13 | 0.03 | 0.05 |
-| 23 | GenSLM (2.5B) | -0.02 | 0.09 | 0.06 | 0.04 |
+| 1 | _ViennaRNA (MSA)_ | 0.29 | 0.43 | 0.24 | 0.32 |
+| 2 | _EVmutation_\* | 0.32 | 0.45 | 0.14 | 0.30 |
+| 3 | _ViennaRNA_ | 0.25 | 0.32 | 0.22 | 0.27 |
+| 4 | _RNA-2Di_ | 0.25 | 0.47 | -0.07 | 0.22 |
+| 5 | AIDO.RNA (650M) | 0.06 | 0.48 | 0.09 | 0.21 |
+| 6 | Evo 2 (40B) | 0.10 | 0.42 | 0.10 | 0.21 |
+| 7 | Evo 2 (20B) | 0.10 | 0.42 | 0.09 | 0.21 |
+| 8 | Evo 2 (7B) | 0.06 | 0.41 | 0.12 | 0.20 |
+| 9 | AIDO.RNA (1.6B) | 0.05 | 0.47 | 0.07 | 0.20 |
+| 10 | Evo 2 (1B base) | 0.00 | 0.45 | 0.13 | 0.20 |
+| 11 | RNA-ERNIE | 0.14 | 0.39 | 0.03 | 0.19 |
+| 12 | RNAGenesis | 0.07 | 0.45 | 0.03 | 0.18 |
+| 13 | _Mutation count_ | 0.20 | 0.46 | -0.12 | 0.18 |
+| 14 | RiNALMo | -0.02 | 0.48 | 0.05 | 0.17 |
+| 15 | AIDO.RNA (25M) | -0.02 | 0.46 | 0.03 | 0.16 |
+| 16 | RNA-FM | -0.01 | 0.48 | 0.00 | 0.15 |
+| 17 | AIDO.RNA (300M) | -0.02 | 0.45 | 0.04 | 0.15 |
+| 18 | Evo 1.5 | 0.06 | 0.39 | 0.00 | 0.15 |
+| 19 | Nucleotide Transformer v3 (650M) | -0.02 | 0.36 | 0.04 | 0.13 |
+| 20 | Nucleotide Transformer v3 (8M) | -0.01 | 0.27 | 0.10 | 0.12 |
+| 21 | Nucleotide Transformer v3 (100M) | -0.01 | 0.25 | 0.10 | 0.11 |
+| 22 | AIDO.RNA (1M) | 0.01 | 0.24 | 0.06 | 0.11 |
+| 23 | Orthrus | -0.04 | 0.08 | 0.16 | 0.06 |
+| 24 | Evo 1 | -0.01 | 0.13 | 0.03 | 0.05 |
+| 25 | GenSLM (2.5B) | -0.02 | 0.09 | 0.06 | 0.04 |
 
 Assays of the same RNA molecule are averaged before their category (Domingo_2018_tRNA with Li_2016_tRNA, Zhang_2024_line1_mini_ribozyme with Zhang_2024_line1_full_ribozyme), as ProteinGym averages the assays of one protein.
 
@@ -48,7 +50,9 @@ Ribozyme, by mutation count (molecules):
 
 | Model | 1 (17) | 2 (22) | 3 (12) | 4 (12) | 5 (10) | 6 (8) | 7 (8) | 8 (5) | 9 (4) |
 |:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| _ViennaRNA (MSA)_ | 0.28 | 0.20 | 0.16 | 0.21 | 0.10 | 0.10 | 0.11 | 0.18 | 0.03 |
 | _EVmutation_\* | 0.23 | 0.17 | 0.13 | 0.13 | -0.01 | -0.01 | -0.03 | 0.03 | -0.07 |
+| _ViennaRNA_ | 0.27 | 0.20 | 0.16 | 0.20 | 0.12 | 0.11 | 0.11 | 0.19 | 0.10 |
 | _RNA-2Di_ | 0.18 | 0.21 | 0.20 | 0.15 | 0.11 | 0.11 | 0.11 | 0.09 | 0.06 |
 | AIDO.RNA (650M) | 0.04 | 0.04 | 0.05 | 0.04 | 0.00 | 0.03 | 0.05 | 0.02 | 0.03 |
 | Evo 2 (40B) | 0.08 | 0.07 | 0.08 | 0.09 | 0.04 | 0.06 | 0.05 | 0.03 | 0.05 |
@@ -75,7 +79,9 @@ tRNA, by mutation count (molecules):
 
 | Model | 1 (2) | 2 (2) | 3 (2) | 4 (2) | 5 (2) | 6 (2) | 7 (2) | 8 (2) | 9 (1) |
 |:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| _ViennaRNA (MSA)_ | 0.42 | 0.34 | 0.16 | 0.08 | 0.09 | 0.07 | 0.10 | 0.08 | 0.17 |
 | _EVmutation_\* | 0.44 | 0.39 | 0.20 | 0.09 | 0.08 | 0.06 | 0.07 | 0.05 | 0.08 |
+| _ViennaRNA_ | 0.20 | 0.18 | 0.09 | 0.04 | 0.06 | 0.06 | 0.13 | 0.07 | 0.18 |
 | _RNA-2Di_ | 0.31 | 0.23 | 0.06 | 0.00 | -0.01 | 0.02 | 0.07 | 0.11 | 0.09 |
 | AIDO.RNA (650M) | 0.54 | 0.39 | 0.15 | 0.04 | 0.04 | 0.03 | 0.02 | 0.05 | 0.08 |
 | Evo 2 (40B) | 0.39 | 0.34 | 0.18 | 0.08 | 0.06 | 0.08 | 0.00 | 0.03 | -0.01 |
@@ -102,7 +108,9 @@ Aptamer, by mutation count (molecules):
 
 | Model | 1 (2) | 2 (2) |
 |:--|--:|--:|
+| _ViennaRNA (MSA)_ | 0.36 | 0.25 |
 | _EVmutation_\* | 0.19 | 0.09 |
+| _ViennaRNA_ | 0.35 | 0.23 |
 | _RNA-2Di_ | 0.17 | 0.04 |
 | AIDO.RNA (650M) | 0.08 | 0.04 |
 | Evo 2 (40B) | 0.11 | 0.04 |
@@ -138,7 +146,10 @@ and [ProteinGym][2] implementations. All four [fill strategies][3] are available
 in the prediction files. RNA-ERNIE uses unmasked wild-type probability changes.
 GenSLM uses mean next-codon log likelihood, excluding padding. EVmutation
 scores the change in statistical energy of a pairwise model fitted to each
-assay's Riboseek MSA. RNA-2Di sums, over the dinucleotides a variant changes,
+assay's Riboseek MSA. ViennaRNA scores the clipped change in Boltzmann log
+probability of the wild-type structure ensemble, and ViennaRNA (MSA) adds
+clipped site and base-pair log odds from the Riboseek MSA on the wild-type MFE
+fold. RNA-2Di sums, over the dinucleotides a variant changes,
 the [substitution log odds][7] of Riboseek's dinucleotide matrix file relative to
 the wild type's own score. Mutation count is the
 negative number of substitutions.
