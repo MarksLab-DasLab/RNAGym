@@ -278,6 +278,15 @@ depends-on = ["source", "weights"]
 cmd = "bash baselines/RiNALMo/score_rinalmo.sh"
 depends-on = ["source", "weights"]
 
+[feature.vienna.dependencies]
+pytest = "8.*"
+python = "3.11.*"
+viennarna = "==2.6.4"
+
+[feature.vienna.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published vienna"
+predict = "bash baselines/ViennaRNA/run.sh"
+
 [environments]
 default = { solve-group = "default" }
 aido-rna = { features = ["model", "aido-rna"], no-default-feature = true }
@@ -291,3 +300,4 @@ rna-ernie = { features = ["model", "rna-ernie"], no-default-feature = true }
 rna-fm = { features = ["model", "rna-fm"], no-default-feature = true }
 rnagenesis = { features = ["model", "rnagenesis"], no-default-feature = true }
 rinalmo = { features = ["model", "rinalmo"], no-default-feature = true }
+vienna = { features = ["model", "vienna"], no-default-feature = true }

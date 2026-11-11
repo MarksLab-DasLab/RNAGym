@@ -40,6 +40,7 @@ Replace `<env>` with a model environment from [pixi.toml][2]:
 | `rna-fm` | RNA-FM |
 | `rnagenesis` | RNAGenesis |
 | `rinalmo` | RiNALMo |
+| `vienna` | ViennaRNA and ViennaRNA (MSA) |
 
 `predict` defaults to all assays. To select reference-sheet rows, append an
 index or range, for example `predict 12` or `predict 0-8,12`. Slurm array jobs

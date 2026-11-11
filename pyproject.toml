@@ -57,6 +57,7 @@ project-includes = ["rnagym/clinical", "rnagym/fitness"]
 python-interpreter-path = "rnagym/fitness/.pixi/envs/default/bin/python"
 # Model libraries live in separate Pixi environments and are tested by reproduction
 ignore-missing-imports = [
+  "RNA",
   "evcouplings.*",
   "evo.*",
   "evo2",
