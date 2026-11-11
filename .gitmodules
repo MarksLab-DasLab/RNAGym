@@ -1,0 +1,3 @@
+[submodule "rnagym/figures"]
+	path = rnagym/figures
+	url = git@github.com:debbiemarkslab/RNAGym_figures.git
