@@ -53,25 +53,16 @@ def main(argv: Sequence[str] | None = None) -> None:
 def potts_scores(
     wt: str, msa: Sequence[str], sequences: Sequence[str]
 ) -> dict[str, float]:
-    """Score sequences with a 2D Potts model on the consensus WT fold."""
-    homologs = [r for r in dict.fromkeys(msa) if r != wt]
-
-    # Consensus WT secondary structure from the closest low-gap homologs
-    def wt_matches(r: str) -> int:
-        return sum(a == b for a, b in zip(wt, r, strict=True))
-
-    low_gap = [r for r in homologs if r.count("-") < 0.25 * len(wt)]
-    fc = RNA.fold_compound(wt)
-    if low_gap:
-        top9 = sorted(low_gap, key=wt_matches, reverse=True)[:9]
-        db, _ = RNA.alifold([wt, *top9])
-        fc.hc_add_from_db(_open_mismatches(wt, db), RNA.CONSTRAINT_DB_ENFORCE_BP)
-    bp = _pairs(str(fc.mfe()[0]))
+    """Score sequences with a 2D Potts model on the WT MFE fold."""
+    # Partition positions into WT MFE base pairs and unpaired sites
+    bp = _pairs(str(RNA.fold(wt)[0]))
     unpaired = [i for i in range(len(wt)) if all(i not in p for p in bp)]
 
     # Clipped Laplace log-odds for site fields h and couplings J (gaps default to WT)
     filled = [
-        "".join(wt[i] if b == "-" else b for i, b in enumerate(r)) for r in homologs
+        "".join(wt[i] if b == "-" else b for i, b in enumerate(r))
+        for r in dict.fromkeys(msa)
+        if r != wt
     ]
     h = {i: _log_odds(Counter(r[i] for r in filled), wt[i], "ACGU") for i in unpaired}
     J = {  # J: base-pair couplings
@@ -157,12 +148,9 @@ def _log_odds(
     return {k: min(0.0, math.log((counts[k] + 1) / denom)) for k in alphabet}
 
 
-def _open_mismatches(
-    seq: str, db: str, bp: Sequence[tuple[int, int]] | None = None
-) -> str:
+def _open_mismatches(seq: str, db: str, bp: Sequence[tuple[int, int]]) -> str:
     """Open base pairs in ``db`` that cannot pair canonically on ``seq``."""
-    pairs = _pairs(db) if bp is None else bp
-    bad = {k for i, j in pairs if seq[i] + seq[j] not in VALID_PAIRS for k in (i, j)}
+    bad = {k for i, j in bp if seq[i] + seq[j] not in VALID_PAIRS for k in (i, j)}
     return "".join("." if k in bad else c for k, c in enumerate(db)) if bad else db
 
 

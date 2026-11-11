@@ -148,8 +148,8 @@ GenSLM uses mean next-codon log likelihood, excluding padding. EVmutation
 scores the change in statistical energy of a pairwise model fitted to each
 assay's Riboseek MSA. ViennaRNA scores the clipped change in Boltzmann log
 probability of the wild-type structure ensemble, and ViennaRNA (MSA) adds
-clipped site and base-pair log odds from the Riboseek MSA on the consensus
-wild-type fold. RNA-2Di sums, over the dinucleotides a variant changes,
+clipped site and base-pair log odds from the Riboseek MSA on the wild-type MFE
+fold. RNA-2Di sums, over the dinucleotides a variant changes,
 the [substitution log odds][7] of Riboseek's dinucleotide matrix file relative to
 the wild type's own score. Mutation count is the
 negative number of substitutions.
