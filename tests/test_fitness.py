@@ -364,7 +364,7 @@ def test_vienna_scoring(fitness_data) -> None:
         fc = RNA.fold_compound(seq)
         fc.pf()
         mean_e = sum(
-            fc.eval_structure(scorer.open_mismatches(seq, s, scorer.pairs(s)))
+            fc.eval_structure(scorer._open_mismatches(seq, s, scorer._pairs(s)))
             for s in samples
         ) / len(samples)
         expected.append(min(0.0, float(np.log(fc.pr_energy(mean_e) / wt_pr))))
