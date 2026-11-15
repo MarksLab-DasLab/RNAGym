@@ -316,3 +316,71 @@ def test_substitution_scoring(fitness_data) -> None:
                     (pl.col("model") == model) & (pl.col("DMS_ID") == name)
                 )["score"],
             )
+
+
+def test_dms_binarization_and_count_auc() -> None:
+    """Select bimodal vs median cutoffs and score fixed-count AUROC cleanly."""
+    from rnagym.fitness.tasks.binarization import select_binarization_cutoff
+    from rnagym.fitness.tasks.performance_fitness import (
+        aggregate_by_mutation_count,
+        calculate_metrics,
+        mutation_count_rows,
+    )
+
+    rng = np.random.default_rng(42)
+    bimodal = np.concatenate([rng.normal(0.15, 0.04, 200), rng.normal(0.85, 0.05, 150)])
+    cutoff, method = select_binarization_cutoff(bimodal, wt_score=1.0)
+    assert method == "bimodal_valley"
+    assert 0.35 < cutoff < 0.65
+
+    unimodal = rng.normal(-0.2, 0.1, 300)
+    u_cutoff, u_method = select_binarization_cutoff(unimodal, wt_score=0.0)
+    assert u_method == "median"
+    np.testing.assert_allclose(u_cutoff, np.median(unimodal), atol=1e-7)
+
+    # Custom cutoff overrides median binarization, and constant scores get 0.5 AUROC
+    assay = np.array([0.0, 0.1, 0.2, 0.9])
+    custom = calculate_metrics(assay, np.array([1.0, 2.0, 3.0, 4.0]), cutoff=0.5)
+    assert custom["AUC"] == 1.0
+    constant = calculate_metrics(assay, np.array([-1.0, -1.0, -1.0, -1.0]), cutoff=0.5)
+    assert constant["AUC"] == 0.5
+
+    # Fixed mutation count AUROC requires >=10 positives and >=10 negatives
+    singles = [f"A{i}G" for i in range(1, 31)]
+    doubles = [f"A{i}G,C{i + 40}U" for i in range(1, 31)]
+    data = pl.DataFrame(
+        {
+            "mutant": [*singles, *doubles],
+            # 15 negatives (<=9.5) and 15 positives (>9.5) in singles; only 5 positives in doubles
+            "DMS_score": [*range(5, 35), *([1.0] * 25), *([20.0] * 5)],
+            "ordered_score": [*range(30), *range(30)],
+            "count_score": [-1.0] * 30 + [-2.0] * 30,
+        },
+        schema_overrides={"DMS_score": pl.Float64},
+    )
+    rows = pl.DataFrame(
+        mutation_count_rows(
+            "assay",
+            "Ribozyme",
+            "molecule",
+            data,
+            ["ordered_score", "count_score"],
+            cutoff=19.5,
+        )
+    )
+    auc_by_cell = {
+        (r["Model"], r["Mutations"]): r["AUC"] for r in rows.iter_rows(named=True)
+    }
+    assert auc_by_cell == {
+        ("ordered_score", 1): 1.0,
+        ("count_score", 1): 0.5,
+        ("ordered_score", 2): None,
+        ("count_score", 2): None,
+    }
+    agg = aggregate_by_mutation_count(rows)
+    s1 = agg.filter((pl.col("Model") == "count_score") & (pl.col("Mutations") == 1))
+    assert s1["AUC_Mean"].to_list() == [0.5]
+    assert s1["AUC_Molecules"].to_list() == [1]
+    s2 = agg.filter((pl.col("Model") == "ordered_score") & (pl.col("Mutations") == 2))
+    assert s2["AUC_Mean"].to_list() == [None]
+    assert s2["AUC_Molecules"].to_list() == [0]

@@ -51,6 +51,15 @@ fully biological and carry the unmasked construct. Rows without an assessment
 are empty. Riboseek searches each masked query without its `N` ends, and
 `msa/riboseek/by_assay/{DMS_ID}_masked.a3m` links the result.
 
+## Binarization cutoffs
+
+`DMS_bin_cutoff` sets the functional threshold in raw `DMS_score` units
+(`DMS_score > DMS_bin_cutoff`), `DMS_bin_method` records whether the assay uses
+its bimodal dead/functional valley (`bimodal_valley`, 14 ncRNA assays) or assay
+median (`median`, 15 ncRNA assays), and `DMS_frac_functional` records the
+resulting functional variant fraction. Rows outside the 29 scored ncRNA assays
+are empty and fall back to the assay median when evaluated.
+
 ## Assay lookup
 
 Use the `DMS_ID` from

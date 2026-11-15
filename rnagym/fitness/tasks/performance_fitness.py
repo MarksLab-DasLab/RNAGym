@@ -21,8 +21,12 @@ from rnagym.fitness.tasks.model_registry import ALL_MODELS, ASSAY_GROUPS
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# Optional reference sheet column overriding median binarization (`DMS_score > cutoff`)
+BIN_CUTOFF = "DMS_bin_cutoff"
 DEPTHS = ("single", "multiple")
 METRICS = ("Spearman", "AUC", "MCC")
+# Minimum positive and negative variants required for fixed-depth AUC within one count
+MIN_COUNT_CLASS_VARIANTS = 10
 # Spearman within one mutation count leaves out counts with fewer variants, too few to rank
 MIN_COUNT_VARIANTS = 30
 # Reference sheet column naming the RNA molecule each assay measures
@@ -35,6 +39,7 @@ COUNT_SCHEMA = {
     "Model": pl.String,
     "Mutations": pl.Int64,
     "Spearman": pl.Float64,
+    "AUC": pl.Float64,
     "Variants": pl.Int64,
 }
 RNA_TYPES = ("mRNA-splicing", "mRNA-coding", "tRNA", "Aptamer", "Ribozyme")
@@ -50,6 +55,21 @@ def _add_depth(data: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.lit("single"))
         .alias("Depth")
     )
+
+
+def _assay_cutoff(assay_info: dict[str, object]) -> float | None:
+    """Read an explicit binarization cutoff from a reference row when present."""
+    raw_value = assay_info.get(BIN_CUTOFF)
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, (int, float)):
+        value = float(raw_value)
+        return value if np.isfinite(value) else None
+    text = str(raw_value).strip()
+    if not text:
+        return None
+    value = float(text)
+    return value if np.isfinite(value) else None
 
 
 def _metric_rows(
@@ -113,13 +133,13 @@ def aggregate_by_depth(depth_metrics: pl.DataFrame, models: list[str]) -> pl.Dat
 
 
 def aggregate_by_mutation_count(count_metrics: pl.DataFrame) -> pl.DataFrame:
-    """Average Spearman within each mutation count over the molecules of each RNA type.
+    """Average metrics within each mutation count over the molecules of each RNA type.
 
     Assays of one molecule are averaged first. Counts are never averaged together.
     """
     keys = ("Model", "RNA_TYPE", "Mutations")
     # A fixed group order fixes the order of the sums, so the table is bitwise stable
-    return (
+    aggregated = (
         count_metrics.group_by(*keys, MOLECULE, maintain_order=True)
         .agg(pl.col("Spearman").mean())
         .group_by(*keys, maintain_order=True)
@@ -129,6 +149,21 @@ def aggregate_by_mutation_count(count_metrics: pl.DataFrame) -> pl.DataFrame:
         )
         .sort(keys)
     )
+    if "AUC" not in count_metrics.columns:
+        return aggregated
+    auc_aggregated = (
+        count_metrics.drop_nulls("AUC")
+        .group_by(*keys, MOLECULE, maintain_order=True)
+        .agg(pl.col("AUC").mean())
+        .group_by(*keys, maintain_order=True)
+        .agg(
+            pl.col("AUC").mean().alias("AUC_Mean"),
+            pl.len().alias("AUC_Molecules"),
+        )
+    )
+    return aggregated.join(
+        auc_aggregated, on=list(keys), how="left", maintain_order="left"
+    ).with_columns(pl.col("AUC_Molecules").fill_null(0))
 
 
 def aggregate_by_rna_type(
@@ -200,11 +235,21 @@ def aggregate_by_type_and_depth(
                 .select(pl.col(*METRICS).mean())
                 .row(0, named=True)
             )
-            row: dict[str, object] = {"Model": model, "Depth": depth, "RNA_TYPE": "All"}
+            row = {"Model": model, "Depth": depth, "RNA_TYPE": "All"}
             row.update({f"{metric}_Mean": all_values[metric] for metric in METRICS})
             rows.append(row)
 
     return pl.DataFrame(rows, infer_schema_length=None)
+
+
+def auc_score(binary_assay: np.ndarray, model_scores: np.ndarray) -> float:
+    """Mann-Whitney AUROC; 0.5 for constant predictions, NaN if only one class."""
+    positives = int(binary_assay.sum())
+    if positives == 0 or positives == len(binary_assay):
+        return float("nan")
+    if np.ptp(model_scores) == 0:
+        return 0.5
+    return float(roc_auc_score(binary_assay, model_scores))
 
 
 def average_molecules(metrics: pl.DataFrame, keys: Sequence[str]) -> pl.DataFrame:
@@ -220,19 +265,29 @@ def average_molecules(metrics: pl.DataFrame, keys: Sequence[str]) -> pl.DataFram
 
 
 def calculate_metrics(
-    assay_scores: np.ndarray, model_scores: np.ndarray
+    assay_scores: np.ndarray,
+    model_scores: np.ndarray,
+    cutoff: float | None = None,
 ) -> dict[str, float]:
     """Calculate directed Spearman, AUC, and MCC.
 
-    AUC binarizes assay scores at their median. MCC binarizes both score vectors
-    at their respective medians.
+    AUC and MCC binarize assay scores at ``cutoff`` (`DMS_score > cutoff`) when
+    provided, or at the assay median otherwise. Model scores for MCC are binarized
+    at their median.
     """
-    binary_assay = assay_scores > np.median(assay_scores)
+    threshold = float(np.median(assay_scores)) if cutoff is None else float(cutoff)
+    binary_assay = assay_scores > threshold
     binary_model = model_scores > np.median(model_scores)
+    positives = int(binary_assay.sum())
+    has_both_classes = 0 < positives < len(binary_assay)
     return {
         "Spearman": spearman(assay_scores, model_scores),
-        "AUC": float(roc_auc_score(binary_assay, model_scores)),
-        "MCC": matthews_corrcoef(binary_assay, binary_model),
+        "AUC": auc_score(binary_assay, model_scores),
+        "MCC": (
+            float(matthews_corrcoef(binary_assay, binary_model))
+            if has_both_classes
+            else float("nan")
+        ),
     }
 
 
@@ -271,21 +326,36 @@ def mutation_count_rows(
     molecule: str,
     data: pl.DataFrame,
     score_columns: list[str],
+    cutoff: float | None = None,
 ) -> list[dict[str, object]]:
-    """Spearman within each mutation count of ``MIN_COUNT_VARIANTS`` or more variants.
+    """Metrics within each mutation count of ``MIN_COUNT_VARIANTS`` or more variants.
 
     Only variants with the same number of mutations are ranked against each other,
-    so ranking by the number of mutations alone scores zero. Counts whose measured
-    fitness never varies are skipped.
+    so ranking by the number of mutations alone scores zero in Spearman and 0.5 in
+    AUROC. Fixed-depth AUROC requires at least ``MIN_COUNT_CLASS_VARIANTS`` positive
+    and negative variants under the assay binarization threshold.
     """
     data = data.drop_nulls("mutant")
     counts = data["mutant"].str.count_matches(",").to_numpy() + 1
     measured = data["DMS_score"].cast(pl.Float64).to_numpy()
+    threshold = (
+        float(np.median(measured))
+        if (cutoff is None and len(measured) > 0)
+        else (0.0 if cutoff is None else float(cutoff))
+    )
+    binary = measured > threshold
     rows: list[dict[str, object]] = []
     for count in np.unique(counts):
         group = counts == count
-        if group.sum() < MIN_COUNT_VARIANTS or np.ptp(measured[group]) == 0:
+        n_group = int(group.sum())
+        if n_group < MIN_COUNT_VARIANTS or np.ptp(measured[group]) == 0:
             continue
+        positives = int(binary[group].sum())
+        negatives = n_group - positives
+        has_auc = (
+            positives >= MIN_COUNT_CLASS_VARIANTS
+            and negatives >= MIN_COUNT_CLASS_VARIANTS
+        )
         for column in score_columns:
             scores = data[column].cast(pl.Float64).to_numpy()
             rows.append(
@@ -296,14 +366,18 @@ def mutation_count_rows(
                     "Model": column,
                     "Mutations": int(count),
                     "Spearman": spearman(measured[group], scores[group]),
-                    "Variants": int(group.sum()),
+                    "AUC": auc_score(binary[group], scores[group]) if has_auc else None,
+                    "Variants": n_group,
                 }
             )
     return rows
 
 
 def get_performance_dataset(
-    data: pl.DataFrame, assay_column: str, score_columns: list[str]
+    data: pl.DataFrame,
+    assay_column: str,
+    score_columns: list[str],
+    cutoff: float | None = None,
 ) -> dict[str, dict[str, float]]:
     """Calculate each model's metrics from complete finite values."""
     data = data.drop_nulls("mutant")
@@ -330,7 +404,9 @@ def get_performance_dataset(
 
         try:
             results[score_column] = calculate_metrics(
-                pairs[assay_column].to_numpy(), pairs[score_column].to_numpy()
+                pairs[assay_column].to_numpy(),
+                pairs[score_column].to_numpy(),
+                cutoff=cutoff,
             )
         except (TypeError, ValueError) as error:
             logger.warning("Could not calculate %s: %s", score_column, error)
@@ -364,6 +440,7 @@ def load_assay_metrics(
         if "Depth" not in assay:
             assay = _add_depth(assay)
 
+        cutoff = _assay_cutoff(assay_info)
         filtered = assay
         if msa_only:
             baseline = assay["EVmutation_score"].cast(pl.Float64)
@@ -384,7 +461,9 @@ def load_assay_metrics(
         if msa_only and not evaluable:
             continue
 
-        filtered_results = get_performance_dataset(filtered, "DMS_score", score_columns)
+        filtered_results = get_performance_dataset(
+            filtered, "DMS_score", score_columns, cutoff=cutoff
+        )
         undefined = [
             model
             for model, metrics in filtered_results.items()
@@ -398,10 +477,15 @@ def load_assay_metrics(
         keys = (assay_info["DMS_ID"], assay_info["RNA_TYPE"], assay_info[MOLECULE])
         assay_rows.extend(_metric_rows(*keys, filtered_results))
         depth_rows.extend(_metric_rows(*keys, filtered_results, "overall"))
-        count_rows.extend(mutation_count_rows(*keys, filtered, score_columns))
+        count_rows.extend(
+            mutation_count_rows(*keys, filtered, score_columns, cutoff=cutoff)
+        )
         for depth in DEPTHS:
             depth_results = get_performance_dataset(
-                filtered.filter(pl.col("Depth") == depth), "DMS_score", score_columns
+                filtered.filter(pl.col("Depth") == depth),
+                "DMS_score",
+                score_columns,
+                cutoff=cutoff,
             )
             depth_rows.extend(_metric_rows(*keys, depth_results, depth))
 
