@@ -99,3 +99,8 @@ EVO2: dict[str, tuple[int, int]] = {
 
 # Every scored checkpoint, in the order of the published evaluation
 MODELS = (*MASKED, *EVO2)
+
+VIENNA_CAP = 201
+
+# Simple substitution-only baselines without pretraining, scored on SNVs
+BASELINES = ("ViennaRNA", "RNA-2Di")

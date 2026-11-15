@@ -36,7 +36,7 @@ import numpy.typing as npt
 import polars as pl
 from sklearn.metrics import average_precision_score
 
-from rnagym.clinical.models import MODELS
+from rnagym.clinical.models import BASELINES, MODELS
 from rnagym.clinical.tasks.prepare import MITO, NUCLEAR
 from rnagym.config import ConfigClinical
 
@@ -220,7 +220,13 @@ def group_record(
 
 
 def evaluate(
-    name: str, staged: Path, merged: Path, models: Sequence[str], draws: int, seed: int
+    name: str,
+    staged: Path,
+    merged: Path,
+    models: Sequence[str],
+    draws: int,
+    seed: int,
+    snv_baselines: Sequence[str] = (),
 ) -> tuple[pl.DataFrame, pl.DataFrame | None]:
     """Return the group table and, for nuclear files, the headline table of a file."""
     mito = name.startswith("mt_")
@@ -235,6 +241,14 @@ def evaluate(
         joined = meta.select("row_id").join(frame, on="row_id", how="left")
         scores[model] = joined["score"].to_numpy()
     finite = np.all([np.isfinite(v) for v in scores.values()], axis=0)
+    extra_scores: dict[str, npt.NDArray[np.float64]] = {}
+    if snv_baselines and "snv" in set(meta["cohort"].to_list()):
+        for baseline in snv_baselines:
+            frame = pl.read_parquet(
+                merged / name / f"{baseline}.parquet", columns=["row_id", "score"]
+            )
+            joined = meta.select("row_id").join(frame, on="row_id", how="left")
+            extra_scores[baseline] = joined["score"].to_numpy()
     baselines = {}
     if mito:
         freq = meta["benign_rule_freq"].cast(pl.Float64, strict=False).to_numpy()
@@ -260,7 +274,16 @@ def evaluate(
             for _ in range(draws)
         ]
         weights = [c[cluster_of_row] for c in cluster_draws]
-        predictors = {m: -v[keep] for m, v in scores.items()} | {
+        cohort_scores = dict(scores)
+        if cohort == "snv" and extra_scores:
+            for baseline, values in extra_scores.items():
+                if not np.isfinite(values[keep]).all():
+                    missing = int((~np.isfinite(values[keep])).sum())
+                    raise ValueError(
+                        f"{name}: SNV baseline {baseline} lacks {missing} model_rows"
+                    )
+            cohort_scores |= extra_scores
+        predictors = {m: -v[keep] for m, v in cohort_scores.items()} | {
             b: v[keep] for b, v in baselines.items()
         }
         # Row sets: every model-scored row, and the complete cases where the baseline
@@ -269,7 +292,7 @@ def evaluate(
             [np.isfinite(v[keep]) for v in baselines.values()], axis=0
         )
         row_sets = {
-            "model_rows": (np.ones(len(sub), dtype=bool), list(scores)),
+            "model_rows": (np.ones(len(sub), dtype=bool), list(cohort_scores)),
             "complete_cases": (baseline_known, list(predictors)),
         }
         reportable_consequence = []
@@ -305,7 +328,7 @@ def evaluate(
             sub,
             label,
             keep,
-            scores,
+            cohort_scores,
             predictors,
             reportable_consequence,
             cluster_ids,
@@ -440,6 +463,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--names", nargs="+", default=[*NUCLEAR, *MITO])
     parser.add_argument("--models", nargs="+", default=list(MODELS))
+    parser.add_argument(
+        "--baselines",
+        nargs="*",
+        default=None,
+        help="SNV-only baselines; default: every BASELINES file present in --merged",
+    )
     parser.add_argument("--out", type=Path, default=ConfigClinical.EVALUATION_DIR)
     parser.add_argument("--bootstrap", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20261008)
@@ -451,8 +480,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     for name in args.names:
+        snv_baselines = (
+            [b for b in BASELINES if (args.merged / name / f"{b}.parquet").exists()]
+            if args.baselines is None
+            else list(args.baselines)
+        )
         table, headline = evaluate(
-            name, args.staged, args.merged, args.models, args.bootstrap, args.seed
+            name,
+            args.staged,
+            args.merged,
+            args.models,
+            args.bootstrap,
+            args.seed,
+            snv_baselines,
         )
         table.write_csv(args.out / f"{name}.groups.csv")
         if headline is not None:

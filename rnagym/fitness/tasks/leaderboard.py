@@ -41,6 +41,7 @@ MODEL_LABELS = {
     "RNAErnie": "RNA-ERNIE",
     "RNA-FM": "RNA-FM",
     "rnagenesis": "RNAGenesis",
+    "ViennaRNA": "ViennaRNA",
 }
 
 

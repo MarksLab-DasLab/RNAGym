@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Score one shard of staged clinical files with one checkpoint, in that model's
-# fitness environment, after the same setup as its fitness scoring wrapper.
+# Score one shard of staged clinical files with one checkpoint or baseline.
 # Usage: score.sh <model> <name> [<name> ...]. The shard is SLURM_ARRAY_TASK_ID
 # (default 0) of NUM_SHARDS (default 1); SCORE_OPTIONS adds scorer options,
-# such as --row-ids-dir or --out.
+# such as --row-ids-dir, --cpu or --out.
 set -euo pipefail
 umask 002
 
@@ -11,6 +10,7 @@ usage="usage: score.sh <model> <name> [<name> ...]"
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repository=$(cd -- "$script_dir/../../.." && pwd)
 fitness="$repository/rnagym/fitness"
+clinical="$repository/rnagym/clinical"
 checkpoint_root=${RNAGYM_CHECKPOINT_DIR:-/n/lw_groups/marks/ckpt}
 model=${1:?$usage}
 shift
@@ -20,6 +20,7 @@ if (($# == 0)); then
 fi
 
 scorer=score_masked
+manifest="$fitness/pixi.toml"
 case $model in
 rna_fm) environment=rna-fm ;;
 rinalmo) environment=rinalmo ;;
@@ -31,6 +32,11 @@ evo2_*)
 	environment=evo2
 	scorer=score_evo2
 	;;
+RNA-2Di | ViennaRNA)
+	environment=default
+	manifest="$clinical/pixi.toml"
+	scorer=score_baselines
+	;;
 *)
 	echo "unknown model: $model" >&2
 	exit 2
@@ -38,7 +44,7 @@ evo2_*)
 esac
 
 run() {
-	pixi run --manifest-path "$fitness/pixi.toml" --environment "$environment" "$@"
+	pixi run --frozen --manifest-path "$manifest" --environment "$environment" "$@"
 }
 
 case $environment in

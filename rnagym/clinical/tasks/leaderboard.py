@@ -3,11 +3,12 @@
 ClinVar has four units, pre-mRNA and mature mRNA SNVs and indels. A unit's
 macro is the plain mean of the AUROC over its reportable consequence classes,
 and the ClinVar score is the plain mean of the four unit macros, so each unit
-weighs the same. MITOMAP is read on the processed RNA: the mito score is the
-plain mean of the tRNA AUROC, on the tRNA with its CCA tail, and the mRNA
-missense AUROC. Every model is compared on the rows all models scored. Every
-aggregate uses the evaluation's full-precision values; tables are rounded to
-12 digits only when written.
+weighs the same. Substitution-only simple baselines score the two SNV units and
+average those two units on ClinVar. MITOMAP is read on the processed RNA: the
+mito score is the plain mean of the tRNA AUROC, on the tRNA with its CCA tail,
+and the mRNA missense AUROC. Every model is compared on the rows all models
+scored. Every aggregate uses the evaluation's full-precision values; tables are
+rounded to 12 digits only when written.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from pathlib import Path
 
 import polars as pl
 
-from rnagym.clinical.models import MODELS
+from rnagym.clinical.models import BASELINES, MODELS
 from rnagym.config import ConfigClinical
 from rnagym.fitness.tasks.leaderboard import MODEL_LABELS
 
@@ -29,6 +30,7 @@ NUCLEAR = {
     "premrna_indel": ("premrna_10101_indel", "nonsnv"),
     "mature_indel": ("mature_mrna_indel", "nonsnv"),
 }
+SNV_NUCLEAR = ("premrna_snv", "mature_snv")
 UNIT_LABELS = {
     "premrna_snv": "Pre-mRNA SNV",
     "mature_snv": "Mature mRNA SNV",
@@ -64,6 +66,27 @@ def label(model: str) -> str:
     return MODEL_LABELS[FITNESS_KEYS.get(model, model)]
 
 
+def display_name(
+    model: str, snv_baselines: Sequence[str] = (), partial: bool = False
+) -> str:
+    """Format a model name for Markdown, italicizing simple baselines."""
+    text = label(model)
+    if model in snv_baselines:
+        text = f"_{text}_"
+        if partial:
+            text += "\\*"
+    return text
+
+
+def detect_baselines(evaluation: Path) -> list[str]:
+    """Return SNV baselines present in the pre-mRNA SNV evaluation."""
+    path = evaluation / f"{NUCLEAR['premrna_snv'][0]}.groups.csv"
+    if not path.exists():
+        return []
+    present = set(pl.read_csv(path, columns=["predictor"])["predictor"].to_list())
+    return [b for b in BASELINES if b in present]
+
+
 def read_groups(evaluation: Path, name: str, models: Sequence[str]) -> pl.DataFrame:
     """Return one file's group table on the rows every model scored."""
     groups = pl.read_csv(
@@ -95,28 +118,31 @@ def check_complete(classes: pl.DataFrame, models: Sequence[str]) -> None:
 
 
 def nuclear(
-    evaluation: Path, models: Sequence[str]
+    evaluation: Path, models: Sequence[str], snv_baselines: Sequence[str] = ()
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Return the reportable consequence classes and the macro of each ClinVar unit."""
     classes: list[pl.DataFrame] = []
     units: list[pl.DataFrame] = []
+    expected_rows = 0
     for unit, (name, cohort) in NUCLEAR.items():
-        groups = read_groups(evaluation, name, models).filter(
+        unit_models = [*models, *snv_baselines] if unit in SNV_NUCLEAR else list(models)
+        expected_rows += len(unit_models)
+        groups = read_groups(evaluation, name, unit_models).filter(
             (pl.col("cohort") == cohort)
             & (pl.col("group_type") == "consequence")
             & pl.col("reportable")
         )
-        classes.append(
-            groups.select(
-                pl.lit(unit).alias("unit"),
-                pl.col("group").alias("class"),
-                pl.col("predictor").alias("model"),
-                *CLASS_COLUMNS,
-                pl.lit(name).alias("source"),
-            )
+        unit_classes = groups.select(
+            pl.lit(unit).alias("unit"),
+            pl.col("group").alias("class"),
+            pl.col("predictor").alias("model"),
+            *CLASS_COLUMNS,
+            pl.lit(name).alias("source"),
         )
+        check_complete(unit_classes, unit_models)
+        classes.append(unit_classes)
         headline = pl.read_csv(evaluation / f"{name}.headline.csv").filter(
-            (pl.col("cohort") == cohort) & pl.col("predictor").is_in(models)
+            (pl.col("cohort") == cohort) & pl.col("predictor").is_in(unit_models)
         )
         units.append(
             headline.select(
@@ -130,14 +156,13 @@ def nuclear(
             )
         )
     class_table, unit_table = pl.concat(classes), pl.concat(units)
-    check_complete(class_table, models)
     # The evaluation's macro must be the plain mean of the classes kept here
     check = (
         class_table.group_by("unit", "model")
         .agg(mean=pl.col("auroc").mean(), k=pl.len())
         .join(unit_table, on=["unit", "model"], validate="1:1")
     )
-    if check.height != len(NUCLEAR) * len(models):
+    if check.height != expected_rows:
         raise ValueError("unit macros and classes cover different models")
     off = check.filter(
         ((pl.col("mean") - pl.col("macro")).abs() > 1e-12)
@@ -156,15 +181,16 @@ def mito_rows(groups: pl.DataFrame) -> pl.DataFrame:
 
 
 def mito(
-    evaluation: Path, models: Sequence[str]
+    evaluation: Path, models: Sequence[str], snv_baselines: Sequence[str] = ()
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Return the mito classes, the mito macro and the RNA view's stratum counts."""
+    all_models = [*models, *snv_baselines]
     parts = []
     for cls, (name, _) in MITO_CLASSES.items():
-        kept = mito_rows(read_groups(evaluation, name, models)).filter(
+        kept = mito_rows(read_groups(evaluation, name, all_models)).filter(
             pl.col("group") == cls
         )
-        if kept.height != len(models) or not kept["reportable"].all():
+        if kept.height != len(all_models) or not kept["reportable"].all():
             raise ValueError(f"{name}: {cls} is missing or not reportable")
         parts.append(
             kept.select(
@@ -176,8 +202,8 @@ def mito(
             )
         )
     classes = pl.concat(parts)
-    check_complete(classes, models)
-    view = mito_rows(read_groups(evaluation, MITO_VIEW, models))
+    check_complete(classes, all_models)
+    view = mito_rows(read_groups(evaluation, MITO_VIEW, all_models))
     # The tRNA + CCA file must hold the same tRNA variants as the RNA view
     plain = view.filter(pl.col("group") == "tRNA").select("n_pathogenic", "n_benign")
     cca = classes.filter(pl.col("class") == "tRNA").select("n_pathogenic", "n_benign")
@@ -215,15 +241,25 @@ def mito(
     return classes, units, strata
 
 
-def scores(units: pl.DataFrame, models: Sequence[str]) -> pl.DataFrame:
+def scores(
+    units: pl.DataFrame, models: Sequence[str], snv_baselines: Sequence[str] = ()
+) -> pl.DataFrame:
     """Return one row per model: the ClinVar and mito scores and the unit macros."""
     wide = units.pivot(on="unit", index="model", values="macro")
+    all_models = [*models, *snv_baselines]
     names = [*NUCLEAR, MITO]
-    if (
-        wide.height != len(models)
-        or wide.select(names).null_count().sum_horizontal().item()
-    ):
+    if set(wide["model"]) != set(all_models) or set(wide.columns) < {"model", *names}:
         raise ValueError("a unit macro is missing")
+    full = wide.filter(pl.col("model").is_in(models))
+    if full.select(names).null_count().sum_horizontal().item():
+        raise ValueError("a unit macro is missing")
+    if snv_baselines:
+        partial = wide.filter(pl.col("model").is_in(snv_baselines))
+        if partial.select([*SNV_NUCLEAR, MITO]).null_count().sum_horizontal().item():
+            raise ValueError("an SNV baseline macro is missing")
+        indel_units = [u for u in NUCLEAR if u not in SNV_NUCLEAR]
+        if partial.select(indel_units).drop_nulls().height:
+            raise ValueError("an SNV baseline has an indel unit macro")
     return wide.select(
         "model",
         pl.mean_horizontal(list(NUCLEAR)).alias("clinvar"),
@@ -232,9 +268,9 @@ def scores(units: pl.DataFrame, models: Sequence[str]) -> pl.DataFrame:
     ).sort("clinvar", "model", descending=[True, False])
 
 
-def number(value: float) -> str:
-    """Format an AUROC to two decimals."""
-    return f"{value:.2f}"
+def number(value: float | None) -> str:
+    """Format an AUROC to two decimals, or '-' when unscored."""
+    return "-" if value is None else f"{value:.2f}"
 
 
 def render(
@@ -242,6 +278,7 @@ def render(
     units: pl.DataFrame,
     classes: pl.DataFrame,
     strata: pl.DataFrame,
+    snv_baselines: Sequence[str] = (),
 ) -> str:
     """Format the ClinVar and mito tables for the README."""
     unit_rows = units.group_by("unit").agg(
@@ -258,8 +295,14 @@ def render(
     ]
     for rank, row in enumerate(board.iter_rows(named=True), 1):
         values = [number(row[u]) for u in ("clinvar", *NUCLEAR)]
-        lines.append(f"| {rank} | {label(row['model'])} | " + " | ".join(values) + " |")
+        name_txt = display_name(row["model"], snv_baselines, partial=True)
+        lines.append(f"| {rank} | {name_txt} | " + " | ".join(values) + " |")
     clinvar = "\n".join(lines)
+    if snv_baselines:
+        clinvar += (
+            "\n\n\\* Simple baselines without pretraining, scored on SNVs only; "
+            "their ClinVar score averages the two SNV units."
+        )
 
     counts = {
         c: (p, b)
@@ -287,7 +330,8 @@ def render(
         values = [number(row[MITO])] + [
             number(auroc[row["model"], c]) for c in MITO_CLASSES
         ]
-        lines.append(f"| {rank} | {label(row['model'])} | " + " | ".join(values) + " |")
+        name_txt = display_name(row["model"], snv_baselines, partial=False)
+        lines.append(f"| {rank} | {name_txt} | " + " | ".join(values) + " |")
     mito_table = "\n".join(lines)
 
     below = strata.filter(~pl.col("reportable"))
@@ -308,19 +352,27 @@ def render(
     )
 
 
-def write_tables(evaluation: Path, output: Path, models: Sequence[str]) -> None:
+def write_tables(
+    evaluation: Path,
+    output: Path,
+    models: Sequence[str],
+    snv_baselines: Sequence[str] | None = None,
+) -> None:
     """Write the leaderboard CSVs and the README tables."""
-    nuclear_classes, nuclear_units = nuclear(evaluation, models)
-    mito_classes, mito_units, strata = mito(evaluation, models)
+    baselines = (
+        detect_baselines(evaluation) if snv_baselines is None else list(snv_baselines)
+    )
+    nuclear_classes, nuclear_units = nuclear(evaluation, models, baselines)
+    mito_classes, mito_units, strata = mito(evaluation, models, baselines)
     classes = pl.concat([nuclear_classes, mito_classes]).sort("unit", "class", "model")
     units = pl.concat([nuclear_units, mito_units]).sort("unit", "model")
-    board = scores(units, models)
+    board = scores(units, models, baselines)
     output.mkdir(parents=True, exist_ok=True)
     board.write_csv(output / "leaderboard.csv", float_precision=12)
     units.write_csv(output / "units.csv", float_precision=12)
     classes.write_csv(output / "classes.csv", float_precision=12)
     strata.write_csv(output / "mito_strata.csv")
-    generated = render(board, units, classes, strata)
+    generated = render(board, units, classes, strata, baselines)
     readme = output / "README.md"
     start, end = "<!-- BEGIN GENERATED TABLES -->", "<!-- END GENERATED TABLES -->"
     text = (
@@ -339,13 +391,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input", type=Path, default=ConfigClinical.EVALUATION_DIR)
     parser.add_argument("--output", type=Path, default=ConfigClinical.LEADERBOARD_DIR)
     parser.add_argument("--models", nargs="+", default=list(MODELS))
+    parser.add_argument(
+        "--baselines",
+        nargs="*",
+        default=None,
+        help="SNV-only baselines; default: every BASELINES predictor in --input",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Rebuild the leaderboard from an evaluation directory."""
     args = parse_args(argv)
-    write_tables(args.input, args.output, args.models)
+    write_tables(args.input, args.output, args.models, args.baselines)
     print(f"Wrote clinical tables to {args.output}")
 
 

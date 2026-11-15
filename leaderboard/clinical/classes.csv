@@ -63,6 +63,8 @@ mature_indel,nonsense,orthrus,2079,11,0.654073199528,0.468306961813,0.8180885627
 mature_indel,nonsense,rinalmo,2079,11,0.744107744108,0.610729920790,0.867987391080,mature_mrna_indel
 mature_indel,nonsense,rna_fm,2079,11,0.597315142770,0.396295603508,0.804975492958,mature_mrna_indel
 mature_indel,nonsense,rnagenesis,2079,11,0.734356552538,0.556481481890,0.890199561481,mature_mrna_indel
+mature_snv,3_prime_utr_variant,RNA-2Di,16,8514,0.497034296453,0.318396347759,0.647297353449,mature_mrna_snv
+mature_snv,3_prime_utr_variant,ViennaRNA,16,8514,0.479533709185,0.211658569408,0.615497190406,mature_mrna_snv
 mature_snv,3_prime_utr_variant,aido_rna,16,8514,0.699399518440,0.515014445918,0.810722057911,mature_mrna_snv
 mature_snv,3_prime_utr_variant,aido_rna_1m,16,8514,0.546474923655,0.421551468817,0.684518774307,mature_mrna_snv
 mature_snv,3_prime_utr_variant,aido_rna_25m,16,8514,0.550442653277,0.423982487989,0.690957467292,mature_mrna_snv
@@ -79,6 +81,8 @@ mature_snv,3_prime_utr_variant,orthrus,16,8514,0.523116337797,0.414512871571,0.6
 mature_snv,3_prime_utr_variant,rinalmo,16,8514,0.718081982617,0.532083907663,0.829893057595,mature_mrna_snv
 mature_snv,3_prime_utr_variant,rna_fm,16,8514,0.678316596195,0.498640062755,0.787970530821,mature_mrna_snv
 mature_snv,3_prime_utr_variant,rnagenesis,16,8514,0.552281536293,0.437392303813,0.687952641594,mature_mrna_snv
+mature_snv,5_prime_utr_variant,RNA-2Di,53,2487,0.499078225641,0.415692061777,0.577157223993,mature_mrna_snv
+mature_snv,5_prime_utr_variant,ViennaRNA,53,2487,0.458296348560,0.398353261394,0.533337018124,mature_mrna_snv
 mature_snv,5_prime_utr_variant,aido_rna,53,2487,0.493710691824,0.432202789428,0.579794850698,mature_mrna_snv
 mature_snv,5_prime_utr_variant,aido_rna_1m,53,2487,0.522733307539,0.457740163697,0.619008641008,mature_mrna_snv
 mature_snv,5_prime_utr_variant,aido_rna_25m,53,2487,0.521382889137,0.461323609253,0.609505743092,mature_mrna_snv
@@ -95,6 +99,8 @@ mature_snv,5_prime_utr_variant,orthrus,53,2487,0.568397174743,0.511755688532,0.6
 mature_snv,5_prime_utr_variant,rinalmo,53,2487,0.563587257513,0.481138566415,0.676195571310,mature_mrna_snv
 mature_snv,5_prime_utr_variant,rna_fm,53,2487,0.482471113943,0.421855280342,0.566812569036,mature_mrna_snv
 mature_snv,5_prime_utr_variant,rnagenesis,53,2487,0.493153075237,0.424618264024,0.595261680715,mature_mrna_snv
+mature_snv,initiator_codon_variant,RNA-2Di,613,21,0.506564126466,0.390806123081,0.623000032830,mature_mrna_snv
+mature_snv,initiator_codon_variant,ViennaRNA,613,21,0.538413734172,0.421732216968,0.659461307438,mature_mrna_snv
 mature_snv,initiator_codon_variant,aido_rna,613,21,0.565563582692,0.431338993413,0.713185250166,mature_mrna_snv
 mature_snv,initiator_codon_variant,aido_rna_1m,613,21,0.547813252544,0.425940231892,0.679376220245,mature_mrna_snv
 mature_snv,initiator_codon_variant,aido_rna_25m,613,21,0.664996504311,0.541035816036,0.783255514930,mature_mrna_snv
@@ -111,6 +117,8 @@ mature_snv,initiator_codon_variant,orthrus,613,21,0.509671405267,0.380096053167,
 mature_snv,initiator_codon_variant,rinalmo,613,21,0.688339936301,0.564507612833,0.814709162294,mature_mrna_snv
 mature_snv,initiator_codon_variant,rna_fm,613,21,0.521867474559,0.391287229664,0.670738936971,mature_mrna_snv
 mature_snv,initiator_codon_variant,rnagenesis,613,21,0.571622776354,0.441652023271,0.725328372885,mature_mrna_snv
+mature_snv,missense_variant,RNA-2Di,23560,38366,0.510662006793,0.500741765476,0.520299705839,mature_mrna_snv
+mature_snv,missense_variant,ViennaRNA,23560,38366,0.529747873046,0.522883810186,0.536542763995,mature_mrna_snv
 mature_snv,missense_variant,aido_rna,23560,38366,0.542473928285,0.520934826514,0.566237540097,mature_mrna_snv
 mature_snv,missense_variant,aido_rna_1m,23560,38366,0.548213197023,0.528834358288,0.569011033891,mature_mrna_snv
 mature_snv,missense_variant,aido_rna_25m,23560,38366,0.612526623433,0.591798461710,0.634726387183,mature_mrna_snv
@@ -127,6 +135,8 @@ mature_snv,missense_variant,orthrus,23560,38366,0.529851714945,0.511696482146,0.
 mature_snv,missense_variant,rinalmo,23560,38366,0.578573219298,0.556690613760,0.603359738997,mature_mrna_snv
 mature_snv,missense_variant,rna_fm,23560,38366,0.525411572388,0.507660066343,0.542590540371,mature_mrna_snv
 mature_snv,missense_variant,rnagenesis,23560,38366,0.537676154418,0.519935780203,0.556745606265,mature_mrna_snv
+mature_snv,non_coding_transcript_variant,RNA-2Di,23,45,0.706280193237,0.564169409022,0.855758995906,mature_mrna_snv
+mature_snv,non_coding_transcript_variant,ViennaRNA,23,45,0.581159420290,0.412863835726,0.830324675325,mature_mrna_snv
 mature_snv,non_coding_transcript_variant,aido_rna,23,45,0.923671497585,0.829293189246,1.000000000000,mature_mrna_snv
 mature_snv,non_coding_transcript_variant,aido_rna_1m,23,45,0.554106280193,0.309343434343,0.692116890531,mature_mrna_snv
 mature_snv,non_coding_transcript_variant,aido_rna_25m,23,45,0.569082125604,0.388744588745,0.666303943452,mature_mrna_snv
@@ -143,6 +153,8 @@ mature_snv,non_coding_transcript_variant,orthrus,23,45,0.521739130435,0.36239583
 mature_snv,non_coding_transcript_variant,rinalmo,23,45,0.927536231884,0.727239597138,1.000000000000,mature_mrna_snv
 mature_snv,non_coding_transcript_variant,rna_fm,23,45,0.927536231884,0.785706301895,1.000000000000,mature_mrna_snv
 mature_snv,non_coding_transcript_variant,rnagenesis,23,45,0.899516908213,0.803738533821,1.000000000000,mature_mrna_snv
+mature_snv,nonsense,RNA-2Di,23141,160,0.487343351627,0.439519372100,0.531773795747,mature_mrna_snv
+mature_snv,nonsense,ViennaRNA,23141,160,0.511734313556,0.464717394404,0.560187084305,mature_mrna_snv
 mature_snv,nonsense,aido_rna,23141,160,0.629626123547,0.578097382946,0.677983605804,mature_mrna_snv
 mature_snv,nonsense,aido_rna_1m,23141,160,0.638764260404,0.588574723044,0.686804374530,mature_mrna_snv
 mature_snv,nonsense,aido_rna_25m,23141,160,0.643351356899,0.592931151806,0.690395692707,mature_mrna_snv
@@ -159,6 +171,8 @@ mature_snv,nonsense,orthrus,23141,160,0.492757713582,0.444278940871,0.5443281984
 mature_snv,nonsense,rinalmo,23141,160,0.667211604944,0.616274681614,0.713242073079,mature_mrna_snv
 mature_snv,nonsense,rna_fm,23141,160,0.554010468433,0.506070178581,0.600243084846,mature_mrna_snv
 mature_snv,nonsense,rnagenesis,23141,160,0.608202432911,0.562048844483,0.657630289222,mature_mrna_snv
+mature_snv,stop_lost,RNA-2Di,54,19,0.589668615984,0.432276226943,0.736782388664,mature_mrna_snv
+mature_snv,stop_lost,ViennaRNA,54,19,0.559454191033,0.398750000000,0.711733090042,mature_mrna_snv
 mature_snv,stop_lost,aido_rna,54,19,0.500974658869,0.324937714590,0.671159394086,mature_mrna_snv
 mature_snv,stop_lost,aido_rna_1m,54,19,0.471734892788,0.287038679379,0.644546008977,mature_mrna_snv
 mature_snv,stop_lost,aido_rna_25m,54,19,0.683235867446,0.510926870748,0.813129123928,mature_mrna_snv
@@ -175,6 +189,8 @@ mature_snv,stop_lost,orthrus,54,19,0.553606237817,0.378801568704,0.711955159113,
 mature_snv,stop_lost,rinalmo,54,19,0.543859649123,0.360332553476,0.692492458914,mature_mrna_snv
 mature_snv,stop_lost,rna_fm,54,19,0.509746588694,0.326430487375,0.684619565217,mature_mrna_snv
 mature_snv,stop_lost,rnagenesis,54,19,0.546296296296,0.359279713007,0.722720807073,mature_mrna_snv
+mature_snv,synonymous_variant,RNA-2Di,283,147951,0.596346409982,0.558878845530,0.627796780888,mature_mrna_snv
+mature_snv,synonymous_variant,ViennaRNA,283,147951,0.508703304095,0.468802407262,0.546499143854,mature_mrna_snv
 mature_snv,synonymous_variant,aido_rna,283,147951,0.409609135944,0.377400451890,0.442485030179,mature_mrna_snv
 mature_snv,synonymous_variant,aido_rna_1m,283,147951,0.406911508975,0.374960575056,0.439720596880,mature_mrna_snv
 mature_snv,synonymous_variant,aido_rna_25m,283,147951,0.405897003002,0.373330845809,0.439882219155,mature_mrna_snv
@@ -191,6 +207,8 @@ mature_snv,synonymous_variant,orthrus,283,147951,0.426346245425,0.390925296873,0
 mature_snv,synonymous_variant,rinalmo,283,147951,0.426711529672,0.395677718814,0.460062068519,mature_mrna_snv
 mature_snv,synonymous_variant,rna_fm,283,147951,0.407598442546,0.374876856037,0.440438331197,mature_mrna_snv
 mature_snv,synonymous_variant,rnagenesis,283,147951,0.411239952355,0.379154869258,0.444241247550,mature_mrna_snv
+mito,missense_variant,RNA-2Di,41,74,0.487640079103,0.383657670052,0.612023209107,mt_rna
+mito,missense_variant,ViennaRNA,41,74,0.455174686882,0.347940062302,0.560909738434,mt_rna
 mito,missense_variant,aido_rna,41,74,0.542518127884,0.388123189795,0.685828571429,mt_rna
 mito,missense_variant,aido_rna_1m,41,74,0.481707317073,0.284912884070,0.692039219661,mt_rna
 mito,missense_variant,aido_rna_25m,41,74,0.517139090310,0.322409304175,0.706974647967,mt_rna
@@ -207,6 +225,8 @@ mito,missense_variant,orthrus,41,74,0.391232696111,0.251701938564,0.491704144621
 mito,missense_variant,rinalmo,41,74,0.467369808833,0.249690114170,0.682447372431,mt_rna
 mito,missense_variant,rna_fm,41,74,0.383322346737,0.180969798461,0.574584569411,mt_rna
 mito,missense_variant,rnagenesis,41,74,0.432762030323,0.217851232394,0.605730047123,mt_rna
+mito,tRNA,RNA-2Di,44,18,0.638257575758,0.528366565110,0.772443181818,mt_trna_cca
+mito,tRNA,ViennaRNA,44,18,0.500000000000,0.333275261324,0.705421626984,mt_trna_cca
 mito,tRNA,aido_rna,44,18,0.910353535354,0.807782587783,0.970782611290,mt_trna_cca
 mito,tRNA,aido_rna_1m,44,18,0.422979797980,0.244499105546,0.575764658101,mt_trna_cca
 mito,tRNA,aido_rna_25m,44,18,0.518308080808,0.274848707134,0.698260377358,mt_trna_cca
@@ -335,6 +355,8 @@ premrna_indel,splice_donor_variant,orthrus,819,69,0.448319796146,0.367687663728,
 premrna_indel,splice_donor_variant,rinalmo,819,69,0.580081753995,0.482789705705,0.674635263425,premrna_10101_indel
 premrna_indel,splice_donor_variant,rna_fm,819,69,0.460883721753,0.358477850663,0.560993201457,premrna_10101_indel
 premrna_indel,splice_donor_variant,rnagenesis,819,69,0.459503459503,0.355394685570,0.557557890806,premrna_10101_indel
+premrna_snv,3_prime_utr_variant,RNA-2Di,17,8828,0.492080679123,0.333095046380,0.634107306389,premrna_10101_snv
+premrna_snv,3_prime_utr_variant,ViennaRNA,17,8828,0.433340440843,0.221873555614,0.588224240360,premrna_10101_snv
 premrna_snv,3_prime_utr_variant,aido_rna,17,8828,0.606156214185,0.474632547924,0.743747634246,premrna_10101_snv
 premrna_snv,3_prime_utr_variant,aido_rna_1m,17,8828,0.555028785415,0.426879633698,0.670347551746,premrna_10101_snv
 premrna_snv,3_prime_utr_variant,aido_rna_25m,17,8828,0.547939044218,0.422854650320,0.670056886703,premrna_10101_snv
@@ -351,6 +373,8 @@ premrna_snv,3_prime_utr_variant,orthrus,17,8828,0.546902902529,0.448459801323,0.
 premrna_snv,3_prime_utr_variant,rinalmo,17,8828,0.597597217410,0.472826551193,0.736623963105,premrna_10101_snv
 premrna_snv,3_prime_utr_variant,rna_fm,17,8828,0.539146832272,0.426029054662,0.655376746964,premrna_10101_snv
 premrna_snv,3_prime_utr_variant,rnagenesis,17,8828,0.533073242890,0.417989125719,0.678365520990,premrna_10101_snv
+premrna_snv,5_prime_utr_variant,RNA-2Di,62,3019,0.528673241513,0.455805309250,0.603068690300,premrna_10101_snv
+premrna_snv,5_prime_utr_variant,ViennaRNA,62,3019,0.510465973565,0.436270431535,0.581521425991,premrna_10101_snv
 premrna_snv,5_prime_utr_variant,aido_rna,62,3019,0.462583743816,0.407042914133,0.526510902177,premrna_10101_snv
 premrna_snv,5_prime_utr_variant,aido_rna_1m,62,3019,0.471786214192,0.410686863789,0.534169401480,premrna_10101_snv
 premrna_snv,5_prime_utr_variant,aido_rna_25m,62,3019,0.465888085138,0.408579669094,0.528238079546,premrna_10101_snv
@@ -367,6 +391,8 @@ premrna_snv,5_prime_utr_variant,orthrus,62,3019,0.535260554125,0.473411996350,0.
 premrna_snv,5_prime_utr_variant,rinalmo,62,3019,0.514942995437,0.441667530568,0.598008159192,premrna_10101_snv
 premrna_snv,5_prime_utr_variant,rna_fm,62,3019,0.464520403039,0.409665762436,0.524775434431,premrna_10101_snv
 premrna_snv,5_prime_utr_variant,rnagenesis,62,3019,0.466660077573,0.409970562724,0.530004501752,premrna_10101_snv
+premrna_snv,initiator_codon_variant,RNA-2Di,629,72,0.551470588235,0.487974507754,0.612651662353,premrna_10101_snv
+premrna_snv,initiator_codon_variant,ViennaRNA,629,72,0.527545928281,0.461917995582,0.599414805585,premrna_10101_snv
 premrna_snv,initiator_codon_variant,aido_rna,629,72,0.394629924042,0.324196857888,0.466031665223,premrna_10101_snv
 premrna_snv,initiator_codon_variant,aido_rna_1m,629,72,0.399233792616,0.331194141392,0.475764493319,premrna_10101_snv
 premrna_snv,initiator_codon_variant,aido_rna_25m,629,72,0.505376700230,0.437373247091,0.574955695070,premrna_10101_snv
@@ -383,6 +409,8 @@ premrna_snv,initiator_codon_variant,orthrus,629,72,0.394740328564,0.334591973341
 premrna_snv,initiator_codon_variant,rinalmo,629,72,0.637321144674,0.573581183397,0.699458935732,premrna_10101_snv
 premrna_snv,initiator_codon_variant,rna_fm,629,72,0.378996643703,0.310228416777,0.448605825838,premrna_10101_snv
 premrna_snv,initiator_codon_variant,rnagenesis,629,72,0.408452570217,0.334348266495,0.482896499263,premrna_10101_snv
+premrna_snv,intron_variant,RNA-2Di,1156,78381,0.661868040631,0.641757913565,0.679296321277,premrna_10101_snv
+premrna_snv,intron_variant,ViennaRNA,1156,78381,0.561637240930,0.544723088571,0.580446327751,premrna_10101_snv
 premrna_snv,intron_variant,aido_rna,1156,78381,0.479586271636,0.462722351124,0.495871920748,premrna_10101_snv
 premrna_snv,intron_variant,aido_rna_1m,1156,78381,0.475276606695,0.456987430165,0.491491684323,premrna_10101_snv
 premrna_snv,intron_variant,aido_rna_25m,1156,78381,0.476411225109,0.459283327906,0.492268989111,premrna_10101_snv
@@ -399,6 +427,8 @@ premrna_snv,intron_variant,orthrus,1156,78381,0.468909081490,0.449122718352,0.48
 premrna_snv,intron_variant,rinalmo,1156,78381,0.509708317888,0.491219032600,0.526871954311,premrna_10101_snv
 premrna_snv,intron_variant,rna_fm,1156,78381,0.477724066443,0.460347050032,0.493491345297,premrna_10101_snv
 premrna_snv,intron_variant,rnagenesis,1156,78381,0.474891620467,0.457067627312,0.491392185696,premrna_10101_snv
+premrna_snv,missense_variant,RNA-2Di,23568,39663,0.512033326101,0.502003468856,0.521820086717,premrna_10101_snv
+premrna_snv,missense_variant,ViennaRNA,23568,39663,0.528666288065,0.521993034577,0.535379608201,premrna_10101_snv
 premrna_snv,missense_variant,aido_rna,23568,39663,0.513297337477,0.496679643352,0.530569894155,premrna_10101_snv
 premrna_snv,missense_variant,aido_rna_1m,23568,39663,0.499912836485,0.487963581463,0.512392610792,premrna_10101_snv
 premrna_snv,missense_variant,aido_rna_25m,23568,39663,0.543937412175,0.526125530671,0.563720793432,premrna_10101_snv
@@ -415,6 +445,8 @@ premrna_snv,missense_variant,orthrus,23568,39663,0.488625577697,0.479944435516,0
 premrna_snv,missense_variant,rinalmo,23568,39663,0.546460971833,0.526868502763,0.567780931195,premrna_10101_snv
 premrna_snv,missense_variant,rna_fm,23568,39663,0.499006205309,0.485935062292,0.512840310565,premrna_10101_snv
 premrna_snv,missense_variant,rnagenesis,23568,39663,0.506947828137,0.492230012530,0.523099177804,premrna_10101_snv
+premrna_snv,non_coding_transcript_variant,RNA-2Di,23,45,0.706280193237,0.576863354037,0.864603365385,premrna_10101_snv
+premrna_snv,non_coding_transcript_variant,ViennaRNA,23,45,0.629951690821,0.461632352941,0.757601565102,premrna_10101_snv
 premrna_snv,non_coding_transcript_variant,aido_rna,23,45,0.883091787440,0.645822584428,1.000000000000,premrna_10101_snv
 premrna_snv,non_coding_transcript_variant,aido_rna_1m,23,45,0.542995169082,0.257065637066,0.648800238095,premrna_10101_snv
 premrna_snv,non_coding_transcript_variant,aido_rna_25m,23,45,0.525603864734,0.357060439560,0.594660011574,premrna_10101_snv
@@ -431,6 +463,8 @@ premrna_snv,non_coding_transcript_variant,orthrus,23,45,0.509178743961,0.3118589
 premrna_snv,non_coding_transcript_variant,rinalmo,23,45,0.820289855072,0.523375199362,1.000000000000,premrna_10101_snv
 premrna_snv,non_coding_transcript_variant,rna_fm,23,45,0.591304347826,0.409034443817,0.698436041083,premrna_10101_snv
 premrna_snv,non_coding_transcript_variant,rnagenesis,23,45,0.826570048309,0.553282894737,1.000000000000,premrna_10101_snv
+premrna_snv,nonsense,RNA-2Di,23170,231,0.496822096045,0.458816735325,0.537500778202,premrna_10101_snv
+premrna_snv,nonsense,ViennaRNA,23170,231,0.497296661043,0.461431718373,0.535957669568,premrna_10101_snv
 premrna_snv,nonsense,aido_rna,23170,231,0.567269494999,0.523265621309,0.608685188079,premrna_10101_snv
 premrna_snv,nonsense,aido_rna_1m,23170,231,0.544293262485,0.499625541032,0.587166039639,premrna_10101_snv
 premrna_snv,nonsense,aido_rna_25m,23170,231,0.555424147138,0.510572566653,0.599420253139,premrna_10101_snv
@@ -447,6 +481,8 @@ premrna_snv,nonsense,orthrus,23170,231,0.431132958539,0.387567966598,0.475710395
 premrna_snv,nonsense,rinalmo,23170,231,0.630331989978,0.585887485353,0.671135664121,premrna_10101_snv
 premrna_snv,nonsense,rna_fm,23170,231,0.526422433846,0.485166485790,0.568937443347,premrna_10101_snv
 premrna_snv,nonsense,rnagenesis,23170,231,0.549808959563,0.506536601686,0.595519616685,premrna_10101_snv
+premrna_snv,splice_acceptor_variant,RNA-2Di,4964,71,0.510370441829,0.446306643489,0.573936567363,premrna_10101_snv
+premrna_snv,splice_acceptor_variant,ViennaRNA,4964,71,0.476348015571,0.400920516372,0.555428902918,premrna_10101_snv
 premrna_snv,splice_acceptor_variant,aido_rna,4964,71,0.505406532669,0.439832976160,0.573072481274,premrna_10101_snv
 premrna_snv,splice_acceptor_variant,aido_rna_1m,4964,71,0.499181430241,0.430341470155,0.573810520519,premrna_10101_snv
 premrna_snv,splice_acceptor_variant,aido_rna_25m,4964,71,0.511753640295,0.444607647962,0.581069322068,premrna_10101_snv
@@ -463,6 +499,8 @@ premrna_snv,splice_acceptor_variant,orthrus,4964,71,0.526321912134,0.46035008878
 premrna_snv,splice_acceptor_variant,rinalmo,4964,71,0.535327598143,0.470782335139,0.602634328646,premrna_10101_snv
 premrna_snv,splice_acceptor_variant,rna_fm,4964,71,0.502970684705,0.439024188483,0.568495252986,premrna_10101_snv
 premrna_snv,splice_acceptor_variant,rnagenesis,4964,71,0.513017670892,0.450401030427,0.580558604220,premrna_10101_snv
+premrna_snv,splice_donor_variant,RNA-2Di,6488,63,0.646239455503,0.567915605135,0.722166005463,premrna_10101_snv
+premrna_snv,splice_donor_variant,ViennaRNA,6488,63,0.610276848101,0.542675498296,0.677578963393,premrna_10101_snv
 premrna_snv,splice_donor_variant,aido_rna,6488,63,0.484690906778,0.406397739381,0.558739983714,premrna_10101_snv
 premrna_snv,splice_donor_variant,aido_rna_1m,6488,63,0.483216879025,0.405108220991,0.556790780855,premrna_10101_snv
 premrna_snv,splice_donor_variant,aido_rna_25m,6488,63,0.478266347641,0.395677822322,0.553090875764,premrna_10101_snv
@@ -479,6 +517,8 @@ premrna_snv,splice_donor_variant,orthrus,6488,63,0.509761611180,0.430911044712,0
 premrna_snv,splice_donor_variant,rinalmo,6488,63,0.586204323489,0.510011805375,0.656583883690,premrna_10101_snv
 premrna_snv,splice_donor_variant,rna_fm,6488,63,0.502757227017,0.428227592258,0.577989745708,premrna_10101_snv
 premrna_snv,splice_donor_variant,rnagenesis,6488,63,0.479518965416,0.404240619656,0.554293972784,premrna_10101_snv
+premrna_snv,stop_lost,RNA-2Di,55,31,0.555425219941,0.425734284098,0.677872131148,premrna_10101_snv
+premrna_snv,stop_lost,ViennaRNA,55,31,0.458651026393,0.331673681257,0.589721812740,premrna_10101_snv
 premrna_snv,stop_lost,aido_rna,55,31,0.390615835777,0.257795302673,0.532790599498,premrna_10101_snv
 premrna_snv,stop_lost,aido_rna_1m,55,31,0.356598240469,0.228123015873,0.500000000000,premrna_10101_snv
 premrna_snv,stop_lost,aido_rna_25m,55,31,0.490909090909,0.343356374808,0.633641103150,premrna_10101_snv
@@ -495,6 +535,8 @@ premrna_snv,stop_lost,orthrus,55,31,0.478005865103,0.347741228070,0.618932116684
 premrna_snv,stop_lost,rinalmo,55,31,0.409384164223,0.267853422619,0.544097272139,premrna_10101_snv
 premrna_snv,stop_lost,rna_fm,55,31,0.405865102639,0.264967071532,0.558573554422,premrna_10101_snv
 premrna_snv,stop_lost,rnagenesis,55,31,0.378592375367,0.240656935647,0.528025119322,premrna_10101_snv
+premrna_snv,synonymous_variant,RNA-2Di,286,148554,0.607195050261,0.572550868689,0.641774996161,premrna_10101_snv
+premrna_snv,synonymous_variant,ViennaRNA,286,148554,0.555222108021,0.518689251932,0.588261402620,premrna_10101_snv
 premrna_snv,synonymous_variant,aido_rna,286,148554,0.372220489905,0.340500678893,0.406930086246,premrna_10101_snv
 premrna_snv,synonymous_variant,aido_rna_1m,286,148554,0.366792688040,0.335768338760,0.399536169859,premrna_10101_snv
 premrna_snv,synonymous_variant,aido_rna_25m,286,148554,0.372762403933,0.340571052721,0.407348156507,premrna_10101_snv

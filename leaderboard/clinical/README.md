@@ -27,13 +27,17 @@ Macro AUROC within consequence classes, then the mean of the four units. [95% in
 | 7 | Nucleotide Transformer v3 (100M) | 0.59 | 0.60 | 0.57 | 0.64 | 0.54 |
 | 8 | Nucleotide Transformer v3 (8M) | 0.58 | 0.56 | 0.55 | 0.63 | 0.57 |
 | 9 | RiNALMo | 0.57 | 0.56 | 0.64 | 0.54 | 0.52 |
-| 10 | AIDO.RNA (25M) | 0.53 | 0.50 | 0.58 | 0.51 | 0.54 |
-| 11 | AIDO.RNA (1.6B) | 0.53 | 0.51 | 0.60 | 0.49 | 0.50 |
-| 12 | AIDO.RNA (1M) | 0.52 | 0.47 | 0.53 | 0.52 | 0.55 |
-| 13 | AIDO.RNA (650M) | 0.52 | 0.50 | 0.59 | 0.49 | 0.49 |
-| 14 | RNAGenesis | 0.51 | 0.50 | 0.58 | 0.48 | 0.47 |
-| 15 | Orthrus | 0.50 | 0.48 | 0.52 | 0.50 | 0.52 |
-| 16 | RNA-FM | 0.49 | 0.48 | 0.58 | 0.47 | 0.44 |
+| 10 | _RNA-2Di_\* | 0.56 | 0.57 | 0.55 | - | - |
+| 11 | AIDO.RNA (25M) | 0.53 | 0.50 | 0.58 | 0.51 | 0.54 |
+| 12 | AIDO.RNA (1.6B) | 0.53 | 0.51 | 0.60 | 0.49 | 0.50 |
+| 13 | _ViennaRNA_\* | 0.52 | 0.53 | 0.52 | - | - |
+| 14 | AIDO.RNA (1M) | 0.52 | 0.47 | 0.53 | 0.52 | 0.55 |
+| 15 | AIDO.RNA (650M) | 0.52 | 0.50 | 0.59 | 0.49 | 0.49 |
+| 16 | RNAGenesis | 0.51 | 0.50 | 0.58 | 0.48 | 0.47 |
+| 17 | Orthrus | 0.50 | 0.48 | 0.52 | 0.50 | 0.52 |
+| 18 | RNA-FM | 0.49 | 0.48 | 0.58 | 0.47 | 0.44 |
+
+\* Simple baselines without pretraining, scored on SNVs only; their ClinVar score averages the two SNV units.
 
 ### Mitochondrial (MITOMAP)
 
@@ -52,11 +56,13 @@ Mean of the tRNA and mRNA missense AUROC, on the processed RNA. Strata with fewe
 | 9 | Nucleotide Transformer v3 (650M) | 0.61 | 0.40 | 0.83 |
 | 10 | RNA-FM | 0.59 | 0.80 | 0.38 |
 | 11 | RNAGenesis | 0.59 | 0.74 | 0.43 |
-| 12 | AIDO.RNA (25M) | 0.52 | 0.52 | 0.52 |
-| 13 | Nucleotide Transformer v3 (100M) | 0.47 | 0.48 | 0.47 |
-| 14 | Orthrus | 0.47 | 0.56 | 0.39 |
-| 15 | Nucleotide Transformer v3 (8M) | 0.46 | 0.48 | 0.44 |
-| 16 | AIDO.RNA (1M) | 0.45 | 0.42 | 0.48 |
+| 12 | _RNA-2Di_ | 0.56 | 0.64 | 0.49 |
+| 13 | AIDO.RNA (25M) | 0.52 | 0.52 | 0.52 |
+| 14 | _ViennaRNA_ | 0.48 | 0.50 | 0.46 |
+| 15 | Nucleotide Transformer v3 (100M) | 0.47 | 0.48 | 0.47 |
+| 16 | Orthrus | 0.47 | 0.56 | 0.39 |
+| 17 | Nucleotide Transformer v3 (8M) | 0.46 | 0.48 | 0.44 |
+| 18 | AIDO.RNA (1M) | 0.45 | 0.42 | 0.48 |
 <!-- END GENERATED TABLES -->
 
 Notes:

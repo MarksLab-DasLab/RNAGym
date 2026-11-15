@@ -12,6 +12,7 @@ on the [leaderboard][0]; the files are described in [data/clinical][1].
 | --- | --- |
 | Masked: RNA-FM, RiNALMo, RNAGenesis, AIDO.RNA (5 sizes), Nucleotide Transformer v3 (3 sizes), Orthrus | SNVs: the masked marginal at the variant, `log p(alt) - log p(ref)` with the site masked in the reference window. Other variants: the mean pseudo-log-likelihood of every position within 50 nt of the variant, alternate minus reference |
 | Autoregressive: Evo 2 (1B base, 7B, 20B, 40B) | Mean log-likelihood per token of the alternate window minus that of the reference window, forward strand, every window scored alone |
+| Simple baselines (SNVs only): ViennaRNA, RNA-2Di | `ViennaRNA`: clipped change `min(0, log p_alt - log p_ref)` of mean free energy over 1,000 WT McCaskill ensemble structures on a 201-nt window (shorter transcripts passed whole). `RNA-2Di`: Riboseek dinucleotide substitution log odds on the full sequence |
 
 Each model reads a window centred on the variant, at its own context limit and
 at most 10,101 nt: 1,022 nt for RNA-FM, RiNALMo and AIDO.RNA, 2,048 for

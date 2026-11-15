@@ -887,3 +887,222 @@ def test_package_sources_skip_environments():
     assert Path(common.__file__).resolve() in sources
     assert not any(".pixi" in path.parts for path in sources)
     assert all(path.suffix == ".py" for path in sources)
+
+
+# ---------------------------------------------------------------- simple baselines
+
+
+def test_rna_2di_matches_full_sequence_and_skips_indels():
+    from rnagym.clinical.score_baselines import score_rna_2di_rows
+    from rnagym.fitness.baselines.substitution.compute_fitness import (
+        dinucleotides,
+        encode,
+        load_matrix,
+    )
+
+    rng = random.Random(17)
+    matrix, scale = load_matrix()
+    for length in (1, 2, 3, 15, 80):
+        wt_seq = "".join(rng.choice("ACGTUacgtu") for _ in range(length))
+        rows = []
+        alts_full = []
+        for vi in range(length):
+            ref = wt_seq[vi]
+            for alt in "ACGTU":
+                mut = wt_seq[:vi] + alt + wt_seq[vi + 1 :]
+                rows.append(("snv", vi, ref, alt, wt_seq, mut))
+                alts_full.append(mut)
+        rows.append(("nonsnv", 0, wt_seq[:1], "", wt_seq, wt_seq[1:]))
+        scored, n_ctx = score_rna_2di_rows(rows)
+        assert n_ctx == len(rows) - 1
+        assert not scored["contained"][-1] and math.isnan(scored["score"][-1])
+
+        wt = dinucleotides(encode([wt_seq]))[0]
+        mt = dinucleotides(encode(alts_full))
+        changed, cols = np.nonzero(mt != wt)
+        terms = matrix[wt[cols], mt[changed, cols]] - matrix[wt, wt][cols]
+        expected = scale * np.bincount(changed, weights=terms, minlength=len(alts_full))
+        np.testing.assert_allclose(
+            scored["score"].to_numpy()[:-1], expected, rtol=0, atol=1e-15
+        )
+
+    with pytest.raises(ValueError):
+        score_rna_2di_rows([("snv", 1, "A", "G", "ACGT", "AGGT")])
+
+
+def test_vienna_rows_match_pr_energy_and_deduplicate_crops():
+    import RNA
+
+    from rnagym.clinical.score_baselines import (
+        N_SAMPLES,
+        _open_mismatches,
+        _pairs,
+        score_vienna_rows,
+    )
+
+    short = "GGGAAACCCUUUGGGAAACCC"
+    long_seq = "ACGU" * 3 + short + "UGCA" * 4
+    rows = [
+        ("snv", 1, "G", "C", short, short[:1] + "C" + short[2:]),
+        ("snv", 2, "G", "A", short, short[:2] + "A" + short[3:]),
+        ("snv", 15, long_seq[15], "U", long_seq, long_seq[:15] + "U" + long_seq[16:]),
+        ("nonsnv", 1, "GG", "", short, short[:1] + short[3:]),
+    ]
+    cap = 21
+    single, n_ctx = score_vienna_rows(rows, cap=cap, cpu=1)
+    parallel, _ = score_vienna_rows(rows, cap=cap, cpu=2)
+    assert n_ctx == 2  # the two SNVs on `short` share one reference crop
+    assert not single["contained"][3] and math.isnan(single["score"][3])
+    np.testing.assert_allclose(
+        single["score"].to_numpy()[:3],
+        parallel["score"].to_numpy()[:3],
+        rtol=0,
+        atol=1e-12,
+    )
+
+    for r in range(3):
+        _, vi, ref, alt, s_ref, s_alt = rows[r]
+        crop = common.crop_pair(s_ref, s_alt, vi, ref, alt, cap)
+        RNA.init_rand(1)
+        wt_fc = RNA.fold_compound(crop.ref, RNA.md(uniq_ML=1))
+        wt_fc.pf()
+        samples = wt_fc.pbacktrack(N_SAMPLES)
+        wt_pr = wt_fc.pr_energy(
+            sum(wt_fc.eval_structure(s) for s in samples) / len(samples)
+        )
+        fc = RNA.fold_compound(crop.alt)
+        fc.pf()
+        mean_e = sum(
+            fc.eval_structure(_open_mismatches(crop.alt, s, _pairs(s))) for s in samples
+        ) / len(samples)
+        expected = min(0.0, float(np.log(fc.pr_energy(mean_e) / wt_pr)))
+        assert single["score"][r] == pytest.approx(expected, abs=1e-5)
+
+
+def test_score_baselines_cli_shards_and_merges(tmp_path, monkeypatch):
+    from rnagym.clinical import score_baselines
+    from rnagym.clinical.tasks import merge as merge_task
+    from rnagym.config import ConfigClinical
+
+    monkeypatch.setattr(
+        ConfigClinical, "CHECKPOINT_HASH_FILE", tmp_path / "ckpt_sha.json"
+    )
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    wt_seq = "GGGAAACCCUUUGGGAAACCC"
+    frame = pl.DataFrame(
+        {
+            "row_id": [0, 1, 2],
+            "cohort": ["snv", "snv", "nonsnv"],
+            "group_id": [0, 1, 1],
+            "variant_index": [0, 5, 2],
+            "ref_allele_tx": ["G", "A", "GA"],
+            "alt_allele_tx": ["C", "U", ""],
+            "seq_ref": [wt_seq, wt_seq, wt_seq],
+            "seq_alt": [
+                "C" + wt_seq[1:],
+                wt_seq[:5] + "U" + wt_seq[6:],
+                wt_seq[:2] + wt_seq[4:],
+            ],
+        }
+    )
+    frame.write_parquet(staged / "toy.parquet")
+    digest = hashlib.sha256((staged / "toy.parquet").read_bytes()).hexdigest()
+    (staged / "toy.summary.json").write_text(json.dumps({"staged_sha256": digest}))
+
+    scores_dir = tmp_path / "scores"
+    for model in ("RNA-2Di", "ViennaRNA"):
+        for shard in (0, 1):
+            score_baselines.main(
+                [
+                    "--model",
+                    model,
+                    "--names",
+                    "toy",
+                    "--staged",
+                    str(staged),
+                    "--out",
+                    str(scores_dir),
+                    "--shard",
+                    str(shard),
+                    "--num-shards",
+                    "2",
+                ]
+            )
+    merged_dir = tmp_path / "merged"
+    merge_task.main(
+        [
+            "--score-dir",
+            str(scores_dir),
+            "--staged",
+            str(staged),
+            "--merged",
+            str(merged_dir),
+        ]
+    )
+    for model in ("RNA-2Di", "ViennaRNA"):
+        merged = pl.read_parquet(merged_dir / "toy" / f"{model}.parquet")
+        assert merged["row_id"].to_list() == [0, 1, 2]
+        assert merged["contained"].to_list() == [True, True, False]
+        assert np.isfinite(merged["score"].to_numpy()[:2]).all()
+        assert math.isnan(merged["score"][2])
+
+
+def test_snv_baselines_preserve_model_evaluation_and_build_partial_leaderboard(
+    tmp_path,
+):
+    merged = fixture_scores(tmp_path)
+    snv_files = ("premrna_10101_snv", "mature_mrna_snv", "mt_rna", "mt_trna_cca")
+    for name in snv_files:
+        meta = pl.read_parquet(FIXTURE / "staged" / f"{name}.parquet")
+        base_score = pl.read_parquet(merged / name / f"{MODELS[0]}.parquet").join(
+            meta.select("row_id", "cohort"), on="row_id"
+        )
+        for b_idx, baseline in enumerate(("ViennaRNA", "RNA-2Di")):
+            out_df = base_score.select(
+                "row_id",
+                pl.when(pl.col("cohort") == "snv")
+                .then(pl.col("score") * (1.0 + 0.1 * b_idx))
+                .otherwise(float("nan"))
+                .alias("score"),
+            )
+            out_df.write_parquet(merged / name / f"{baseline}.parquet")
+
+    out = tmp_path / "evaluation"
+    evaluate.main(
+        [
+            "--staged",
+            str(FIXTURE / "staged"),
+            "--merged",
+            str(merged),
+            "--names",
+            *FILES,
+            "--out",
+            str(out),
+            "--bootstrap",
+            str(DRAWS),
+            "--seed",
+            str(SEED),
+        ]
+    )
+    expected = FIXTURE / "expected"
+    for path in sorted(expected.glob("*_*.*.csv")):
+        got = read_table(out / path.name).filter(
+            ~pl.col("predictor").is_in(["ViennaRNA", "RNA-2Di"])
+        )
+        assert_frame_equal(got, read_table(path), rel_tol=0, abs_tol=1e-12)
+
+    board_dir = tmp_path / "leaderboard"
+    leaderboard.main(["--input", str(out), "--output", str(board_dir)])
+    board = read_table(board_dir / "leaderboard.csv")
+    for baseline in ("ViennaRNA", "RNA-2Di"):
+        assert baseline in board["model"].to_list()
+        row = board.filter(pl.col("model") == baseline).row(0, named=True)
+        assert row["premrna_indel"] is None and row["mature_indel"] is None
+        assert row["clinvar"] == pytest.approx(
+            0.5 * (row["premrna_snv"] + row["mature_snv"]), abs=1e-12
+        )
+    readme = (board_dir / "README.md").read_text()
+    assert "_ViennaRNA_\\*" in readme and "_RNA-2Di_\\*" in readme
+    assert "| - | - |" in readme
+    assert "| _ViennaRNA_ |" in readme and "| _RNA-2Di_ |" in readme
