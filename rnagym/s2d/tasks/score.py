@@ -18,7 +18,6 @@ STRUCTURE_MODALITIES = (
     ("pseudobase", "PseudoBase"),
     ("pdb", "PDB"),
     ("bprna", "bpRNA-1m"),
-    ("efold_challenging", "eFold Challenging"),
 )
 
 
@@ -66,6 +65,14 @@ def load_mapping() -> pl.DataFrame:
     )
 
 
+def load_efold_viral() -> pl.DataFrame:
+    """Load viral chemical mapping profiles from eFold."""
+    return pl.read_parquet(
+        Config2D.EFOLD_FILE,
+        columns=["uid", "sequence_id", "sequence", "modifier", "reactivity"],
+    )
+
+
 def load_assignments() -> pl.DataFrame:
     """Load sequence cluster and fold assignments."""
     return load_registry(Config2D.SEQUENCE_FILE).select(
@@ -98,6 +105,7 @@ def spearman_rows(reference: np.ndarray, prediction: np.ndarray) -> np.ndarray:
 def score_mapping_batch(batch: pl.DataFrame, modifier: str, length: int) -> np.ndarray:
     """Score one rectangular batch of chemical mapping profiles."""
     reactivity = batch["reactivity"].list.to_array(length).to_numpy()
+    reactivity = np.where(reactivity > -500, reactivity, np.nan)
     probabilities = batch["probabilities"].list.to_array(length).to_numpy()
     if modifier in {"DMS", "CMCT"}:
         bases = np.frombuffer(
@@ -111,17 +119,21 @@ def score_mapping_batch(batch: pl.DataFrame, modifier: str, length: int) -> np.n
     return spearman_rows(reactivity, 1 - probabilities)
 
 
-def score_mapping(
-    model: str, profiles: pl.DataFrame, registry: pl.DataFrame
+def _score_reactivity_dataset(
+    model: str,
+    dataset: str,
+    profiles: pl.DataFrame,
+    registry: pl.DataFrame,
+    label: str,
 ) -> pl.DataFrame:
-    """Score one model against all chemical mapping profiles."""
+    """Score one model against a chemical mapping reactivity dataset."""
     expected_profiles = profiles.height
     predictions = pl.read_parquet(
-        prediction_files(model, "mapping"),
+        prediction_files(model, dataset),
         columns=["sequence_id", "probabilities"],
     )
     if predictions["sequence_id"].n_unique() != predictions.height:
-        raise RuntimeError(f"Duplicate chemical mapping predictions for {model}")
+        raise RuntimeError(f"Duplicate {label} predictions for {model}")
     profiles = (
         profiles.join(predictions, on="sequence_id")
         .join(registry, on="sequence_id")
@@ -131,16 +143,14 @@ def score_mapping(
         profiles.height != expected_profiles
         or profiles["uid"].n_unique() != expected_profiles
     ):
-        raise RuntimeError(
-            f"Incomplete or duplicate chemical mapping predictions for {model}"
-        )
+        raise RuntimeError(f"Incomplete or duplicate {label} predictions for {model}")
     if profiles.filter(pl.col("length") != pl.col("probabilities").list.len()).height:
         raise ValueError(f"Prediction length mismatch for {model}")
 
     scores = []
     with tqdm(
         total=profiles.height,
-        desc=f"Scoring {model} chemical mapping",
+        desc=f"Scoring {model} {label}",
         unit="profiles",
     ) as progress:
         for (modifier, length), group in profiles.group_by("modifier", "length"):
@@ -153,9 +163,18 @@ def score_mapping(
                     )
                 )
                 progress.update(batch.height)
+    return pl.concat(scores)
+
+
+def score_mapping(
+    model: str, profiles: pl.DataFrame, registry: pl.DataFrame
+) -> pl.DataFrame:
+    """Score one model against all RMDB and Ribonanza chemical mapping profiles."""
+    scored = _score_reactivity_dataset(
+        model, "mapping", profiles, registry, "chemical mapping"
+    )
     return (
-        pl.concat(scores)
-        .with_columns(
+        scored.with_columns(
             pl.lit(model).alias("model"),
             pl.lit("mapping").alias("dataset"),
             pl.lit("unpaired_probability").alias("method"),
@@ -175,6 +194,41 @@ def score_mapping(
             "score",
         )
         .sort("uid")
+    )
+
+
+def score_efold_viral(
+    model: str, viral_profiles: pl.DataFrame, registry: pl.DataFrame
+) -> pl.DataFrame:
+    """Score one model against eFold viral DMS and SHAPE reactivity profiles."""
+    scored = _score_reactivity_dataset(
+        model, "efold_viral", viral_profiles, registry, "eFold viral"
+    )
+    base = scored.with_columns(
+        pl.lit(model).alias("model"),
+        pl.lit("efold_viral").alias("dataset"),
+        pl.lit("unpaired_probability").alias("method"),
+        pl.lit("spearman").alias("metric"),
+    )
+    combined = base.with_columns(pl.lit("efold_viral").alias("modality"))
+    by_reagent = base.with_columns(
+        pl.format("efold_{}", pl.col("modifier").str.to_lowercase()).alias("modality")
+    )
+    return (
+        pl.concat([combined, by_reagent])
+        .select(
+            "model",
+            "dataset",
+            "modality",
+            "method",
+            "metric",
+            "uid",
+            "sequence_id",
+            "cluster_rep",
+            "fold",
+            "score",
+        )
+        .sort(["modality", "uid"])
     )
 
 
@@ -237,7 +291,9 @@ def summarize(scores: pl.DataFrame) -> pl.DataFrame:
     columns = [*groups, "cluster_rep", "sequence_id", "score"]
     scores = pl.concat(
         [
-            scores.filter(pl.col("dataset") == "mapping").select(columns),
+            scores.filter(pl.col("dataset").is_in(["mapping", "efold_viral"])).select(
+                columns
+            ),
             scores.filter(pl.col("dataset") == "2d")
             .group_by(*groups, "cluster_rep", "sequence_id")
             .agg(pl.col("score").max()),
@@ -259,12 +315,16 @@ def summarize(scores: pl.DataFrame) -> pl.DataFrame:
 
 
 def score_model(
-    model: str, profiles: pl.DataFrame, registry: pl.DataFrame
+    model: str,
+    profiles: pl.DataFrame,
+    viral_profiles: pl.DataFrame,
+    registry: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Score one model against both benchmark datasets."""
+    """Score one model against all reactivity and structure benchmark datasets."""
     return pl.concat(
         [
             score_mapping(model, profiles, registry),
+            score_efold_viral(model, viral_profiles, registry),
             score_structures(model, registry),
         ]
     )
@@ -272,7 +332,7 @@ def score_model(
 
 # Benchmarks that share one decoder per model; PseudoBase keeps its own best so
 # pseudoknot decoders can win there
-SHARED_DECODER_MODALITIES = ("pdb", "bprna", "efold_challenging")
+SHARED_DECODER_MODALITIES = ("pdb", "bprna")
 
 
 def best_methods(leaderboard: pl.DataFrame) -> pl.DataFrame:
@@ -304,7 +364,9 @@ def best_methods(leaderboard: pl.DataFrame) -> pl.DataFrame:
     return pl.concat([consistent, own])
 
 
-def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
+def write_table(
+    leaderboard: pl.DataFrame, profiles: pl.DataFrame, viral_profiles: pl.DataFrame
+) -> None:
     """Update the compact table in the leaderboard README."""
     mapping = (
         leaderboard.filter(
@@ -314,13 +376,21 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         .group_by("model")
         .agg(pl.col("score").mean().alias("mapping"))
     )
+    efold_viral = leaderboard.filter(
+        (pl.col("dataset") == "efold_viral") & (pl.col("modality") == "efold_viral")
+    ).select("model", pl.col("score").alias("efold_viral"))
     structures = best_methods(leaderboard).pivot(
         on="modality", index="model", values="score"
     )
     structure_columns = [modality for modality, _ in STRUCTURE_MODALITIES]
     summary = (
-        mapping.join(structures, on="model")
-        .with_columns(pl.mean_horizontal("mapping", *structure_columns).alias("macro"))
+        mapping.join(efold_viral, on="model")
+        .join(structures, on="model")
+        .with_columns(
+            pl.mean_horizontal("mapping", "efold_viral", *structure_columns).alias(
+                "macro"
+            )
+        )
         .sort("macro", descending=True)
     )
 
@@ -331,6 +401,7 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         "mapping": profiles.filter(
             pl.col("modifier").is_in(Config2D.HEADLINE_MODIFIERS)
         )["sequence_id"].n_unique(),
+        "efold_viral": viral_profiles["sequence_id"].n_unique(),
         **{
             modality: references.filter(pl.col("uid").str.starts_with(f"{modality}:"))[
                 "sequence_id"
@@ -353,7 +424,11 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         "ufold": "UFold",
         "vienna": "Vienna",
     }
-    score_columns = [("mapping", "Chemical mapping"), *STRUCTURE_MODALITIES]
+    score_columns = [
+        ("mapping", "Chemical mapping"),
+        ("efold_viral", "eFold viral"),
+        *STRUCTURE_MODALITIES,
+    ]
     lines = [
         "| Rank | Model | "
         + " | ".join(
@@ -368,7 +443,7 @@ def write_table(leaderboard: pl.DataFrame, profiles: pl.DataFrame) -> None:
         suffix = "".join(
             marker
             for modality, marker in zip(
-                ("mapping", "pseudobase", "pdb", "bprna"), "*†‡§"
+                ("mapping", "efold_viral", "pseudobase", "pdb", "bprna"), "*¶†‡§"
             )
             if model in Config2D.TRAINING_OVERLAP[modality]
         )
@@ -397,10 +472,11 @@ def main() -> None:
         )
 
     profiles = load_mapping()
+    viral_profiles = load_efold_viral()
     registry = load_assignments()
     summaries = []
     for model in models:
-        scores = score_model(model, profiles, registry)
+        scores = score_model(model, profiles, viral_profiles, registry)
         summaries.append(summarize(scores))
 
     leaderboard = (
@@ -410,6 +486,8 @@ def main() -> None:
                 pl.any_horizontal(
                     (pl.col("dataset") == "mapping")
                     & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["mapping"]),
+                    (pl.col("dataset") == "efold_viral")
+                    & pl.col("model").is_in(Config2D.TRAINING_OVERLAP["efold_viral"]),
                     *(
                         (pl.col("modality") == modality)
                         & pl.col("model").is_in(Config2D.TRAINING_OVERLAP[modality])
@@ -439,7 +517,7 @@ def main() -> None:
     )
     Config2D.LEADERBOARD_FILE.parent.mkdir(parents=True, exist_ok=True)
     leaderboard.write_csv(Config2D.LEADERBOARD_FILE)
-    write_table(leaderboard, profiles)
+    write_table(leaderboard, profiles, viral_profiles)
 
     with pl.Config(tbl_rows=-1, tbl_cols=-1):
         print(leaderboard.drop("training_overlap"))

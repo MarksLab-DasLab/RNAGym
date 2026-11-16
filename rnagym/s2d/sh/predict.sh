@@ -44,22 +44,33 @@ esac
 cd "$PROJECT_ROOT"
 mkdir -p .rg_jobs
 
+dataset_shards() {
+	if [[ $1 == efold_viral ]]; then
+		echo 1
+	else
+		echo "$shards"
+	fi
+}
+
 check_complete() {
 	local output_dir="$PROJECT_ROOT/../../data/2d/predictions/$environment/$1"
-	for ((shard = 0; shard < shards; shard++)); do
+	local n_shards
+	n_shards=$(dataset_shards "$1")
+	for ((shard = 0; shard < n_shards; shard++)); do
 		[[ -s "$output_dir/$shard.parquet" ]] || return 1
 	done
 }
 
-for dataset in mapping 2d; do
+for dataset in mapping efold_viral 2d; do
 	if check_complete "$dataset"; then
 		echo "Skipping $environment $dataset: all shards complete"
 		continue
 	fi
+	n_shards=$(dataset_shards "$dataset")
 	dependency=""
 	if [[ -v gpu ]]; then
 		dependency=$(gpu_array_dependency)
 	fi
 	sbatch ${dependency:+"--dependency=$dependency"} "${resources[@]}" --account="$ACCOUNT" \
-		--array="0-$((shards - 1))%32" -- tasks/predict.slurm "$environment" "$dataset"
+		--array="0-$((n_shards - 1))%32" -- tasks/predict.slurm "$environment" "$dataset"
 done

@@ -39,13 +39,13 @@ class Config2D(_Config):
     DATA_DIR = _DATA_DIR / "2d"
     RAW_DIR = DATA_DIR / "raw_data"
     MAPPING_FILE = DATA_DIR / "rnagym_mapping.parquet"
+    EFOLD_FILE = DATA_DIR / "rnagym_efold_viral.parquet"
     STRUCTURE_FILE = DATA_DIR / "rnagym_2d.parquet"
     PREDICTION_DIR = DATA_DIR / "predictions"
     LEADERBOARD_DIR = _REPO_DIR / "leaderboard" / "2d"
     LEADERBOARD_FILE = LEADERBOARD_DIR / "leaderboard.csv"
     LEADERBOARD_README = LEADERBOARD_DIR / "README.md"
     BPRNA_FILE = RAW_DIR / "bprna_1m_dbn.zip"
-    EFOLD_LNCRNA_FILE = RAW_DIR / "lncRNA_nonFiltered.json"
     EFOLD_VIRAL_FILE = RAW_DIR / "viral_fragments.json"
     PSEUDOBASE_FILE = RAW_DIR / "pseudobase.csv"
     MODEL_SOURCE_DIR = DIR / ".pixi" / "model-sources"
@@ -67,8 +67,8 @@ class Config2D(_Config):
     # training on both
     TRAINING_OVERLAP = {
         "mapping": {"eternafold", "ribonanzanet"},
+        "efold_viral": {"ribonanzanet"},
         "bprna": _BPRNA_TRAINED,
-        "efold_challenging": set(),
         "pseudobase": set(_BPRNA_TRAINED),
         "pdb": {"ribonanzanet", "rinalmo", "rna-fm", "ufold"} | _BPRNA_TRAINED,
     }

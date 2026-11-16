@@ -106,6 +106,9 @@ def main() -> None:
             pl.read_parquet(Config2D.MAPPING_FILE)
             .select("sequence")
             .with_columns(pl.lit("mapping").alias("modality")),
+            pl.read_parquet(Config2D.EFOLD_FILE)
+            .select("sequence")
+            .with_columns(pl.lit("efold_viral").alias("modality")),
             structures.select(
                 "sequence",
                 pl.col("uid").str.split(":").list.first().alias("modality"),

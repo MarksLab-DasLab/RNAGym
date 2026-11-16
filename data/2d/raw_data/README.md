@@ -1,7 +1,7 @@
 # Compiled secondary structure source data
 
 Raw data from [RMDB][rmdb], [PseudoBase++2.0][pb] (see [Taufer et al.
-(2009)][taufer]), [bpRNA-1m][bprna-download], and the [eFold Challenging
+(2009)][taufer]), [bpRNA-1m][bprna-download], and the [eFold viral reactivity
 dataset][efold-dryad].
 
 ## Dataset groups
@@ -12,8 +12,7 @@ dataset][efold-dryad].
 | `RMDB_dataset_extra` | Other RMDB data not used in the Ribonanza train and test sets. |
 | `pseudobase.csv` | Entries from PseudoBase (downloaded 2026/07/20) |
 | `bprna_1m_dbn.zip` | Official bpRNA-1m v1.0 dot-bracket archive. |
-| `lncRNA_nonFiltered.json` | eFold Challenging long noncoding RNA structures. |
-| `viral_fragments.json` | eFold Challenging viral-fragment structures. |
+| `viral_fragments.json` | eFold viral RNA fragments with raw DMS and SHAPE reactivities. |
 
 For more granular detail, `RMDB_dataset_extra` is further divided into:
 
@@ -25,7 +24,8 @@ For more granular detail, `RMDB_dataset_extra` is further divided into:
 | `extra_invivo` | Chemical mapping experiments performed *in vivo*. |
 
 Collation keeps canonical bpRNA-1m sequences and collapses exact duplicates.
-The eFold base-pair lists are converted to extended dot-bracket notation.
+Raw nucleotide DMS and SHAPE reactivities in `viral_fragments.json` are extracted
+directly without thermodynamic structure modeling.
 
 [rmdb]: https://rmdb.stanford.edu/
 [pb]: https://rnavlab.utep.edu/database

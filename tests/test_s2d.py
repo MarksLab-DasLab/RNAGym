@@ -35,6 +35,7 @@ def test_2d_workflow(tmp_path, monkeypatch) -> None:
     from rnagym.s2d.tasks import score
 
     monkeypatch.setattr(Config2D, "MAPPING_FILE", FIXTURE_DIR / "mapping.parquet")
+    monkeypatch.setattr(Config2D, "EFOLD_FILE", FIXTURE_DIR / "efold_viral.parquet")
     monkeypatch.setattr(Config2D, "PREDICTION_DIR", FIXTURE_DIR / "predictions")
     monkeypatch.setattr(Config2D, "SEQUENCE_FILE", FIXTURE_DIR / "sequences.parquet")
     monkeypatch.setattr(Config2D, "STRUCTURE_FILE", FIXTURE_DIR / "structures.parquet")

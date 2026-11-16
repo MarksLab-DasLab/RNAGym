@@ -16,6 +16,7 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "s3d"
 def test_3d_workflow(tmp_path, monkeypatch) -> None:
     """Reproduce target selection, cluster-macro scoring, and leaderboard output."""
     monkeypatch.setattr(Config2D, "MAPPING_FILE", tmp_path / Config2D.MAPPING_FILE.name)
+    monkeypatch.setattr(Config2D, "EFOLD_FILE", tmp_path / Config2D.EFOLD_FILE.name)
     monkeypatch.setattr(
         Config2D, "STRUCTURE_FILE", tmp_path / Config2D.STRUCTURE_FILE.name
     )
@@ -38,6 +39,7 @@ def test_3d_workflow(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(Config3D, "USALIGN_ANNOTATION_DIR", FIXTURE_DIR)
 
     pl.DataFrame(schema={"sequence": pl.String}).write_parquet(Config2D.MAPPING_FILE)
+    pl.DataFrame(schema={"sequence": pl.String}).write_parquet(Config2D.EFOLD_FILE)
     pl.DataFrame(schema={"uid": pl.String, "sequence": pl.String}).write_parquet(
         Config2D.STRUCTURE_FILE
     )

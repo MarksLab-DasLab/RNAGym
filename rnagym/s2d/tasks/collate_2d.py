@@ -18,7 +18,7 @@ from rnagym.config import Config2D, Config3D
 from rnagym.s3d.util.curation import monomer_filter
 from rnagym.sequences import fitness_sequences, update_registry
 
-from ..models.utils import dot_bracket, pairs_to_dot_bracket, parse_pairs
+from ..models.utils import dot_bracket, parse_pairs
 
 CWW_PATTERN = re.compile(
     r"^A(\d+)-A(\d+) : \w+-\w+ Ww/Ww.*pairing "
@@ -219,37 +219,41 @@ def get_bprna_structures(path: Path = Config2D.BPRNA_FILE) -> pl.DataFrame:
     return consolidate_structures(rows, "bprna", len(names))
 
 
-def get_efold_challenging_structures(
-    paths: tuple[tuple[str, Path], ...] = (
-        ("lncrna", Config2D.EFOLD_LNCRNA_FILE),
-        ("viral", Config2D.EFOLD_VIRAL_FILE),
-    ),
+def get_efold_viral_profiles(
+    path: Path = Config2D.EFOLD_VIRAL_FILE,
 ) -> pl.DataFrame:
-    """Load eFold's long noncoding RNA and viral challenging sets."""
-    missing = [path.name for _, path in paths if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(f"Missing source files: {', '.join(missing)}")
+    """Load raw chemical mapping reactivities for eFold's viral RNA fragments."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing source file: {path.name}")
+
+    with path.open() as handle:
+        records = json.load(handle)
 
     rows = []
-    source_count = 0
-    for subset, path in paths:
-        with path.open() as handle:
-            records = json.load(handle)
-        source_count += len(records)
-        for source_id, record in sorted(records.items()):
-            sequence = record["sequence"].upper().replace("T", "U")
-            if any(base not in "ACGU" for base in sequence):
-                continue
-            rows.append(
-                {
-                    "source_id": f"{subset}:{source_id}",
-                    "sequence": sequence,
-                    "secondary_structure": pairs_to_dot_bracket(
-                        len(sequence), record["structure"]
-                    ),
-                }
-            )
-    return consolidate_structures(rows, "efold_challenging", source_count)
+    for source_id, record in sorted(records.items()):
+        sequence = record["sequence"].upper().replace("T", "U")
+        if any(base not in "ACGU" for base in sequence):
+            continue
+        reagents = [key for key in ("dms", "shape") if key in record]
+        if len(reagents) != 1:
+            raise ValueError(f"Expected one reactivity vector for {source_id}")
+        reagent = reagents[0]
+        values = np.asarray(record[reagent], dtype=float)
+        if len(values) != len(sequence):
+            raise ValueError(f"Sequence/reactivity length mismatch: {source_id}")
+        reactivity = np.where(np.isfinite(values) & (values > -500), values, np.nan)
+        rows.append(
+            {
+                "uid": f"efold_viral:{source_id}",
+                "sequence": sequence,
+                "modifier": reagent.upper(),
+                "reactivity": reactivity.tolist(),
+            }
+        )
+
+    profiles = pl.DataFrame(rows).sort("uid")
+    print(f"eFold viral: {len(records):,} source -> {profiles.height:,} canonical")
+    return profiles
 
 
 def get_pdb_candidates() -> list[tuple[str, Path, str]]:
@@ -358,14 +362,14 @@ def write_parquet(data: pl.DataFrame, path: Path) -> None:
 def main() -> None:
     """Collate and write chemical mapping and discrete structure datasets."""
     filtered = get_source_profiles()
+    efold_viral = get_efold_viral_profiles()
     bprna = get_bprna_structures()
-    efold_challenging = get_efold_challenging_structures()
     pseudobase = get_pseudobase_structures()
     pdb = get_pdb_structures()
     datasets = {
         "mapping": filtered,
+        "efold_viral": efold_viral,
         "bprna": bprna,
-        "efold_challenging": efold_challenging,
         "pseudobase": pseudobase,
         "pdb": pdb,
     }
@@ -376,7 +380,12 @@ def main() -> None:
         for name, data in datasets.items()
     }
     filtered = datasets["mapping"]
-    structures = pl.concat(data for name, data in datasets.items() if name != "mapping")
+    efold_viral = datasets["efold_viral"]
+    structures = pl.concat(
+        data
+        for name, data in datasets.items()
+        if name not in {"mapping", "efold_viral"}
+    )
     modalities = pl.concat(
         [
             *(
@@ -412,6 +421,12 @@ def main() -> None:
 
     write_parquet(filtered, Config2D.MAPPING_FILE)
     print_summary(filtered, Config2D.MAPPING_FILE)
+
+    efold_viral = efold_viral.join(
+        registry.select("sequence_id", "sequence"), on="sequence", how="left"
+    ).select("uid", "sequence_id", "sequence", "modifier", "reactivity")
+    write_parquet(efold_viral, Config2D.EFOLD_FILE)
+    print_summary(efold_viral, Config2D.EFOLD_FILE)
 
     structures = structures.join(
         registry.select("sequence_id", "sequence"),

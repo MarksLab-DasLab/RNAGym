@@ -17,6 +17,7 @@ class Dataset(Enum):
     """Prediction datasets."""
 
     MAPPING = "mapping"
+    EFOLD_VIRAL = "efold_viral"
     STRUCTURES = "2d"
 
 
@@ -38,6 +39,10 @@ def load_profiles(dataset: Dataset) -> pl.DataFrame:
     if dataset is Dataset.MAPPING:
         return pl.read_parquet(
             Config2D.MAPPING_FILE, columns=["sequence_id", "sequence"]
+        ).unique()
+    if dataset is Dataset.EFOLD_VIRAL:
+        return pl.read_parquet(
+            Config2D.EFOLD_FILE, columns=["sequence_id", "sequence"]
         ).unique()
     if dataset is Dataset.STRUCTURES:
         return pl.read_parquet(

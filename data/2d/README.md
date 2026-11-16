@@ -5,7 +5,8 @@
 | Dataset | Contents | Unique key |
 | --- | --- | --- |
 | `rnagym_mapping.parquet` | 970k chemical mapping profiles for 585k sequences | `uid` |
-| `rnagym_2d.parquet` | 57,120 bpRNA-1m, 45 eFold Challenging, 358 PseudoBase, and 2,566 PDB structures | `uid` |
+| `rnagym_efold_viral.parquet` | 40 viral chemical mapping reactivity profiles (25 DMS, 15 SHAPE) | `uid` |
+| `rnagym_2d.parquet` | 57,120 bpRNA-1m, 358 PseudoBase, and 2,566 PDB structures | `uid` |
 
 ## Schemas
 
@@ -31,6 +32,16 @@ Replicates match the RMDB series, sequence, modifier, temperature, chemicals,
 reverse transcriptase, note, and context. Some source rows incorrectly assign
 different UIDs to identical measurements. These duplicates are collapsed, and
 the highest-SNR measurement is the representative.
+
+### `rnagym_efold_viral.parquet`
+
+| Column | Description |
+| --- | --- |
+| `uid` | Unique profile identifier formatted as `efold_viral:<source_id>`. |
+| `sequence_id` | Identifier shared by records with the same sequence. |
+| `sequence` | Canonical RNA sequence. |
+| `modifier` | Chemical probing reagent (`DMS` or `SHAPE`). |
+| `reactivity` | Raw experimental per-nucleotide reactivity values (`NaN` where unmeasured). |
 
 ### `rnagym_2d.parquet`
 
