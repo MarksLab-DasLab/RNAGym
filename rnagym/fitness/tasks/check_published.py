@@ -51,6 +51,8 @@ MODEL_OVERRIDE_VARIABLES = (
     "NTV3_MODEL_NAME",
     "NTV3_PREDICTION_NAME",
     "ORTHRUS_MODEL_NAME",
+    "STRUCTRFM_MODEL_NAME",
+    "STRUCTRFM_PREDICTION_NAME",
 )
 
 
@@ -135,6 +137,9 @@ MODEL_FAMILIES = {
         "baselines/RNAGenesis/score_rnagenesis.sh", (("rnagenesis", None),)
     ),
     "rinalmo": ModelFamily("baselines/RiNALMo/score_rinalmo.sh", (("rinalmo", None),)),
+    "structrfm": ModelFamily(
+        "baselines/structRFM/score_structrfm.sh", (("structrfm", None),)
+    ),
 }
 
 

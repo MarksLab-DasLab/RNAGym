@@ -40,6 +40,7 @@ Replace `<env>` with a model environment from [pixi.toml][2]:
 | `rna-fm` | RNA-FM |
 | `rnagenesis` | RNAGenesis |
 | `rinalmo` | RiNALMo |
+| `structrfm` | structRFM |
 
 `predict` defaults to all assays. To select reference-sheet rows, append an
 index or range, for example `predict 12` or `predict 0-8,12`. Slurm array jobs
@@ -78,7 +79,7 @@ pixi run --locked -e default check-published
 
 The fast tests use real assay fixtures and need no checkpoints. The full check
 rebuilds both tables and scores 128 variants from each of the 29 ncRNA assays
-with all 20 checkpoints. Score ranks must have Spearman correlation of at least
+with all 21 checkpoints. Score ranks must have Spearman correlation of at least
 0.95 with the stored predictions. Install environments and weights first.
 The full run has a one-hour limit and needs two 80 GB GPUs for Evo2 40B.
 

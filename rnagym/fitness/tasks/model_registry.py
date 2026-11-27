@@ -25,6 +25,7 @@ CHECKPOINT_MODELS = (
     "aido_rna_25m",
     "aido_rna_300m",
     "aido_rna_650m",
+    "structrfm",
 )
 # Reference baselines rather than pretrained models, set in italics on the leaderboard
 BASELINE_MODELS = ("EVmutation", "RNA-2Di", "mutation_count")
@@ -51,6 +52,7 @@ CHECKPOINT_REVISIONS = {
     "genbio-ai/AIDO.RNA-300M-MARS": "0f21db50d971d43ee66b39963ae4ec3c28b66e0d",
     "genbio-ai/AIDO.RNA-650M": "efaf4af45dc6b522b7ba62ee725d00ad9c43ce11",
     "genbio-ai/AIDO.RNA-1.6B": "cea90e53284c2a8b77c66528303d04a784b9c67b",
+    "heqin-zhu/structRFM": "5fca714bd82815c65a83d12d008a7b217ae57224",
     "togethercomputer/evo-1-131k-base": "c206aab77ae5967a069c4200ecb1858588528c9d",
 }
 
@@ -81,6 +83,7 @@ FOUR_FILL_SPECS = {
     "aido_rna_300m": ("aido_rna_300m_4fill", "aido_rna_score"),
     "aido_rna_650m": ("aido_rna_650m_4fill", "aido_rna_score"),
     "orthrus": ("orthrus_4fill", "orthrus_score"),
+    "structrfm": ("structrfm_4fill", "structrfm_score"),
 }
 STRATEGIES = ("wt_fill", "mask_fill", "mut_fill", "match_fill")
 

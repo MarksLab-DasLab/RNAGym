@@ -278,6 +278,17 @@ depends-on = ["source", "weights"]
 cmd = "bash baselines/RiNALMo/score_rinalmo.sh"
 depends-on = ["source", "weights"]
 
+[feature.structrfm.dependencies]
+python = "3.11.*"
+
+[feature.structrfm.pypi-dependencies]
+torch = "==2.6.0"
+transformers = "==4.55.4"
+
+[feature.structrfm.tasks]
+check-published = "python -m rnagym.fitness.tasks.check_published structrfm"
+predict = "bash baselines/structRFM/score_structrfm.sh"
+
 [environments]
 default = { solve-group = "default" }
 aido-rna = { features = ["model", "aido-rna"], no-default-feature = true }
@@ -291,3 +302,4 @@ rna-ernie = { features = ["model", "rna-ernie"], no-default-feature = true }
 rna-fm = { features = ["model", "rna-fm"], no-default-feature = true }
 rnagenesis = { features = ["model", "rnagenesis"], no-default-feature = true }
 rinalmo = { features = ["model", "rinalmo"], no-default-feature = true }
+structrfm = { features = ["model", "structrfm"], no-default-feature = true }
