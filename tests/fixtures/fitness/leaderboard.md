@@ -16,16 +16,17 @@
 | 11 | Evo 2 (40B) | 0.14 | 0.61 | -0.40 | 0.12 |
 | 12 | Evo 2 (1B base) | 0.04 | 0.57 | -0.33 | 0.10 |
 | 13 | RNA-FM | 0.10 | 0.56 | -0.37 | 0.09 |
-| 14 | Evo 1.5 | 0.06 | 0.57 | -0.41 | 0.07 |
-| 15 | AIDO.RNA (300M) | -0.02 | 0.52 | -0.49 | 0.00 |
-| 16 | AIDO.RNA (25M) | -0.07 | 0.53 | -0.50 | -0.01 |
-| 17 | Nucleotide Transformer v3 (8M) | 0.03 | 0.39 | -0.50 | -0.03 |
-| 18 | Nucleotide Transformer v3 (650M) | -0.01 | 0.45 | -0.55 | -0.04 |
-| 19 | Nucleotide Transformer v3 (100M) | 0.00 | 0.43 | -0.55 | -0.04 |
-| 20 | GenSLM (2.5B) | -0.05 | 0.04 | -0.12 | -0.04 |
-| 21 | Evo 1 | -0.04 | 0.06 | -0.33 | -0.10 |
-| 22 | AIDO.RNA (1M) | 0.02 | 0.15 | -0.51 | -0.11 |
-| 23 | Orthrus | -0.05 | -0.11 | -0.24 | -0.14 |
+| 14 | structRFM | -0.05 | 0.57 | -0.25 | 0.09 |
+| 15 | Evo 1.5 | 0.06 | 0.57 | -0.41 | 0.07 |
+| 16 | AIDO.RNA (300M) | -0.02 | 0.52 | -0.49 | 0.00 |
+| 17 | AIDO.RNA (25M) | -0.07 | 0.53 | -0.50 | -0.01 |
+| 18 | Nucleotide Transformer v3 (8M) | 0.03 | 0.39 | -0.50 | -0.03 |
+| 19 | Nucleotide Transformer v3 (650M) | -0.01 | 0.45 | -0.55 | -0.04 |
+| 20 | Nucleotide Transformer v3 (100M) | 0.00 | 0.43 | -0.55 | -0.04 |
+| 21 | GenSLM (2.5B) | -0.05 | 0.04 | -0.12 | -0.04 |
+| 22 | Evo 1 | -0.04 | 0.06 | -0.33 | -0.10 |
+| 23 | AIDO.RNA (1M) | 0.02 | 0.15 | -0.51 | -0.11 |
+| 24 | Orthrus | -0.05 | -0.11 | -0.24 | -0.14 |
 
 Assays of the same RNA molecule are averaged before their category (Domingo_2018_tRNA with Li_2016_tRNA, Zhang_2024_line1_mini_ribozyme with Zhang_2024_line1_full_ribozyme), as ProteinGym averages the assays of one protein.
 
@@ -51,6 +52,7 @@ Ribozyme, by mutation count (molecules):
 | Evo 2 (40B) | -0.03 | 0.27 |
 | Evo 2 (1B base) | 0.08 | 0.40 |
 | RNA-FM | 0.13 | 0.08 |
+| structRFM | 0.42 | 0.24 |
 | Evo 1.5 | 0.36 | 0.50 |
 | AIDO.RNA (300M) | 0.12 | 0.47 |
 | AIDO.RNA (25M) | 0.10 | 0.48 |
@@ -78,6 +80,7 @@ tRNA, by mutation count (molecules):
 | Evo 2 (40B) | 0.20 | 0.07 |
 | Evo 2 (1B base) | 0.38 | 0.15 |
 | RNA-FM | 0.00 | 0.24 |
+| structRFM | 0.20 | -0.16 |
 | Evo 1.5 | 0.12 | 0.11 |
 | AIDO.RNA (300M) | 0.23 | 0.11 |
 | AIDO.RNA (25M) | 0.18 | 0.07 |
@@ -105,6 +108,7 @@ Aptamer, by mutation count (molecules):
 | Evo 2 (40B) | 0.03 | -0.26 |
 | Evo 2 (1B base) | -0.22 | -0.31 |
 | RNA-FM | -0.22 | -0.09 |
+| structRFM | -0.15 | -0.13 |
 | Evo 1.5 | -0.19 | -0.40 |
 | AIDO.RNA (300M) | 0.03 | -0.43 |
 | AIDO.RNA (25M) | -0.06 | -0.41 |
